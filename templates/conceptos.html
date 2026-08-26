@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Conceptos - LeSiCo</title>
+</head>
+
+<body>
+
+    <h1>Conceptos</h1>
+
+    <h2>Registrar nuevo concepto</h2>
+
+    <form
+        method="post"
+        action="{{ url_for('concepts.nuevo_concepto') }}"
+    >
+
+        <label>
+            Etiqueta preferida:
+        </label>
+
+        <input
+            type="text"
+            name="preferred_label"
+            required
+        >
+
+        <button type="submit">
+            Guardar concepto
+        </button>
+
+    </form>
+
+
+    <h2>Conceptos registrados</h2>
+
+    <table
+        border="1"
+        cellpadding="8"
+    >
+
+        <tr>
+            <th>ID</th>
+            <th>Etiqueta preferida</th>
+            <th>Acciones</th>
+        </tr>
+
+        {% for concepto in conceptos %}
+
+            <tr>
+
+                <td>
+                    {{ concepto["concept_id"] }}
+                </td>
+
+                <td>
+                    {{ concepto["preferred_label"] }}
+                </td>
+
+                <td>
+
+                    <a href="{{
+                        url_for(
+                            'concepts.editar_concepto',
+                            concept_id=concepto['concept_id']
+                        )
+                    }}">
+                        Editar
+                    </a>
+
+                </td>
+
+            </tr>
+
+        {% endfor %}
+
+    </table>
+
+
+    <p>
+        <a href="{{ url_for('main.trabajo') }}">
+            Volver al espacio de trabajo
+        </a>
+    </p>
+
+</body>
+
+</html>

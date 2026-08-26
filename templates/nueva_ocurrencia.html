@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Enviar ocurrencia a revisión - LeSiCo</title>
+</head>
+
+<body>
+
+    <h1>Enviar nueva ocurrencia a revisión</h1>
+
+    <p>
+        El aporte quedará pendiente y no se incorporará a las ocurrencias
+        aprobadas hasta que sea revisado.
+    </p>
+
+    <form
+        method="post"
+        action="{{ url_for('submissions.guardar_aporte') }}"
+    >
+
+        <p>
+
+            <label>
+                Concepto:
+            </label>
+
+            <select
+                name="concept_id"
+                required
+            >
+
+                <option value="">
+                    Seleccione un concepto
+                </option>
+
+                {% for concepto in conceptos %}
+
+                    <option value="{{ concepto['concept_id'] }}">
+                        {{ concepto["preferred_label"] }}
+                    </option>
+
+                {% endfor %}
+
+            </select>
+
+        </p>
+
+
+        <p>
+
+            <label>
+                Fuente:
+            </label>
+
+            <select
+                name="source_id"
+                required
+            >
+
+                <option value="">
+                    Seleccione una fuente
+                </option>
+
+                {% for fuente in fuentes %}
+
+                    <option value="{{ fuente['source_id'] }}">
+                        {{ fuente["source_name"] }}
+                    </option>
+
+                {% endfor %}
+
+            </select>
+
+        </p>
+
+
+        <p>
+
+            <label>
+                Glosa original:
+            </label>
+
+            <input
+                type="text"
+                name="original_gloss"
+            >
+
+        </p>
+
+
+        <p>
+
+            <label>
+                Enlace:
+            </label>
+
+            <input
+                type="url"
+                name="hyperlink"
+            >
+
+        </p>
+
+
+        <button type="submit">
+            Enviar a revisión
+        </button>
+
+    </form>
+
+
+    <p>
+        <a href="{{ url_for('main.trabajo') }}">
+            Cancelar
+        </a>
+    </p>
+
+</body>
+
+</html>

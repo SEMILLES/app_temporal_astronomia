@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Editar concepto - LeSiCo</title>
+</head>
+
+<body>
+
+    <h1>Editar concepto</h1>
+
+    <p>
+        <strong>ID:</strong>
+        {{ concepto["concept_id"] }}
+    </p>
+
+    <form
+        method="post"
+        action="{{
+            url_for(
+                'concepts.actualizar_concepto',
+                concept_id=concepto['concept_id']
+            )
+        }}"
+    >
+
+        <p>
+
+            <label>
+                Etiqueta preferida:
+            </label>
+
+            <input
+                type="text"
+                name="preferred_label"
+                value="{{ concepto['preferred_label'] }}"
+                required
+            >
+
+        </p>
+
+        <button type="submit">
+            Guardar cambios
+        </button>
+
+    </form>
+
+    <p>
+        <a href="{{ url_for('concepts.conceptos') }}">
+            Cancelar
+        </a>
+    </p>
+
+</body>
+
+</html>

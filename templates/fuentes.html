@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Fuentes - LeSiCo</title>
+</head>
+
+<body>
+
+    <h1>Fuentes</h1>
+
+    <h2>Registrar nueva fuente</h2>
+
+    <form
+        method="post"
+        action="{{ url_for('sources.nueva_fuente') }}"
+    >
+
+        <label>
+            Nombre de la fuente:
+        </label>
+
+        <input
+            type="text"
+            name="source_name"
+            required
+        >
+
+        <button type="submit">
+            Guardar fuente
+        </button>
+
+    </form>
+
+
+    <h2>Fuentes registradas</h2>
+
+    <table
+        border="1"
+        cellpadding="8"
+    >
+
+        <tr>
+            <th>ID</th>
+            <th>Nombre</th>
+            <th>Acciones</th>
+        </tr>
+
+        {% for fuente in fuentes %}
+
+            <tr>
+
+                <td>
+                    {{ fuente["source_id"] }}
+                </td>
+
+                <td>
+                    {{ fuente["source_name"] }}
+                </td>
+
+                <td>
+
+                    <a href="{{
+                        url_for(
+                            'sources.editar_fuente',
+                            source_id=fuente['source_id']
+                        )
+                    }}">
+                        Editar
+                    </a>
+
+                </td>
+
+            </tr>
+
+        {% endfor %}
+
+    </table>
+
+
+    <p>
+        <a href="{{ url_for('main.trabajo') }}">
+            Volver al espacio de trabajo
+        </a>
+    </p>
+
+</body>
+
+</html>

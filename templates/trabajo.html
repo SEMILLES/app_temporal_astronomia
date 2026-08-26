@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>LeSiCo - Espacio de trabajo</title>
+</head>
+
+<body>
+
+    <h1>LeSiCo — espacio de trabajo</h1>
+
+    <p>
+        Área interna para registro, análisis y revisión de datos.
+    </p>
+
+
+    <h2>Aportes</h2>
+
+    <ul>
+
+        <li>
+            <a href="{{ url_for('submissions.nuevo_aporte') }}">
+                Enviar nueva ocurrencia a revisión
+            </a>
+        </li>
+
+        <li>
+            <a href="{{ url_for('submissions.aportes') }}">
+                Ver aportes enviados
+            </a>
+        </li>
+
+        <li>
+            <a href="{{ url_for('submissions.revisar_aportes') }}">
+                Revisar aportes pendientes
+            </a>
+        </li>
+
+    </ul>
+
+
+    <h2>Datos</h2>
+
+    <ul>
+
+        <li>
+            <a href="{{ url_for('occurrences.ocurrencias') }}">
+                Gestionar ocurrencias
+            </a>
+        </li>
+
+        <li>
+            <a href="{{ url_for('sources.fuentes') }}">
+                Gestionar fuentes
+            </a>
+        </li>
+
+        <li>
+            <a href="{{ url_for('concepts.conceptos') }}">
+                Gestionar conceptos
+            </a>
+        </li>
+
+    </ul>
+
+</body>
+
+</html>

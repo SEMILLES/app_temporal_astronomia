@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Aportes enviados - LeSiCo</title>
+</head>
+
+<body>
+
+    <h1>Aportes enviados</h1>
+
+    <p>
+        <a href="{{ url_for('submissions.nuevo_aporte') }}">
+            Enviar nueva ocurrencia a revisión
+        </a>
+    </p>
+
+    {% if aportes %}
+
+        <table border="1" cellpadding="8">
+            <tr>
+                <th>ID</th>
+                <th>Concepto</th>
+                <th>Fuente</th>
+                <th>Glosa original</th>
+                <th>Enlace</th>
+                <th>Estado</th>
+                <th>Enviado</th>
+                <th>Revisado</th>
+                <th>Ocurrencia aprobada</th>
+            </tr>
+
+            {% for aporte in aportes %}
+                <tr>
+                    <td>{{ aporte["submission_id"] }}</td>
+                    <td>{{ aporte["preferred_label"] }}</td>
+                    <td>{{ aporte["source_name"] }}</td>
+                    <td>{{ aporte["original_gloss"] or "" }}</td>
+                    <td>
+                        {% if aporte["hyperlink"] %}
+                            <a
+                                href="{{ aporte['hyperlink'] }}"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                            >
+                                Abrir
+                            </a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if aporte["status"] == "pending" %}
+                            Pendiente
+                        {% elif aporte["status"] == "approved" %}
+                            Aprobado
+                        {% else %}
+                            Rechazado
+                        {% endif %}
+                    </td>
+                    <td>{{ aporte["submitted_at"] }}</td>
+                    <td>{{ aporte["reviewed_at"] or "" }}</td>
+                    <td>
+                        {% if aporte["approved_occurrence_id"] %}
+                            <a href="{{
+                                url_for(
+                                    'occurrences.editar_ocurrencia',
+                                    occurrence_id=aporte['approved_occurrence_id']
+                                )
+                            }}">
+                                {{ aporte["approved_occurrence_id"] }}
+                            </a>
+                        {% endif %}
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+
+    {% else %}
+
+        <p>No hay aportes enviados.</p>
+
+    {% endif %}
+
+    <p>
+        <a href="{{ url_for('main.trabajo') }}">
+            Volver al espacio de trabajo
+        </a>
+    </p>
+
+</body>
+
+</html>

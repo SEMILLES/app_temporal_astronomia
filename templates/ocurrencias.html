@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Ocurrencias - LeSiCo</title>
+</head>
+
+<body>
+
+    <h1>Ocurrencias</h1>
+
+    <p>
+        <a href="{{ url_for('submissions.nuevo_aporte') }}">
+            Enviar nueva ocurrencia a revisión
+        </a>
+    </p>
+
+    <table
+        border="1"
+        cellpadding="8"
+    >
+
+        <tr>
+            <th>ID</th>
+            <th>Concepto</th>
+            <th>Fuente</th>
+            <th>Glosa original</th>
+            <th>Enlace</th>
+            <th>Acciones</th>
+        </tr>
+
+        {% for ocurrencia in ocurrencias %}
+
+            <tr>
+
+                <td>
+                    {{ ocurrencia["occurrence_id"] }}
+                </td>
+
+                <td>
+                    {{ ocurrencia["preferred_label"] }}
+                </td>
+
+                <td>
+                    {{ ocurrencia["source_name"] }}
+                </td>
+
+                <td>
+                    {{ ocurrencia["original_gloss"] }}
+                </td>
+
+                <td>
+
+                    {% if ocurrencia["hyperlink"] %}
+
+                        <a
+                            href="{{ ocurrencia['hyperlink'] }}"
+                            target="_blank"
+                        >
+                            Abrir
+                        </a>
+
+                    {% endif %}
+
+                </td>
+
+                <td>
+
+                    <a href="{{
+                        url_for(
+                            'occurrences.editar_ocurrencia',
+                            occurrence_id=ocurrencia['occurrence_id']
+                        )
+                    }}">
+                        Editar
+                    </a>
+
+                </td>
+
+            </tr>
+
+        {% endfor %}
+
+    </table>
+
+
+    <p>
+        <a href="{{ url_for('main.trabajo') }}">
+            Volver al espacio de trabajo
+        </a>
+    </p>
+
+</body>
+
+</html>
