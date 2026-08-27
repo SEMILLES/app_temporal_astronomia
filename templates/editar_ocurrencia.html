@@ -28,36 +28,6 @@
         <p>
 
             <label>
-                Concepto:
-            </label>
-
-            <select
-                name="concept_id"
-                required
-            >
-
-                {% for concepto in conceptos %}
-
-                    <option
-                        value="{{ concepto['concept_id'] }}"
-
-                        {% if concepto["concept_id"] == ocurrencia["concept_id"] %}
-                            selected
-                        {% endif %}
-                    >
-                        {{ concepto["preferred_label"] }}
-                    </option>
-
-                {% endfor %}
-
-            </select>
-
-        </p>
-
-
-        <p>
-
-            <label>
                 Fuente:
             </label>
 
@@ -112,6 +82,25 @@
                 value="{{ ocurrencia['hyperlink'] or '' }}"
             >
 
+        </p>
+
+        <p>
+            <label>Localización en la fuente:</label>
+            <input
+                type="text"
+                name="source_locator"
+                value="{{ ocurrencia['source_locator'] or '' }}"
+            >
+        </p>
+
+        <p>
+            <label>Nota de procedencia:</label>
+            <textarea name="provenance_note">{{ ocurrencia['provenance_note'] or '' }}</textarea>
+        </p>
+
+        <p>
+            <label>Nota del cambio:</label>
+            <textarea name="change_note"></textarea>
         </p>
 
 

@@ -27,12 +27,11 @@
             </label>
 
             <select
-                name="concept_id"
-                required
+                name="proposed_concept_id"
             >
 
                 <option value="">
-                    Seleccione un concepto
+                    Ninguno / no estoy seguro
                 </option>
 
                 {% for concepto in conceptos %}
@@ -47,6 +46,32 @@
 
         </p>
 
+
+        <p>
+            <label>Propuesta:</label>
+            <select name="proposal_type">
+                <option value="not_sure">No estoy seguro</option>
+                <option value="existing_alternative">Alternativa existente</option>
+                <option value="new_alternative">Forma nueva</option>
+            </select>
+        </p>
+
+        <p>
+            <label>Alternativa existente:</label>
+            <select name="proposed_alternative_id">
+                <option value="">Ninguna</option>
+                {% for alternativa in alternativas %}
+                    <option value="{{ alternativa['alternative_id'] }}">
+                        {{ alternativa['working_label'] or alternativa['alternative_id'] }}
+                    </option>
+                {% endfor %}
+            </select>
+        </p>
+
+        <p>
+            <label>Forma nueva:</label>
+            <input type="text" name="proposed_alternative_label">
+        </p>
 
         <p>
 

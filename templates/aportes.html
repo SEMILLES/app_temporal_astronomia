@@ -51,8 +51,8 @@
                     <td>
                         {% if aporte["status"] == "pending" %}
                             Pendiente
-                        {% elif aporte["status"] == "approved" %}
-                            Aprobado
+                        {% elif aporte["status"] == "accepted" %}
+                            Aceptado
                         {% else %}
                             Rechazado
                         {% endif %}
@@ -60,14 +60,14 @@
                     <td>{{ aporte["submitted_at"] }}</td>
                     <td>{{ aporte["reviewed_at"] or "" }}</td>
                     <td>
-                        {% if aporte["approved_occurrence_id"] %}
+                        {% if aporte["occurrence_id"] %}
                             <a href="{{
                                 url_for(
                                     'occurrences.editar_ocurrencia',
-                                    occurrence_id=aporte['approved_occurrence_id']
+                                    occurrence_id=aporte['occurrence_id']
                                 )
                             }}">
-                                {{ aporte["approved_occurrence_id"] }}
+                                {{ aporte["occurrence_id"] }}
                             </a>
                         {% endif %}
                     </td>

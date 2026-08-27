@@ -25,12 +25,19 @@ def nuevo_aporte():
         ORDER BY preferred_label
     """).fetchall()
 
+    alternativas = conexion.execute("""
+        SELECT alternative_id, concept_id, working_label
+        FROM alternative
+        ORDER BY alternative_id
+    """).fetchall()
+
     conexion.close()
 
     return render_template(
         "nueva_ocurrencia.html",
         fuentes=fuentes,
-        conceptos=conceptos
+        conceptos=conceptos,
+        alternativas=alternativas
     )
 
 
@@ -38,14 +45,19 @@ def nuevo_aporte():
 def guardar_aporte():
 
     source_id = request.form.get("source_id", "")
-    concept_id = request.form.get("concept_id", "")
+    proposed_concept_id = request.form.get("proposed_concept_id") or None
+    proposed_alternative_id = request.form.get("proposed_alternative_id") or None
+    proposed_alternative_label = request.form.get(
+        "proposed_alternative_label", ""
+    ).strip() or None
+    proposal_type = request.form.get("proposal_type", "not_sure")
     original_gloss = request.form.get("original_gloss", "").strip()
     hyperlink = request.form.get("hyperlink", "").strip()
 
-    if not source_id or not concept_id:
+    if not source_id:
 
         return (
-            "Fuente y concepto son obligatorios.",
+            "La fuente es obligatoria.",
             400
         )
 
@@ -53,20 +65,27 @@ def guardar_aporte():
 
     try:
 
-        conexion.execute("""
-            INSERT INTO occurrence_submission
-            (
-                source_id,
-                concept_id,
-                original_gloss,
-                hyperlink
-            )
-            VALUES (?, ?, ?, ?)
+        cursor = conexion.execute("""
+            INSERT INTO occurrence (source_id, original_gloss, hyperlink)
+            VALUES (?, ?, ?)
         """, (
             source_id,
-            concept_id,
             original_gloss,
             hyperlink
+        ))
+
+        conexion.execute("""
+            INSERT INTO submission (
+                occurrence_id, proposed_concept_id, proposed_alternative_id,
+                proposed_alternative_label, proposal_type
+            )
+            VALUES (?, ?, ?, ?, ?)
+        """, (
+            cursor.lastrowid,
+            proposed_concept_id,
+            proposed_alternative_id,
+            proposed_alternative_label,
+            proposal_type
         ))
 
         conexion.commit()
@@ -105,17 +124,16 @@ def aportes():
             os.submission_id,
             c.preferred_label,
             s.source_name,
-            os.original_gloss,
-            os.hyperlink,
+            o.original_gloss,
+            o.hyperlink,
             os.status,
-            os.approved_occurrence_id,
+            os.occurrence_id,
             os.submitted_at,
             os.reviewed_at
-        FROM occurrence_submission AS os
-        JOIN concept AS c
-            ON os.concept_id = c.concept_id
-        JOIN source AS s
-            ON os.source_id = s.source_id
+        FROM submission AS os
+        JOIN occurrence AS o ON o.occurrence_id = os.occurrence_id
+        LEFT JOIN concept AS c ON os.proposed_concept_id = c.concept_id
+        JOIN source AS s ON o.source_id = s.source_id
         ORDER BY os.submission_id DESC
     """).fetchall()
 
@@ -134,14 +152,13 @@ def revisar_aportes():
             os.submission_id,
             c.preferred_label,
             s.source_name,
-            os.original_gloss,
-            os.hyperlink,
+            o.original_gloss,
+            o.hyperlink,
             os.submitted_at
-        FROM occurrence_submission AS os
-        JOIN concept AS c
-            ON os.concept_id = c.concept_id
-        JOIN source AS s
-            ON os.source_id = s.source_id
+        FROM submission AS os
+        JOIN occurrence AS o ON o.occurrence_id = os.occurrence_id
+        LEFT JOIN concept AS c ON os.proposed_concept_id = c.concept_id
+        JOIN source AS s ON o.source_id = s.source_id
         WHERE os.status = 'pending'
         ORDER BY os.submission_id
     """).fetchall()
@@ -168,12 +185,8 @@ def aprobar_aporte(submission_id):
 
         aporte = conexion.execute("""
             SELECT
-                source_id,
-                concept_id,
-                original_gloss,
-                hyperlink,
                 status
-            FROM occurrence_submission
+            FROM submission
             WHERE submission_id = ?
         """, (submission_id,)).fetchone()
 
@@ -195,35 +208,15 @@ def aprobar_aporte(submission_id):
                 409
             )
 
-        cursor = conexion.execute("""
-            INSERT INTO occurrence
-            (
-                source_id,
-                concept_id,
-                original_gloss,
-                hyperlink
-            )
-            VALUES (?, ?, ?, ?)
-        """, (
-            aporte["source_id"],
-            aporte["concept_id"],
-            aporte["original_gloss"],
-            aporte["hyperlink"]
-        ))
-
         actualizacion = conexion.execute("""
-            UPDATE occurrence_submission
+            UPDATE submission
             SET
-                status = 'approved',
-                approved_occurrence_id = ?,
+                status = 'accepted',
                 reviewed_at = CURRENT_TIMESTAMP
             WHERE
                 submission_id = ?
                 AND status = 'pending'
-        """, (
-            cursor.lastrowid,
-            submission_id
-        ))
+        """, (submission_id,))
 
         if actualizacion.rowcount != 1:
 
@@ -268,7 +261,7 @@ def rechazar_aporte(submission_id):
 
         aporte = conexion.execute("""
             SELECT status
-            FROM occurrence_submission
+            FROM submission
             WHERE submission_id = ?
         """, (submission_id,)).fetchone()
 
@@ -291,7 +284,7 @@ def rechazar_aporte(submission_id):
             )
 
         actualizacion = conexion.execute("""
-            UPDATE occurrence_submission
+            UPDATE submission
             SET
                 status = 'rejected',
                 reviewed_at = CURRENT_TIMESTAMP

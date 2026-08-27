@@ -16,15 +16,32 @@ def ocurrencias():
     ocurrencias = conexion.execute("""
         SELECT
             o.occurrence_id,
-            c.preferred_label,
             s.source_name,
             o.original_gloss,
-            o.hyperlink
+            o.hyperlink,
+            CASE
+                WHEN c.preferred_label IS NULL
+                    AND al.working_label IS NULL
+                    THEN 'Sin clasificación'
+                WHEN al.working_label IS NULL
+                    THEN c.preferred_label
+                WHEN c.preferred_label IS NULL
+                    THEN al.working_label
+                ELSE c.preferred_label || ' / ' || al.working_label
+            END AS current_classification
         FROM occurrence AS o
-        JOIN concept AS c
-            ON o.concept_id = c.concept_id
+        JOIN submission AS sub
+            ON sub.occurrence_id = o.occurrence_id
+            AND sub.status = 'accepted'
         JOIN source AS s
             ON o.source_id = s.source_id
+        LEFT JOIN assignment AS a
+            ON a.occurrence_id = o.occurrence_id
+            AND a.is_current = 1
+        LEFT JOIN alternative AS al
+            ON al.alternative_id = a.alternative_id
+        LEFT JOIN concept AS c
+            ON c.concept_id = al.concept_id
         ORDER BY o.occurrence_id
     """).fetchall()
 
@@ -53,9 +70,10 @@ def editar_ocurrencia(occurrence_id):
         SELECT
             occurrence_id,
             source_id,
-            concept_id,
             original_gloss,
-            hyperlink
+            hyperlink,
+            source_locator,
+            provenance_note
         FROM occurrence
         WHERE occurrence_id = ?
     """, (occurrence_id,)).fetchone()
@@ -75,19 +93,12 @@ def editar_ocurrencia(occurrence_id):
         ORDER BY source_name
     """).fetchall()
 
-    conceptos = conexion.execute("""
-        SELECT concept_id, preferred_label
-        FROM concept
-        ORDER BY preferred_label
-    """).fetchall()
-
     conexion.close()
 
     return render_template(
         "editar_ocurrencia.html",
         ocurrencia=ocurrencia,
-        fuentes=fuentes,
-        conceptos=conceptos
+        fuentes=fuentes
     )
 
 
@@ -98,34 +109,91 @@ def editar_ocurrencia(occurrence_id):
 def actualizar_ocurrencia(occurrence_id):
 
     source_id = request.form.get("source_id", "")
-    concept_id = request.form.get("concept_id", "")
     original_gloss = request.form.get("original_gloss", "").strip()
     hyperlink = request.form.get("hyperlink", "").strip()
+    source_locator = request.form.get("source_locator", "").strip()
+    provenance_note = request.form.get("provenance_note", "").strip()
+    change_note = request.form.get("change_note", "").strip() or None
 
-    if not source_id or not concept_id:
+    if not source_id:
 
         return (
-            "Fuente y concepto son obligatorios.",
+            "La fuente es obligatoria.",
             400
         )
 
     conexion = conectar()
 
     try:
+        conexion.execute("BEGIN IMMEDIATE")
+
+        actual = conexion.execute("""
+            SELECT
+                source_id,
+                original_gloss,
+                hyperlink,
+                source_locator,
+                provenance_note
+            FROM occurrence
+            WHERE occurrence_id = ?
+        """, (occurrence_id,)).fetchone()
+
+        if actual is None:
+
+            conexion.rollback()
+
+            return (
+                "La ocurrencia no existe.",
+                404
+            )
+
+        nuevo_estado = (
+            int(source_id),
+            original_gloss,
+            hyperlink,
+            source_locator,
+            provenance_note
+        )
+        estado_actual = tuple(actual)
+
+        if nuevo_estado != estado_actual:
+            conexion.execute("""
+                INSERT INTO occurrence_revision (
+                    occurrence_id,
+                    source_id,
+                    original_gloss,
+                    hyperlink,
+                    source_locator,
+                    provenance_note,
+                    change_note
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                occurrence_id,
+                actual["source_id"],
+                actual["original_gloss"],
+                actual["hyperlink"],
+                actual["source_locator"],
+                actual["provenance_note"],
+                change_note
+            ))
 
         cursor = conexion.execute("""
             UPDATE occurrence
             SET
                 source_id = ?,
-                concept_id = ?,
                 original_gloss = ?,
-                hyperlink = ?
+                hyperlink = ?,
+                source_locator = ?,
+                provenance_note = ?,
+                updated_at = CURRENT_TIMESTAMP
             WHERE occurrence_id = ?
         """, (
             source_id,
-            concept_id,
             original_gloss,
             hyperlink,
+            source_locator,
+            provenance_note,
             occurrence_id
         ))
 
