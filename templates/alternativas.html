@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Alternativas - LeSiCo</title>
+</head>
+<body>
+    <h1>Alternativas de {{ concepto["preferred_label"] }}</h1>
+
+    <form method="post" action="{{ url_for('alternatives.nueva_alternativa', concept_id=concepto['concept_id']) }}">
+        <label>Número:</label>
+        <select name="working_label_number">
+            <option value="">Sin número</option>
+            {% for number in range(1, 11) %}
+                <option value="{{ number }}">{{ number }}</option>
+            {% endfor %}
+        </select>
+        <label>Letra:</label>
+        <select name="working_label_letter">
+            <option value="">Sin letra</option>
+            {% for letter in "abcdefghijklmnopqrstuvwxyz" %}
+                <option value="{{ letter }}">{{ letter }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit">Crear alternativa</button>
+    </form>
+
+    {% if alternativas %}
+        <table border="1" cellpadding="8">
+            <tr>
+                <th>ID</th>
+                <th>Etiqueta de trabajo</th>
+                <th>Acciones</th>
+            </tr>
+            {% for alternativa in alternativas %}
+                <tr>
+                    <td>{{ alternativa["alternative_id"] }}</td>
+                    <td>{{ alternativa["working_label"] or "Sin etiqueta de trabajo" }}</td>
+                    <td>
+                        <a href="{{ url_for('alternatives.editar_alternativa', alternative_id=alternativa['alternative_id']) }}">
+                            Editar
+                        </a>
+                    </td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>No hay alternativas registradas.</p>
+    {% endif %}
+
+    <p><a href="{{ url_for('concepts.conceptos') }}">Volver a conceptos</a></p>
+</body>
+</html>

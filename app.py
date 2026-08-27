@@ -7,6 +7,7 @@ from routes.sources import sources_bp
 from routes.concepts import concepts_bp
 from routes.occurrences import occurrences_bp
 from routes.submissions import submissions_bp
+from routes.alternatives import alternatives_bp
 
 
 app = Flask(__name__)
@@ -18,6 +19,7 @@ app.register_blueprint(sources_bp)
 app.register_blueprint(concepts_bp)
 app.register_blueprint(occurrences_bp)
 app.register_blueprint(submissions_bp)
+app.register_blueprint(alternatives_bp)
 
 
 # Crear tablas necesarias

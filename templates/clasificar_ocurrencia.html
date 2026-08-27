@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Clasificar occurrence - LeSiCo</title>
+</head>
+<body>
+    <h1>Clasificar occurrence {{ occurrence["occurrence_id"] }}</h1>
+
+    <p>Fuente: {{ occurrence["source_name"] }}</p>
+    <p>Glosa original: {{ occurrence["original_gloss"] or "" }}</p>
+    <p>Clasificación vigente:
+        {% if occurrence["preferred_label"] %}
+            {{ occurrence["preferred_label"] }} /
+            {{ occurrence["working_label"] or "Sin etiqueta de trabajo" }}
+        {% else %}
+            Sin clasificación
+        {% endif %}
+    </p>
+
+    <h2>Asignar clasificación</h2>
+    <form method="post" action="{{ url_for('occurrences.guardar_clasificacion', occurrence_id=occurrence['occurrence_id']) }}">
+        <h3>Alternativa existente</h3>
+        <label>Concepto:</label>
+        <select class="concept-filter" data-target="classification-alternative">
+            <option value="">Seleccione un concepto</option>
+            {% for group in alternatives_by_concept %}
+                <option value="{{ group['concept']['concept_id'] }}">{{ group['concept']['preferred_label'] }}</option>
+            {% endfor %}
+        </select>
+        <select name="alternative_id" id="classification-alternative">
+            <option value="">Seleccione una alternativa</option>
+            {% for group in alternatives_by_concept %}
+                {% for alternativa in group['alternatives'] %}
+                    <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ group['concept']['concept_id'] }}">
+                        {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}
+                    </option>
+                {% endfor %}
+            {% endfor %}
+        </select>
+        <p class="no-alternatives" data-for="classification-alternative">Seleccione un concepto.</p>
+        <button type="submit">Asignar alternativa existente</button>
+    </form>
+
+    <form method="post" action="{{ url_for('occurrences.guardar_clasificacion', occurrence_id=occurrence['occurrence_id']) }}">
+        <h3>Crear y asignar alternativa nueva</h3>
+        <label>Concepto:</label>
+        <select name="concept_id" required>
+            <option value="">Seleccione un concepto</option>
+            {% for group in alternatives_by_concept %}
+                <option value="{{ group['concept']['concept_id'] }}">
+                    {{ group['concept']['preferred_label'] }}
+                </option>
+            {% endfor %}
+        </select>
+        <label>Número:</label>
+        <select name="working_label_number">
+            <option value="">Sin número</option>
+            {% for number in range(1, 11) %}<option value="{{ number }}">{{ number }}</option>{% endfor %}
+        </select>
+        <label>Letra:</label>
+        <select name="working_label_letter">
+            <option value="">Sin letra</option>
+            {% for letter in "abcdefghijklmnopqrstuvwxyz" %}<option value="{{ letter }}">{{ letter }}</option>{% endfor %}
+        </select>
+        <button type="submit">Crear y asignar alternativa</button>
+    </form>
+
+    <h2>Alternativas disponibles</h2>
+    {% for group in alternatives_by_concept %}
+        <h3>{{ group['concept']['preferred_label'] }}</h3>
+        {% if group['alternatives'] %}
+            <ul>
+                {% for alternativa in group['alternatives'] %}
+                    <li>
+                        <span class="alternative-reference-visual" data-alternative-id="{{ alternativa['alternative_id'] }}"></span>
+                        {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}
+                        (ID {{ alternativa['alternative_id'] }})
+                    </li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p>Sin alternativas registradas</p>
+        {% endif %}
+    {% endfor %}
+
+    <h2>Historial de assignments</h2>
+    {% if history %}
+        <table border="1" cellpadding="8">
+            <tr>
+                <th>ID</th>
+                <th>Concepto</th>
+                <th>Alternativa</th>
+                <th>Vigente</th>
+                <th>Sustituye</th>
+            </tr>
+            {% for assignment in history %}
+                <tr>
+                    <td>{{ assignment["assignment_id"] }}</td>
+                    <td>{{ assignment["preferred_label"] }}</td>
+                    <td>{{ assignment["working_label"] or "Sin etiqueta de trabajo" }}</td>
+                    <td>{{ "Sí" if assignment["is_current"] else "No" }}</td>
+                    <td>{{ assignment["supersedes_assignment_id"] or "" }}</td>
+                </tr>
+            {% endfor %}
+        </table>
+    {% else %}
+        <p>No hay assignments.</p>
+    {% endif %}
+
+    <p><a href="{{ url_for('occurrences.ocurrencias') }}">Volver a occurrences</a></p>
+</body>
+<script>
+    document.querySelectorAll('.concept-filter').forEach(function (conceptSelect) {
+        var alternatives = document.getElementById(conceptSelect.dataset.target);
+        var emptyMessage = document.querySelector('[data-for="' + conceptSelect.dataset.target + '"]');
+        function filterAlternatives() {
+            var conceptId = conceptSelect.value;
+            var visibleCount = 0;
+            alternatives.value = '';
+            Array.from(alternatives.options).forEach(function (option) {
+                var visible = option.value === '' || option.dataset.conceptId === conceptId;
+                option.hidden = !visible;
+                if (visible && option.value !== '') visibleCount += 1;
+            });
+            emptyMessage.textContent = conceptId && visibleCount === 0
+                ? 'Sin alternativas registradas'
+                : 'Seleccione un concepto.';
+        }
+        conceptSelect.addEventListener('change', filterAlternatives);
+        filterAlternatives();
+    });
+</script>
+</html>

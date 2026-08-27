@@ -26,7 +26,18 @@
             {% for aporte in aportes %}
                 <tr>
                     <td>{{ aporte["submission_id"] }}</td>
-                    <td>{{ aporte["preferred_label"] }}</td>
+                    <td>
+                        <strong>PROPUESTA DEL INTÉRPRETE</strong><br>
+                        Concepto:
+                        {{ aporte["preferred_label"] or "Sin concepto propuesto" }}<br>
+                        {% if aporte["proposed_alternative_id"] %}
+                            Alternativa existente: {{ aporte["proposed_alternative_id"] }}
+                        {% elif aporte["proposed_alternative_label"] %}
+                            Forma nueva: {{ aporte["proposed_alternative_label"] }}
+                        {% else %}
+                            Alternativa: No estoy seguro
+                        {% endif %}
+                    </td>
                     <td>{{ aporte["source_name"] }}</td>
                     <td>{{ aporte["original_gloss"] or "" }}</td>
                     <td>
@@ -42,28 +53,77 @@
                     </td>
                     <td>{{ aporte["submitted_at"] }}</td>
                     <td>
+                        <strong>DECISIÓN DEL REVISOR</strong>
                         <form
                             method="post"
-                            action="{{
-                                url_for(
-                                    'submissions.aprobar_aporte',
-                                    submission_id=aporte['submission_id']
-                                )
-                            }}"
+                            action="{{ url_for('submissions.decidir_aporte', submission_id=aporte['submission_id']) }}"
                         >
-                            <button type="submit">Aprobar</button>
-                        </form>
-
-                        <form
-                            method="post"
-                            action="{{
-                                url_for(
-                                    'submissions.rechazar_aporte',
-                                    submission_id=aporte['submission_id']
-                                )
-                            }}"
-                        >
-                            <button type="submit">Rechazar</button>
+                            <p>
+                                <select name="decision" required>
+                                    <option value="accept_unclassified">Aceptar sin clasificación</option>
+                                    <option value="assign_existing">Aceptar y asignar a alternativa existente</option>
+                                    <option value="create_new">Aceptar y crear alternativa nueva</option>
+                                    <option value="reject">Rechazar aporte</option>
+                                </select>
+                            </p>
+                            <p>
+                                <label>Alternativa existente:</label>
+                                <select class="concept-filter" data-target="review-alternative-{{ aporte['submission_id'] }}">
+                                    <option value="">Seleccione un concepto</option>
+                                    {% for group in alternativas_por_concepto %}
+                                        <option value="{{ group['concepto']['concept_id'] }}">{{ group['concepto']['preferred_label'] }}</option>
+                                    {% endfor %}
+                                </select>
+                                <select name="alternative_id" id="review-alternative-{{ aporte['submission_id'] }}">
+                                    <option value="">Ninguna</option>
+                                    {% for group in alternativas_por_concepto %}
+                                        {% for alternativa in group['alternativas'] %}
+                                            <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ group['concepto']['concept_id'] }}">
+                                                {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}
+                                            </option>
+                                        {% endfor %}
+                                    {% endfor %}
+                                </select>
+                                <span class="no-alternatives" data-for="review-alternative-{{ aporte['submission_id'] }}">Seleccione un concepto.</span>
+                            </p>
+                            <p>
+                                <strong>Alternativas disponibles por concepto</strong>
+                                {% for group in alternativas_por_concepto %}
+                                    <br>{{ group['concepto']['preferred_label'] }}:
+                                    {% if group['alternativas'] %}
+                                        {% for alternativa in group['alternativas'] %}
+                                            <span class="alternative-reference-visual" data-alternative-id="{{ alternativa['alternative_id'] }}"></span>
+                                            {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}{% if not loop.last %}, {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        Sin alternativas registradas
+                                    {% endif %}
+                                {% endfor %}
+                            </p>
+                            <p>
+                                <label>Concepto para alternativa nueva:</label>
+                                <select name="concept_id">
+                                    <option value="">Ninguno</option>
+                                    {% for concepto in conceptos %}
+                                        <option value="{{ concepto['concept_id'] }}">
+                                            {{ concepto['preferred_label'] }}
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                            </p>
+                            <p>
+                                <label>Número nueva:</label>
+                                <select name="working_label_number">
+                                    <option value="">Sin número</option>
+                                    {% for number in range(1, 11) %}<option value="{{ number }}">{{ number }}</option>{% endfor %}
+                                </select>
+                                <label>Letra nueva:</label>
+                                <select name="working_label_letter">
+                                    <option value="">Sin letra</option>
+                                    {% for letter in "abcdefghijklmnopqrstuvwxyz" %}<option value="{{ letter }}">{{ letter }}</option>{% endfor %}
+                                </select>
+                            </p>
+                            <button type="submit">Aplicar decisión</button>
                         </form>
                     </td>
                 </tr>
@@ -90,4 +150,25 @@
 
 </body>
 
+<script>
+    document.querySelectorAll('.concept-filter').forEach(function (conceptSelect) {
+        var alternatives = document.getElementById(conceptSelect.dataset.target);
+        var emptyMessage = document.querySelector('[data-for="' + conceptSelect.dataset.target + '"]');
+        function filterAlternatives() {
+            var conceptId = conceptSelect.value;
+            var visibleCount = 0;
+            alternatives.value = '';
+            Array.from(alternatives.options).forEach(function (option) {
+                var visible = option.value === '' || option.dataset.conceptId === conceptId;
+                option.hidden = !visible;
+                if (visible && option.value !== '') visibleCount += 1;
+            });
+            emptyMessage.textContent = conceptId && visibleCount === 0
+                ? 'Sin alternativas registradas'
+                : 'Seleccione un concepto.';
+        }
+        conceptSelect.addEventListener('change', filterAlternatives);
+        filterAlternatives();
+    });
+</script>
 </html>

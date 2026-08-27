@@ -76,6 +76,15 @@
                         Editar
                     </a>
 
+                    <a href="{{
+                        url_for(
+                            'occurrences.clasificar_ocurrencia',
+                            occurrence_id=ocurrencia['occurrence_id']
+                        )
+                    }}">
+                        Clasificar
+                    </a>
+
                 </td>
 
             </tr>

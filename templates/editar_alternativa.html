@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Editar alternativa - LeSiCo</title>
+</head>
+<body>
+    <h1>Editar alternativa {{ alternativa["alternative_id"] }}</h1>
+    <p>El concepto de la alternativa no puede cambiarse.</p>
+    <form method="post" action="{{ url_for('alternatives.actualizar_alternativa', alternative_id=alternativa['alternative_id']) }}">
+        {% if working_label_is_unstructured %}
+            <p>Esta etiqueta no tiene formato número + letra. Se conservará salvo que elijas una combinación nueva.</p>
+            <label>Etiqueta existente:</label>
+            <input type="text" name="working_label_fallback" value="{{ alternativa['working_label'] or '' }}">
+        {% else %}
+            <label>Número:</label>
+            <select name="working_label_number">
+                <option value="">Sin número</option>
+                {% for number in range(1, 11) %}
+                    <option value="{{ number }}" {% if working_label_number == number|string %}selected{% endif %}>{{ number }}</option>
+                {% endfor %}
+            </select>
+            <label>Letra:</label>
+            <select name="working_label_letter">
+                <option value="">Sin letra</option>
+                {% for letter in "abcdefghijklmnopqrstuvwxyz" %}
+                    <option value="{{ letter }}" {% if working_label_letter == letter %}selected{% endif %}>{{ letter }}</option>
+                {% endfor %}
+            </select>
+            <input type="hidden" name="working_label_fallback" value="">
+        {% endif %}
+        <button type="submit">Guardar cambios</button>
+    </form>
+    <p><a href="{{ url_for('alternatives.alternativas', concept_id=alternativa['concept_id']) }}">Cancelar</a></p>
+</body>
+</html>
