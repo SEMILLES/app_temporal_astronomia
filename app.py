@@ -1,6 +1,7 @@
 from flask import Flask
 
 from database import crear_base
+from concept_labels import alternative_display_label, human_concept_label
 
 from routes.main import main_bp
 from routes.sources import sources_bp
@@ -11,6 +12,9 @@ from routes.alternatives import alternatives_bp
 
 
 app = Flask(__name__)
+
+app.jinja_env.filters["human_concept_label"] = human_concept_label
+app.jinja_env.filters["alternative_display_label"] = alternative_display_label
 
 
 # Registrar grupos de rutas

@@ -12,7 +12,7 @@
     <p>Clasificación vigente:
         {% if occurrence["preferred_label"] %}
             {% if occurrence["working_label"] %}
-                {{ occurrence["preferred_label"] }}-{{ occurrence["working_label"] }}
+                {{ occurrence["preferred_label"] | alternative_display_label(occurrence["working_label"]) }}
             {% else %}
                 Sin etiqueta de trabajo
             {% endif %}
@@ -28,7 +28,7 @@
         <select class="concept-filter" data-target="classification-alternative">
             <option value="">Seleccione un concepto</option>
             {% for group in alternatives_by_concept %}
-                <option value="{{ group['concept']['concept_id'] }}">{{ group['concept']['preferred_label'] }}</option>
+                <option value="{{ group['concept']['concept_id'] }}">{{ group['concept']['preferred_label'] | human_concept_label }}</option>
             {% endfor %}
         </select>
         <select name="alternative_id" id="classification-alternative">
@@ -36,7 +36,7 @@
             {% for group in alternatives_by_concept %}
                 {% for alternativa in group['alternatives'] %}
                     <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ group['concept']['concept_id'] }}">
-                        {% if alternativa['working_label'] %}{{ group['concept']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
+                        {% if alternativa['working_label'] %}{{ group['concept']['preferred_label'] | alternative_display_label(alternativa['working_label']) }}{% else %}Sin etiqueta de trabajo{% endif %}
                     </option>
                 {% endfor %}
             {% endfor %}
@@ -52,7 +52,7 @@
             <option value="">Seleccione un concepto</option>
             {% for group in alternatives_by_concept %}
                 <option value="{{ group['concept']['concept_id'] }}">
-                    {{ group['concept']['preferred_label'] }}
+                    {{ group['concept']['preferred_label'] | human_concept_label }}
                 </option>
             {% endfor %}
         </select>
@@ -71,13 +71,13 @@
 
     <h2>Alternativas disponibles</h2>
     {% for group in alternatives_by_concept %}
-        <h3>{{ group['concept']['preferred_label'] }}</h3>
+        <h3>{{ group['concept']['preferred_label'] | human_concept_label }}</h3>
         {% if group['alternatives'] %}
             <ul>
                 {% for alternativa in group['alternatives'] %}
                     <li>
                         <span class="alternative-reference-visual" data-alternative-id="{{ alternativa['alternative_id'] }}"></span>
-                        {% if alternativa['working_label'] %}{{ group['concept']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
+                        {% if alternativa['working_label'] %}{{ group['concept']['preferred_label'] | alternative_display_label(alternativa['working_label']) }}{% else %}Sin etiqueta de trabajo{% endif %}
                         (ID {{ alternativa['alternative_id'] }})
                     </li>
                 {% endfor %}
@@ -100,8 +100,8 @@
             {% for assignment in history %}
                 <tr>
                     <td>{{ assignment["assignment_id"] }}</td>
-                    <td>{{ assignment["preferred_label"] }}</td>
-                    <td>{% if assignment["working_label"] %}{{ assignment["preferred_label"] }}-{{ assignment["working_label"] }}{% else %}Sin etiqueta de trabajo{% endif %}</td>
+                    <td>{{ assignment["preferred_label"] | human_concept_label }}</td>
+                    <td>{% if assignment["working_label"] %}{{ assignment["preferred_label"] | alternative_display_label(assignment["working_label"]) }}{% else %}Sin etiqueta de trabajo{% endif %}</td>
                     <td>{{ "Sí" if assignment["is_current"] else "No" }}</td>
                     <td>{{ assignment["supersedes_assignment_id"] or "" }}</td>
                 </tr>

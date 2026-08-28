@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for
 import sqlite3
 
 from database import conectar
+from concept_labels import InvalidConceptLabel, normalize_concept_label
 from routes.alternatives import generated_working_label
 from routes.sources import source_insert_values
 
@@ -260,8 +261,9 @@ def guardar_aporte():
         elif concept_choice == "new":
             proposed_concept_id = None
             proposed_concept_status = "new"
-            if not proposed_concept_label or not proposed_concept_note:
+            if not proposed_concept_label:
                 raise ValueError
+            normalize_concept_label(proposed_concept_label)
         else:
             proposed_concept_status = "selected"
         if proposal_type == "existing_alternative":
@@ -337,6 +339,12 @@ def guardar_aporte():
         conexion.execute(insert_sql, tuple(values))
 
         conexion.commit()
+
+    except InvalidConceptLabel as error:
+
+        conexion.rollback()
+
+        return str(error), 400
 
     except (sqlite3.IntegrityError, ValueError):
 
@@ -476,6 +484,15 @@ def revisar_aportes():
 
     for aporte in aportes:
         aporte["accept_proposed_allowed"] = submission_accepts_proposed(conexion, aporte)
+        aporte["proposed_concept_preview"] = None
+        aporte["proposed_concept_preview_valid"] = True
+        if aporte["proposed_concept_label"]:
+            try:
+                aporte["proposed_concept_preview"] = normalize_concept_label(
+                    aporte["proposed_concept_label"]
+                )
+            except InvalidConceptLabel:
+                aporte["proposed_concept_preview_valid"] = False
 
     conceptos = conexion.execute("""
         SELECT concept_id, preferred_label
@@ -665,13 +682,23 @@ def decidir_aporte(submission_id):
                     SELECT proposed_concept_label, proposed_concept_note
                     FROM submission WHERE submission_id = ?
                 """, (submission_id,)).fetchone()
-                if (proposed is None or not proposed["proposed_concept_label"]
-                        or not proposed["proposed_concept_note"]):
+                if proposed is None or not proposed["proposed_concept_label"]:
                     return "No hay un concepto nuevo propuesto completo.", 400
-                concept_cursor = conexion.execute("""
-                    INSERT INTO concept (preferred_label)
-                    VALUES (?)
-                """, (proposed["proposed_concept_label"],))
+                try:
+                    preferred_label = normalize_concept_label(
+                        proposed["proposed_concept_label"]
+                    )
+                    concept_cursor = conexion.execute("""
+                        INSERT INTO concept (preferred_label)
+                        VALUES (?)
+                    """, (preferred_label,))
+                except InvalidConceptLabel as error:
+                    return str(error), 400
+                except sqlite3.IntegrityError:
+                    return (
+                        "Ya existe un concepto con la etiqueta canónica propuesta.",
+                        400
+                    )
                 concept_id = str(concept_cursor.lastrowid)
 
             if conexion.execute(

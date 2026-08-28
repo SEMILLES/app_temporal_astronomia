@@ -32,13 +32,20 @@
                             Concepto: No estoy seguro
                         {% elif aporte["proposed_concept_status"] == "new" %}
                             Concepto: {{ aporte["proposed_concept_label"] or "Concepto nuevo no especificado" }}
+                            {% if aporte["proposed_concept_label"] %}
+                                {% if aporte["proposed_concept_preview_valid"] %}
+                                    <br><small>Si se crea, se almacenará como: {{ aporte["proposed_concept_preview"] }}</small>
+                                {% else %}
+                                    <br><small>La propuesta requiere corrección antes de crear el concepto.</small>
+                                {% endif %}
+                            {% endif %}
                         {% else %}
-                            Concepto: {{ aporte["preferred_label"] or "Sin concepto propuesto" }}
+                            Concepto: {% if aporte["preferred_label"] %}{{ aporte["preferred_label"] | human_concept_label }}{% else %}Sin concepto propuesto{% endif %}
                         {% endif %}
                         {% if aporte["proposal_type"] == "existing_alternative" %}
                             <br>Clasificación propuesta: Alternativa existente
                             <br>Alternativa propuesta:
-                            {% if aporte["proposed_alternative_working_label"] %}{{ aporte["preferred_label"] }}-{{ aporte["proposed_alternative_working_label"] }}{% else %}Sin etiqueta de trabajo{% endif %}
+                            {% if aporte["proposed_alternative_working_label"] %}{{ aporte["preferred_label"] | alternative_display_label(aporte["proposed_alternative_working_label"]) }}{% else %}Sin etiqueta de trabajo{% endif %}
                         {% elif aporte["proposal_type"] == "new_alternative" %}
                             <br>Clasificación propuesta: Nueva alternativa
                             {% if aporte["proposed_relation_answer"] == "yes" %}
@@ -55,7 +62,7 @@
                                     <br>Estado: {{ aporte["related_submission_status"] or "no determinado" }}
                                     {% if aporte["related_submission_status"] == "accepted" %}
                                         {% if aporte["related_submission_current_alternative_id"] %}
-                                            <br>→ ahora clasificado como {% if aporte["related_submission_current_working_label"] %}{{ aporte["related_submission_current_concept_label"] }}-{{ aporte["related_submission_current_working_label"] }}{% else %}Sin etiqueta de trabajo{% endif %}
+                                            <br>→ ahora clasificado como {% if aporte["related_submission_current_working_label"] %}{{ aporte["related_submission_current_concept_label"] | alternative_display_label(aporte["related_submission_current_working_label"]) }}{% else %}Sin etiqueta de trabajo{% endif %}
                                         {% else %}
                                             <br>→ aporte relacionado aceptado, aún sin clasificación
                                         {% endif %}
@@ -68,7 +75,7 @@
                                     {% endif %}
                                 {% elif aporte["proposed_related_alternative_id"] %}
                                     <br>Alternativa relacionada propuesta:
-                                    {% if aporte["proposed_related_alternative_working_label"] %}{{ aporte["preferred_label"] }}-{{ aporte["proposed_related_alternative_working_label"] }}{% else %}Sin etiqueta de trabajo{% endif %}
+                                    {% if aporte["proposed_related_alternative_working_label"] %}{{ aporte["preferred_label"] | alternative_display_label(aporte["proposed_related_alternative_working_label"]) }}{% else %}Sin etiqueta de trabajo{% endif %}
                                 {% else %}
                                     <br>Alternativa relacionada propuesta: no indicada
                                 {% endif %}
@@ -88,8 +95,8 @@
                         {% if aporte["alternative_uncertainty_note"] and aporte["proposal_type"] == "not_sure" %}
                             <br>Duda sobre la alternativa: {{ aporte["alternative_uncertainty_note"] }}
                         {% endif %}
-                        {% if aporte["proposed_concept_status"] == "new" %}
-                            <br>Justificación del concepto nuevo: {{ aporte["proposed_concept_note"] or "Sin justificación especificada" }}
+                        {% if aporte["proposed_concept_status"] == "new" and aporte["proposed_concept_note"] %}
+                            <br>Observación sobre el concepto propuesto: {{ aporte["proposed_concept_note"] }}
                         {% endif %}
                     </td>
                     <td>{{ aporte["source_name"] }}</td>
@@ -117,7 +124,7 @@
                                     {% if aporte['accept_proposed_allowed'] %}
                                         <option value="accept_proposed">Aceptar clasificación propuesta</option>
                                     {% endif %}
-                                    <option value="accept_unclassified">Aceptar sin clasificación</option>
+                                    <option value="accept_unclassified">Aceptar evidencia sin clasificación</option>
                                     <option value="assign_existing">Aceptar y asignar a alternativa existente</option>
                                     <option value="create_new">Aceptar y crear alternativa nueva</option>
                                     <option value="reject">Rechazar aporte</option>
@@ -133,7 +140,7 @@
                                 <select class="concept-filter" data-target="review-alternative-{{ aporte['submission_id'] }}">
                                     <option value="">Seleccione un concepto</option>
                                     {% for group in alternativas_por_concepto %}
-                                        <option value="{{ group['concepto']['concept_id'] }}">{{ group['concepto']['preferred_label'] }}</option>
+                                        <option value="{{ group['concepto']['concept_id'] }}">{{ group['concepto']['preferred_label'] | human_concept_label }}</option>
                                     {% endfor %}
                                 </select>
                                 <select name="alternative_id" id="review-alternative-{{ aporte['submission_id'] }}">
@@ -141,7 +148,7 @@
                                     {% for group in alternativas_por_concepto %}
                                         {% for alternativa in group['alternativas'] %}
                                             <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ group['concepto']['concept_id'] }}">
-                                                {% if alternativa['working_label'] %}{{ group['concepto']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
+                                                {% if alternativa['working_label'] %}{{ group['concepto']['preferred_label'] | alternative_display_label(alternativa['working_label']) }}{% else %}Sin etiqueta de trabajo{% endif %}
                                             </option>
                                         {% endfor %}
                                     {% endfor %}
@@ -151,11 +158,11 @@
                             <p>
                                 <strong>Alternativas disponibles por concepto</strong>
                                 {% for group in alternativas_por_concepto %}
-                                    <br>{{ group['concepto']['preferred_label'] }}:
+                                    <br>{{ group['concepto']['preferred_label'] | human_concept_label }}:
                                     {% if group['alternativas'] %}
                                         {% for alternativa in group['alternativas'] %}
                                             <span class="alternative-reference-visual" data-alternative-id="{{ alternativa['alternative_id'] }}"></span>
-                                            {% if alternativa['working_label'] %}{{ group['concepto']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}{% if not loop.last %}, {% endif %}
+                                            {% if alternativa['working_label'] %}{{ group['concepto']['preferred_label'] | alternative_display_label(alternativa['working_label']) }}{% else %}Sin etiqueta de trabajo{% endif %}{% if not loop.last %}, {% endif %}
                                         {% endfor %}
                                     {% else %}
                                         Sin alternativas registradas
@@ -166,12 +173,12 @@
                                 <label>Concepto para alternativa nueva:</label>
                                 <select name="concept_id">
                                     <option value="">Ninguno</option>
-                                    {% if aporte["proposed_concept_label"] %}
-                                        <option value="proposed">Crear concepto nuevo propuesto</option>
+                                    {% if aporte["proposed_concept_label"] and aporte["proposed_concept_preview_valid"] %}
+                                        <option value="proposed">{{ aporte["proposed_concept_label"] }} (propuesto)</option>
                                     {% endif %}
                                     {% for concepto in conceptos %}
                                         <option value="{{ concepto['concept_id'] }}">
-                                            {{ concepto['preferred_label'] }}
+                                            {{ concepto['preferred_label'] | human_concept_label }}
                                         </option>
                                     {% endfor %}
                                 </select>
@@ -190,7 +197,7 @@
                                     {% for group in alternativas_por_concepto %}
                                         {% for alternativa in group['alternativas'] %}
                                             <option value="{{ alternativa['alternative_id'] }}">
-                                                {% if alternativa['working_label'] %}{{ group['concepto']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
+                                                {% if alternativa['working_label'] %}{{ group['concepto']['preferred_label'] | alternative_display_label(alternativa['working_label']) }}{% else %}Sin etiqueta de trabajo{% endif %}
                                             </option>
                                         {% endfor %}
                                     {% endfor %}

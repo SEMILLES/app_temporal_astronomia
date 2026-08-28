@@ -34,7 +34,7 @@
             <input
                 type="text"
                 name="preferred_label"
-                value="{{ concepto['preferred_label'] }}"
+                value="{{ concepto['preferred_label'] | human_concept_label }}"
                 required
             >
 

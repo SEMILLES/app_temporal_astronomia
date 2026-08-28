@@ -9,6 +9,7 @@ from flask import (
 import sqlite3
 
 from database import conectar
+from concept_labels import InvalidConceptLabel, normalize_concept_label
 
 
 concepts_bp = Blueprint(
@@ -54,17 +55,12 @@ def conceptos():
 )
 def nuevo_concepto():
 
-    preferred_label = request.form.get(
-        "preferred_label",
-        ""
-    ).strip()
-
-    if not preferred_label:
-
-        return (
-            "La etiqueta del concepto es obligatoria.",
-            400
+    try:
+        preferred_label = normalize_concept_label(
+            request.form.get("preferred_label", "")
         )
+    except InvalidConceptLabel as error:
+        return str(error), 400
 
     conexion = conectar()
 
@@ -141,17 +137,12 @@ def editar_concepto(concept_id):
 )
 def actualizar_concepto(concept_id):
 
-    preferred_label = request.form.get(
-        "preferred_label",
-        ""
-    ).strip()
-
-    if not preferred_label:
-
-        return (
-            "La etiqueta del concepto es obligatoria.",
-            400
+    try:
+        preferred_label = normalize_concept_label(
+            request.form.get("preferred_label", "")
         )
+    except InvalidConceptLabel as error:
+        return str(error), 400
 
     conexion = conectar()
 

@@ -118,7 +118,7 @@
     </style>
 </head>
 <body>
-    <h1>Alternativas de {{ concepto["preferred_label"] }}</h1>
+    <h1>Alternativas de {{ concepto["preferred_label"] | human_concept_label }}</h1>
 
     <div class="alternatives-list">
         {% if alternative_groups %}
@@ -128,7 +128,7 @@
                     <header class="alternative-header">
                         <h2>
                             {% if alternativa["working_label"] %}
-                                {{ concepto["preferred_label"] }}-{{ alternativa["working_label"] }}
+                                {{ concepto["preferred_label"] | alternative_display_label(alternativa["working_label"]) }}
                             {% else %}
                                 Sin etiqueta de trabajo
                             {% endif %}
@@ -216,7 +216,7 @@
                                     <li>
                                         <strong>
                                             {% if relacion["working_label"] %}
-                                                {{ relacion["concept_label"] }}-{{ relacion["working_label"] }}
+                                                {{ relacion["concept_label"] | alternative_display_label(relacion["working_label"]) }}
                                             {% else %}
                                                 Sin etiqueta de trabajo
                                             {% endif %}

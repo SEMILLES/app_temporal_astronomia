@@ -34,7 +34,15 @@
             {% for aporte in aportes %}
                 <tr>
                     <td>{{ aporte["submission_id"] }}</td>
-                    <td>{{ aporte["preferred_label"] }}</td>
+                    <td>
+                        {% if aporte["preferred_label"] %}
+                            {{ aporte["preferred_label"] | human_concept_label }}
+                        {% elif aporte["proposed_concept_label"] %}
+                            {{ aporte["proposed_concept_label"] }} (propuesto)
+                        {% else %}
+                            —
+                        {% endif %}
+                    </td>
                     <td>{{ aporte["source_name"] }}</td>
                     <td>{{ aporte["original_gloss"] or "" }}</td>
                     <td>

@@ -37,7 +37,7 @@
                 {% for concepto in conceptos %}
 
                     <option value="{{ concepto['concept_id'] }}">
-                        {{ concepto["preferred_label"] }}
+                        {{ concepto["preferred_label"] | human_concept_label }}
                     </option>
 
                 {% endfor %}
@@ -64,14 +64,14 @@
                 <option value="">Ninguna</option>
                 {% for alternativa in alternativas %}
                     <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ alternativa['concept_id'] }}">
-                        {% if alternativa['working_label'] %}{{ alternativa['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
+                        {% if alternativa['working_label'] %}{{ alternativa['preferred_label'] | alternative_display_label(alternativa['working_label']) }}{% else %}Sin etiqueta de trabajo{% endif %}
                     </option>
                 {% endfor %}
             </select>
             <div id="alternative-cards">
                 {% for detail in alternative_details %}
                     <article class="alternative-card" data-concept-id="{{ detail['alternative']['concept_id'] }}">
-                        <strong>{% if detail['alternative']['working_label'] %}{{ detail['alternative']['preferred_label'] }}-{{ detail['alternative']['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}</strong>
+                        <strong>{% if detail['alternative']['working_label'] %}{{ detail['alternative']['preferred_label'] | alternative_display_label(detail['alternative']['working_label']) }}{% else %}Sin etiqueta de trabajo{% endif %}</strong>
                         {% if detail['alternative']['original_code'] %} ({{ detail['alternative']['original_code'] }}){% endif %}
                         <p>Ocurrencias documentadas:</p>
                         {% if detail['occurrences'] %}
@@ -114,7 +114,7 @@
                     <option value="">Ninguna</option>
                     {% for alternativa in alternativas %}
                         <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ alternativa['concept_id'] }}">
-                            {% if alternativa['working_label'] %}{{ alternativa['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
+                            {% if alternativa['working_label'] %}{{ alternativa['preferred_label'] | alternative_display_label(alternativa['working_label']) }}{% else %}Sin etiqueta de trabajo{% endif %}
                         </option>
                     {% endfor %}
                 </select>
@@ -137,7 +137,7 @@
             <legend>Concepto nuevo propuesto</legend>
             <label>Nombre del concepto propuesto:</label>
             <input type="text" name="proposed_concept_label">
-            <label>¿Por qué considera que hace falta este concepto?</label>
+            <label>Observación sobre el concepto propuesto (opcional):</label>
             <textarea name="proposed_concept_note"></textarea>
         </fieldset>
 

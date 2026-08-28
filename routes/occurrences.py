@@ -3,6 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for
 import sqlite3
 
 from database import conectar
+from concept_labels import alternative_display_label, human_concept_label
 from routes.submissions import crear_o_reemplazar_assignment
 
 
@@ -33,16 +34,9 @@ def validate_occurrence_year(conexion, source_id, value):
 @occurrences_bp.route("/ocurrencias")
 def ocurrencias():
     conexion = conectar()
-    ocurrencias = conexion.execute("""
+    rows = conexion.execute("""
         SELECT o.occurrence_id, s.source_name, o.original_gloss, o.hyperlink,
-               CASE
-                   WHEN c.preferred_label IS NULL
-                       AND al.working_label IS NULL
-                       THEN 'Sin clasificación'
-                   WHEN al.working_label IS NULL THEN c.preferred_label
-                   WHEN c.preferred_label IS NULL THEN al.working_label
-                   ELSE c.preferred_label || '-' || al.working_label
-               END AS current_classification
+               c.preferred_label, al.working_label
         FROM occurrence AS o
         JOIN submission AS sub
             ON sub.occurrence_id = o.occurrence_id
@@ -54,6 +48,19 @@ def ocurrencias():
         LEFT JOIN concept AS c ON c.concept_id = al.concept_id
         ORDER BY o.occurrence_id
     """).fetchall()
+    ocurrencias = []
+    for row in rows:
+        occurrence = dict(row)
+        if row["preferred_label"] is None and row["working_label"] is None:
+            current_classification = "Sin clasificación"
+        elif row["working_label"] is None:
+            current_classification = human_concept_label(row["preferred_label"])
+        else:
+            current_classification = alternative_display_label(
+                row["preferred_label"], row["working_label"]
+            )
+        occurrence["current_classification"] = current_classification
+        ocurrencias.append(occurrence)
     conexion.close()
     return render_template("ocurrencias.html", ocurrencias=ocurrencias)
 
