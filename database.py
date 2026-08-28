@@ -36,7 +36,13 @@ def crear_esquema(conexion):
             source_name TEXT NOT NULL UNIQUE,
             source_type TEXT,
             source_reference TEXT,
+            start_year INTEGER,
+            end_year INTEGER,
+            end_year_status TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            ,updated_at TEXT,
+            created_by TEXT,
+            updated_by TEXT
         );
 
         CREATE TABLE IF NOT EXISTS concept (
@@ -52,12 +58,31 @@ def crear_esquema(conexion):
             hyperlink TEXT,
             source_locator TEXT,
             provenance_note TEXT,
+            occurrence_year INTEGER,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT,
             updated_at TEXT,
             updated_by TEXT,
             FOREIGN KEY (source_id) REFERENCES source(source_id)
         );
+
+        CREATE TABLE IF NOT EXISTS source_revision (
+            source_revision_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id INTEGER NOT NULL,
+            source_name TEXT NOT NULL,
+            source_type TEXT,
+            source_reference TEXT,
+            start_year INTEGER,
+            end_year INTEGER,
+            end_year_status TEXT,
+            changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            changed_by TEXT,
+            change_note TEXT,
+            FOREIGN KEY (source_id) REFERENCES source(source_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_source_revision_source
+            ON source_revision(source_id);
 
         CREATE TABLE IF NOT EXISTS occurrence_revision (
             occurrence_revision_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -67,6 +92,7 @@ def crear_esquema(conexion):
             hyperlink TEXT,
             source_locator TEXT,
             provenance_note TEXT,
+            occurrence_year INTEGER,
             changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             changed_by TEXT,
             change_note TEXT,
@@ -80,6 +106,7 @@ def crear_esquema(conexion):
         CREATE TABLE IF NOT EXISTS alternative (
             alternative_id INTEGER PRIMARY KEY AUTOINCREMENT,
             concept_id INTEGER NOT NULL,
+            original_code TEXT,
             working_label TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT,
@@ -108,6 +135,26 @@ def crear_esquema(conexion):
             ON assignment(alternative_id);
         CREATE INDEX IF NOT EXISTS idx_assignment_occurrence
             ON assignment(occurrence_id);
+
+        CREATE TABLE IF NOT EXISTS alternative_relation (
+            alternative_relation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alternative_a_id INTEGER NOT NULL,
+            alternative_b_id INTEGER NOT NULL,
+            phonological_parameter TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            FOREIGN KEY (alternative_a_id) REFERENCES alternative(alternative_id),
+            FOREIGN KEY (alternative_b_id) REFERENCES alternative(alternative_id),
+            CHECK (alternative_a_id <> alternative_b_id)
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS one_symmetric_alternative_relation
+            ON alternative_relation (
+                CASE WHEN alternative_a_id < alternative_b_id
+                    THEN alternative_a_id ELSE alternative_b_id END,
+                CASE WHEN alternative_a_id < alternative_b_id
+                    THEN alternative_b_id ELSE alternative_a_id END
+            );
 
         CREATE TABLE IF NOT EXISTS media_asset (
             media_asset_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,6 +212,12 @@ def crear_esquema(conexion):
             proposed_concept_id INTEGER,
             proposed_alternative_id INTEGER,
             proposed_alternative_label TEXT,
+            proposed_concept_status TEXT,
+            concept_uncertainty_note TEXT,
+            proposed_relation_answer TEXT,
+            proposed_related_alternative_id INTEGER,
+            proposed_phonological_parameter TEXT,
+            alternative_uncertainty_note TEXT,
             proposal_type TEXT NOT NULL
                 CHECK (proposal_type IN (
                     'existing_alternative', 'new_alternative', 'not_sure'
@@ -180,13 +233,15 @@ def crear_esquema(conexion):
             FOREIGN KEY (proposed_concept_id) REFERENCES concept(concept_id),
             FOREIGN KEY (proposed_alternative_id)
                 REFERENCES alternative(alternative_id),
+            FOREIGN KEY (proposed_related_alternative_id)
+                REFERENCES alternative(alternative_id),
             CHECK (
                 (proposal_type = 'existing_alternative'
                     AND proposed_alternative_id IS NOT NULL
                     AND proposed_alternative_label IS NULL)
                 OR (proposal_type = 'new_alternative'
                     AND proposed_alternative_id IS NULL
-                    AND proposed_alternative_label IS NOT NULL)
+                        )
                 OR (proposal_type = 'not_sure'
                     AND proposed_alternative_id IS NULL
                     AND proposed_alternative_label IS NULL)

@@ -3,7 +3,7 @@ from flask import Blueprint, render_template, request, redirect, url_for
 import sqlite3
 
 from database import conectar
-from routes.alternatives import structured_working_label
+from routes.alternatives import generated_working_label
 
 
 submissions_bp = Blueprint("submissions", __name__)
@@ -54,6 +54,13 @@ def guardar_aporte():
     proposal_type = request.form.get("proposal_type", "not_sure")
     original_gloss = request.form.get("original_gloss", "").strip()
     hyperlink = request.form.get("hyperlink", "").strip()
+    occurrence_year = request.form.get("occurrence_year", "").strip() or None
+    proposed_concept_status = request.form.get("proposed_concept_status") or None
+    concept_uncertainty_note = request.form.get("concept_uncertainty_note", "").strip() or None
+    proposed_relation_answer = request.form.get("proposed_relation_answer") or None
+    proposed_related_alternative_id = request.form.get("proposed_related_alternative_id") or None
+    proposed_phonological_parameter = request.form.get("proposed_phonological_parameter", "").strip() or None
+    alternative_uncertainty_note = request.form.get("alternative_uncertainty_note", "").strip() or None
 
     if not source_id:
 
@@ -66,32 +73,71 @@ def guardar_aporte():
 
     try:
 
+        from routes.occurrences import validate_occurrence_year
+        occurrence_year = validate_occurrence_year(
+            conexion, source_id, occurrence_year
+        )
+        if proposed_concept_id is None:
+            proposed_concept_status = "not_sure"
+            if not concept_uncertainty_note:
+                raise ValueError
+        else:
+            proposed_concept_status = "selected"
+        if proposal_type == "existing_alternative":
+            if proposed_alternative_id is None:
+                raise ValueError
+            alternative = conexion.execute(
+                "SELECT concept_id FROM alternative WHERE alternative_id = ?",
+                (proposed_alternative_id,)
+            ).fetchone()
+            if alternative is None or int(alternative["concept_id"]) != int(proposed_concept_id):
+                raise ValueError
+        elif proposal_type == "new_alternative" and proposed_relation_answer == "yes":
+            if proposed_related_alternative_id is None or not proposed_phonological_parameter:
+                raise ValueError
+            related = conexion.execute(
+                "SELECT concept_id FROM alternative WHERE alternative_id = ?",
+                (proposed_related_alternative_id,)
+            ).fetchone()
+            if related is None or int(related["concept_id"]) != int(proposed_concept_id):
+                raise ValueError
+
         cursor = conexion.execute("""
-            INSERT INTO occurrence (source_id, original_gloss, hyperlink)
-            VALUES (?, ?, ?)
+            INSERT INTO occurrence (source_id, original_gloss, hyperlink, occurrence_year)
+            VALUES (?, ?, ?, ?)
         """, (
             source_id,
             original_gloss,
-            hyperlink
+            hyperlink,
+            occurrence_year
         ))
 
         conexion.execute("""
             INSERT INTO submission (
                 occurrence_id, proposed_concept_id, proposed_alternative_id,
-                proposed_alternative_label, proposal_type
+                proposed_alternative_label, proposed_concept_status,
+                concept_uncertainty_note, proposed_relation_answer,
+                proposed_related_alternative_id, proposed_phonological_parameter,
+                alternative_uncertainty_note, proposal_type
             )
-            VALUES (?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             cursor.lastrowid,
             proposed_concept_id,
             proposed_alternative_id,
             proposed_alternative_label,
+            proposed_concept_status,
+            concept_uncertainty_note,
+            proposed_relation_answer,
+            proposed_related_alternative_id,
+            proposed_phonological_parameter,
+            alternative_uncertainty_note,
             proposal_type
         ))
 
         conexion.commit()
 
-    except sqlite3.IntegrityError:
+    except (sqlite3.IntegrityError, ValueError):
 
         conexion.rollback()
 
@@ -126,6 +172,12 @@ def aportes():
             c.preferred_label,
             os.proposed_alternative_id,
             os.proposed_alternative_label,
+            os.proposed_concept_status,
+            os.concept_uncertainty_note,
+            os.proposed_relation_answer,
+            os.proposed_related_alternative_id,
+            os.proposed_phonological_parameter,
+            os.alternative_uncertainty_note,
             s.source_name,
             o.original_gloss,
             o.hyperlink,
@@ -156,6 +208,12 @@ def revisar_aportes():
             c.preferred_label,
             os.proposed_alternative_id,
             os.proposed_alternative_label,
+            os.proposed_concept_status,
+            os.concept_uncertainty_note,
+            os.proposed_relation_answer,
+            os.proposed_related_alternative_id,
+            os.proposed_phonological_parameter,
+            os.alternative_uncertainty_note,
             s.source_name,
             o.original_gloss,
             o.hyperlink,
@@ -212,10 +270,9 @@ def decidir_aporte(submission_id):
     decision = request.form.get("decision", "")
     alternative_id = request.form.get("alternative_id") or None
     concept_id = request.form.get("concept_id") or None
-    try:
-        working_label = structured_working_label(request.form)
-    except ValueError:
-        return "Número y letra no son válidos.", 400
+    relation_answer = request.form.get("relation_answer") or None
+    related_alternative_id = request.form.get("related_alternative_id") or None
+    phonological_parameter = request.form.get("phonological_parameter", "").strip() or None
 
     conexion = conectar()
 
@@ -276,10 +333,33 @@ def decidir_aporte(submission_id):
             ).fetchone() is None:
                 return "El concepto no existe.", 400
 
+            if relation_answer == "yes":
+                if related_alternative_id is None or not phonological_parameter:
+                    return "La relación fonológica requiere alternativa y parámetro.", 400
+                related = conexion.execute("""
+                    SELECT concept_id FROM alternative WHERE alternative_id = ?
+                """, (related_alternative_id,)).fetchone()
+                if related is None or int(related["concept_id"]) != int(concept_id):
+                    return "La alternativa relacionada debe pertenecer al concepto elegido.", 400
+            elif relation_answer not in (None, "no", "not_sure"):
+                return "La respuesta de relación no es válida.", 400
+
+            working_label = generated_working_label(
+                conexion,
+                int(concept_id),
+                int(related_alternative_id) if relation_answer == "yes" else None
+            )
             cursor = conexion.execute("""
                 INSERT INTO alternative (concept_id, working_label)
                 VALUES (?, ?)
             """, (concept_id, working_label))
+            if relation_answer == "yes":
+                a_id, b_id = sorted((int(related_alternative_id), cursor.lastrowid))
+                conexion.execute("""
+                    INSERT INTO alternative_relation (
+                        alternative_a_id, alternative_b_id, phonological_parameter
+                    ) VALUES (?, ?, ?)
+                """, (a_id, b_id, phonological_parameter))
             crear_o_reemplazar_assignment(
                 conexion,
                 aporte["occurrence_id"],
@@ -312,7 +392,7 @@ def decidir_aporte(submission_id):
 
         conexion.commit()
 
-    except sqlite3.Error:
+    except (sqlite3.Error, ValueError):
 
         conexion.rollback()
 

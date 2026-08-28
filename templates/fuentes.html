@@ -27,6 +27,22 @@
             required
         >
 
+        <label>Tipo:</label>
+        <input type="text" name="source_type">
+        <label>Referencia:</label>
+        <input type="text" name="source_reference">
+        <label>Año inicial:</label>
+        <input type="number" name="start_year" min="1" max="9999">
+        <label>Año final:</label>
+        <input type="number" name="end_year" min="1" max="9999">
+        <label>Estado del año final:</label>
+        <select name="end_year_status">
+            <option value="">Sin especificar</option>
+            <option value="known">Conocido</option>
+            <option value="ongoing">En curso</option>
+            <option value="unknown">Desconocido</option>
+        </select>
+
         <button type="submit">
             Guardar fuente
         </button>
@@ -44,6 +60,7 @@
         <tr>
             <th>ID</th>
             <th>Nombre</th>
+            <th>Periodo</th>
             <th>Acciones</th>
         </tr>
 
@@ -57,6 +74,10 @@
 
                 <td>
                     {{ fuente["source_name"] }}
+                </td>
+
+                <td>
+                    {{ fuente["start_year"] or "" }}{% if fuente["end_year"] %}–{{ fuente["end_year"] }}{% elif fuente["end_year_status"] == "ongoing" %}–en curso{% elif fuente["end_year_status"] == "unknown" %}–final desconocido{% endif %}
                 </td>
 
                 <td>

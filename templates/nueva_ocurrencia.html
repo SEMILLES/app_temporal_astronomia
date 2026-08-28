@@ -26,9 +26,7 @@
                 Concepto:
             </label>
 
-            <select
-                name="proposed_concept_id"
-            >
+            <select name="proposed_concept_id" id="proposed-concept">
 
                 <option value="">
                     Ninguno / no estoy seguro
@@ -47,31 +45,47 @@
         </p>
 
 
-        <p>
-            <label>Propuesta:</label>
-            <select name="proposal_type">
-                <option value="not_sure">No estoy seguro</option>
-                <option value="existing_alternative">Alternativa existente</option>
-                <option value="new_alternative">Forma nueva</option>
-            </select>
+        <p id="concept-uncertainty" hidden>
+            <label>Explique por qué no está seguro del concepto:</label>
+            <textarea name="concept_uncertainty_note"></textarea>
         </p>
 
-        <p>
-            <label>Alternativa existente:</label>
-            <select name="proposed_alternative_id">
+        <fieldset id="classification-fields">
+            <legend>Clasificación dentro del concepto</legend>
+            <select name="proposed_concept_status" id="concept-status">
+                <option value="selected">He seleccionado un concepto</option>
+                <option value="not_sure">No estoy seguro</option>
+            </select>
+            <select name="proposal_type" id="proposal-type">
+                <option value="not_sure">No estoy seguro de la alternativa</option>
+                <option value="existing_alternative">Alternativa existente</option>
+                <option value="new_alternative">Parece una alternativa nueva</option>
+            </select>
+            <select name="proposed_alternative_id" id="proposed-alternative">
                 <option value="">Ninguna</option>
                 {% for alternativa in alternativas %}
-                    <option value="{{ alternativa['alternative_id'] }}">
+                    <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ alternativa['concept_id'] }}">
                         {{ alternativa['working_label'] or alternativa['alternative_id'] }}
                     </option>
                 {% endfor %}
             </select>
-        </p>
-
-        <p>
-            <label>Forma nueva:</label>
-            <input type="text" name="proposed_alternative_label">
-        </p>
+            <textarea name="alternative_uncertainty_note" placeholder="¿Qué le genera duda?"></textarea>
+            <select name="proposed_relation_answer" id="relation-answer">
+                <option value="">Relación fonológica: no indicada</option>
+                <option value="yes">Sí</option>
+                <option value="no">No</option>
+                <option value="not_sure">No estoy seguro</option>
+            </select>
+            <select name="proposed_related_alternative_id" id="related-alternative">
+                <option value="">Ninguna</option>
+                {% for alternativa in alternativas %}
+                    <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ alternativa['concept_id'] }}">
+                        {{ alternativa['working_label'] or alternativa['alternative_id'] }}
+                    </option>
+                {% endfor %}
+            </select>
+            <input type="text" name="proposed_phonological_parameter" placeholder="Parámetro fonológico">
+        </fieldset>
 
         <p>
 
@@ -79,10 +93,7 @@
                 Fuente:
             </label>
 
-            <select
-                name="source_id"
-                required
-            >
+            <select name="source_id" id="source-select" required>
 
                 <option value="">
                     Seleccione una fuente
@@ -90,13 +101,18 @@
 
                 {% for fuente in fuentes %}
 
-                    <option value="{{ fuente['source_id'] }}">
+                    <option value="{{ fuente['source_id'] }}"
+                        data-start-year="{{ fuente['start_year'] or '' }}"
+                        data-end-year="{{ fuente['end_year'] or '' }}"
+                        data-end-status="{{ fuente['end_year_status'] or '' }}">
                         {{ fuente["source_name"] }}
                     </option>
 
                 {% endfor %}
 
             </select>
+            <span id="occurrence-year-help"></span>
+            <input type="number" name="occurrence_year" id="occurrence-year" min="1" max="9999">
 
         </p>
 
@@ -142,6 +158,64 @@
         </a>
     </p>
 
+    <script>
+        const concept = document.getElementById('proposed-concept');
+        const conceptStatus = document.getElementById('concept-status');
+        const uncertainty = document.getElementById('concept-uncertainty');
+        const classification = document.getElementById('classification-fields');
+        const proposalType = document.getElementById('proposal-type');
+        const alternative = document.getElementById('proposed-alternative');
+        const relationAnswer = document.getElementById('relation-answer');
+        const relatedAlternative = document.getElementById('related-alternative');
+        const source = document.getElementById('source-select');
+        const year = document.getElementById('occurrence-year');
+        const yearHelp = document.getElementById('occurrence-year-help');
+
+        function filterAlternatives(select) {
+            Array.from(select.options).forEach(function (option) {
+                option.hidden = option.value !== '' && option.dataset.conceptId !== concept.value;
+            });
+            select.value = '';
+        }
+
+        function updateConcept() {
+            const unsure = conceptStatus.value === 'not_sure';
+            uncertainty.hidden = !unsure;
+            classification.hidden = unsure;
+            concept.required = !unsure;
+            filterAlternatives(alternative);
+            filterAlternatives(relatedAlternative);
+        }
+
+        function updateProposal() {
+            const isNew = proposalType.value === 'new_alternative';
+            relationAnswer.hidden = !isNew;
+            relatedAlternative.hidden = !isNew || relationAnswer.value !== 'yes';
+            document.querySelector('[name="proposed_phonological_parameter"]').hidden =
+                !isNew || relationAnswer.value !== 'yes';
+            alternative.hidden = proposalType.value !== 'existing_alternative';
+        }
+
+        function updateYear() {
+            const selected = source.options[source.selectedIndex];
+            const start = selected.dataset.startYear;
+            const end = selected.dataset.endYear;
+            const status = selected.dataset.endStatus;
+            const singleYear = start && end && start === end && status === 'known';
+            year.hidden = singleYear;
+            yearHelp.textContent = singleYear ? 'La fuente corresponde a un único año.' : 'Año de la occurrence (opcional).';
+            if (singleYear) year.value = '';
+        }
+
+        conceptStatus.addEventListener('change', updateConcept);
+        concept.addEventListener('change', updateConcept);
+        proposalType.addEventListener('change', updateProposal);
+        relationAnswer.addEventListener('change', updateProposal);
+        source.addEventListener('change', updateYear);
+        updateConcept();
+        updateProposal();
+        updateYear();
+    </script>
 </body>
 
 </html>

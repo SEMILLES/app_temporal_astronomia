@@ -37,6 +37,9 @@
                         {% else %}
                             Alternativa: No estoy seguro
                         {% endif %}
+                        {% if aporte["concept_uncertainty_note"] %}<br>Motivo: {{ aporte["concept_uncertainty_note"] }}{% endif %}
+                        {% if aporte["proposed_relation_answer"] %}<br>Relación propuesta: {{ aporte["proposed_relation_answer"] }}{% endif %}
+                        {% if aporte["proposed_phonological_parameter"] %}<br>Parámetro propuesto: {{ aporte["proposed_phonological_parameter"] }}{% endif %}
                     </td>
                     <td>{{ aporte["source_name"] }}</td>
                     <td>{{ aporte["original_gloss"] or "" }}</td>
@@ -112,16 +115,27 @@
                                 </select>
                             </p>
                             <p>
-                                <label>Número nueva:</label>
-                                <select name="working_label_number">
-                                    <option value="">Sin número</option>
-                                    {% for number in range(1, 11) %}<option value="{{ number }}">{{ number }}</option>{% endfor %}
+                                <label>¿Está relacionada fonológicamente?</label>
+                                <select name="relation_answer">
+                                    <option value="">No indicado</option>
+                                    <option value="yes">Sí</option>
+                                    <option value="no">No</option>
+                                    <option value="not_sure">No estoy seguro</option>
                                 </select>
-                                <label>Letra nueva:</label>
-                                <select name="working_label_letter">
-                                    <option value="">Sin letra</option>
-                                    {% for letter in "abcdefghijklmnopqrstuvwxyz" %}<option value="{{ letter }}">{{ letter }}</option>{% endfor %}
+                                <label>Alternativa relacionada:</label>
+                                <select name="related_alternative_id">
+                                    <option value="">Ninguna</option>
+                                    {% for group in alternativas_por_concepto %}
+                                        {% for alternativa in group['alternativas'] %}
+                                            <option value="{{ alternativa['alternative_id'] }}">
+                                                {{ group['concepto']['preferred_label'] }} /
+                                                {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}
+                                            </option>
+                                        {% endfor %}
+                                    {% endfor %}
                                 </select>
+                                <label>Parámetro fonológico:</label>
+                                <input type="text" name="phonological_parameter">
                             </p>
                             <button type="submit">Aplicar decisión</button>
                         </form>

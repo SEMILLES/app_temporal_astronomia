@@ -40,6 +40,36 @@
 
         </p>
 
+        <p>
+            <label>Tipo:</label>
+            <input type="text" name="source_type" value="{{ fuente['source_type'] or '' }}">
+        </p>
+        <p>
+            <label>Referencia:</label>
+            <input type="text" name="source_reference" value="{{ fuente['source_reference'] or '' }}">
+        </p>
+        <p>
+            <label>Año inicial:</label>
+            <input type="number" name="start_year" value="{{ fuente['start_year'] or '' }}">
+        </p>
+        <p>
+            <label>Año final:</label>
+            <input type="number" name="end_year" value="{{ fuente['end_year'] or '' }}">
+        </p>
+        <p>
+            <label>Estado del año final:</label>
+            <select name="end_year_status">
+                <option value="" {% if not fuente['end_year_status'] %}selected{% endif %}>Sin especificar</option>
+                <option value="known" {% if fuente['end_year_status'] == 'known' %}selected{% endif %}>Conocido</option>
+                <option value="ongoing" {% if fuente['end_year_status'] == 'ongoing' %}selected{% endif %}>En curso</option>
+                <option value="unknown" {% if fuente['end_year_status'] == 'unknown' %}selected{% endif %}>Desconocido</option>
+            </select>
+        </p>
+        <p>
+            <label>Nota del cambio:</label>
+            <textarea name="change_note"></textarea>
+        </p>
+
         <button type="submit">
             Guardar cambios
         </button>
