@@ -28,18 +28,41 @@
                     <td>{{ aporte["submission_id"] }}</td>
                     <td>
                         <strong>PROPUESTA DEL INTÉRPRETE</strong><br>
-                        Concepto:
-                        {{ aporte["preferred_label"] or "Sin concepto propuesto" }}<br>
-                        {% if aporte["proposed_alternative_id"] %}
-                            Alternativa existente: {{ aporte["proposed_alternative_id"] }}
-                        {% elif aporte["proposed_alternative_label"] %}
-                            Forma nueva: {{ aporte["proposed_alternative_label"] }}
+                        {% if aporte["proposed_concept_status"] == "not_sure" %}
+                            Concepto: No estoy seguro
+                        {% elif aporte["proposed_concept_status"] == "new" %}
+                            Concepto: {{ aporte["proposed_concept_label"] or "Concepto nuevo no especificado" }}
                         {% else %}
-                            Alternativa: No estoy seguro
+                            Concepto: {{ aporte["preferred_label"] or "Sin concepto propuesto" }}
                         {% endif %}
-                        {% if aporte["concept_uncertainty_note"] %}<br>Motivo: {{ aporte["concept_uncertainty_note"] }}{% endif %}
-                        {% if aporte["proposed_relation_answer"] %}<br>Relación propuesta: {{ aporte["proposed_relation_answer"] }}{% endif %}
-                        {% if aporte["proposed_phonological_parameter"] %}<br>Parámetro propuesto: {{ aporte["proposed_phonological_parameter"] }}{% endif %}
+                        {% if aporte["proposal_type"] == "existing_alternative" %}
+                            <br>Clasificación propuesta: Alternativa existente
+                            <br>Alternativa propuesta:
+                            {{ aporte["proposed_alternative_working_label"] or "Sin etiqueta de trabajo" }}
+                        {% elif aporte["proposal_type"] == "new_alternative" %}
+                            <br>Clasificación propuesta: Nueva alternativa
+                            {% if aporte["proposed_relation_answer"] == "yes" %}
+                                <br>Alternativa relacionada propuesta:
+                                {{ aporte["proposed_related_alternative_working_label"] or "Sin etiqueta de trabajo" }}
+                                <br>Parámetro fonológico propuesto:
+                                {{ aporte["proposed_phonological_parameter"] or "Sin parámetro especificado" }}
+                            {% elif aporte["proposed_relation_answer"] == "no" %}
+                                <br>Relación propuesta: No relacionada con una alternativa existente
+                            {% elif aporte["proposed_relation_answer"] == "not_sure" %}
+                                <br>Relación propuesta: No estoy seguro
+                            {% endif %}
+                        {% elif aporte["proposal_type"] == "not_sure" %}
+                            <br>Clasificación propuesta: No estoy seguro de la alternativa
+                        {% endif %}
+                        {% if aporte["concept_uncertainty_note"] and aporte["proposed_concept_status"] == "not_sure" %}
+                            <br>Motivo: {{ aporte["concept_uncertainty_note"] }}
+                        {% endif %}
+                        {% if aporte["alternative_uncertainty_note"] and aporte["proposal_type"] == "not_sure" %}
+                            <br>Duda sobre la alternativa: {{ aporte["alternative_uncertainty_note"] }}
+                        {% endif %}
+                        {% if aporte["proposed_concept_status"] == "new" %}
+                            <br>Justificación del concepto nuevo: {{ aporte["proposed_concept_note"] or "Sin justificación especificada" }}
+                        {% endif %}
                     </td>
                     <td>{{ aporte["source_name"] }}</td>
                     <td>{{ aporte["original_gloss"] or "" }}</td>
@@ -107,6 +130,9 @@
                                 <label>Concepto para alternativa nueva:</label>
                                 <select name="concept_id">
                                     <option value="">Ninguno</option>
+                                    {% if aporte["proposed_concept_label"] %}
+                                        <option value="proposed">Crear concepto nuevo propuesto</option>
+                                    {% endif %}
                                     {% for concepto in conceptos %}
                                         <option value="{{ concepto['concept_id'] }}">
                                             {{ concepto['preferred_label'] }}

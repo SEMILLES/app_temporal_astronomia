@@ -26,11 +26,13 @@
                 Concepto:
             </label>
 
-            <select name="proposed_concept_id" id="proposed-concept">
+            <select name="concept_choice" id="proposed-concept" required>
 
                 <option value="">
-                    Ninguno / no estoy seguro
+                    Seleccione una opción
                 </option>
+                <option value="not_sure">No estoy seguro</option>
+                <option value="new">El concepto no está registrado</option>
 
                 {% for concepto in conceptos %}
 
@@ -52,10 +54,7 @@
 
         <fieldset id="classification-fields">
             <legend>Clasificación dentro del concepto</legend>
-            <select name="proposed_concept_status" id="concept-status">
-                <option value="selected">He seleccionado un concepto</option>
-                <option value="not_sure">No estoy seguro</option>
-            </select>
+            <input type="hidden" name="proposed_concept_status" id="concept-status" value="">
             <select name="proposal_type" id="proposal-type">
                 <option value="not_sure">No estoy seguro de la alternativa</option>
                 <option value="existing_alternative">Alternativa existente</option>
@@ -69,6 +68,30 @@
                     </option>
                 {% endfor %}
             </select>
+            <div id="alternative-cards">
+                {% for detail in alternative_details %}
+                    <article class="alternative-card" data-concept-id="{{ detail['alternative']['concept_id'] }}">
+                        <strong>{{ detail['alternative']['working_label'] or 'Sin etiqueta de trabajo' }}</strong>
+                        {% if detail['alternative']['original_code'] %} ({{ detail['alternative']['original_code'] }}){% endif %}
+                        <p>Ocurrencias documentadas:</p>
+                        {% if detail['occurrences'] %}
+                            <ul>
+                                {% for item in detail['occurrences'] %}
+                                    <li>
+                                        {{ item['source_name'] }} |
+                                        {% if item['occurrence_year'] %}{{ item['occurrence_year'] }}{% elif item['start_year'] and item['end_year'] %}fuente {{ item['start_year'] }}–{{ item['end_year'] }}{% else %}periodo de fuente no especificado{% endif %}
+                                        | {{ item['source_locator'] or 'localización no especificada' }}
+                                        {% if item['hyperlink'] %}<a href="{{ item['hyperlink'] }}" target="_blank" rel="noopener noreferrer">Abrir</a>{% endif %}
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p>Sin occurrences documentadas.</p>
+                        {% endif %}
+                        {% if detail['visual_url'] %}<a href="{{ detail['visual_url'] }}" target="_blank" rel="noopener noreferrer">Ver referencia visual</a>{% endif %}
+                    </article>
+                {% endfor %}
+            </div>
             <textarea name="alternative_uncertainty_note" placeholder="¿Qué le genera duda?"></textarea>
             <select name="proposed_relation_answer" id="relation-answer">
                 <option value="">Relación fonológica: no indicada</option>
@@ -85,6 +108,14 @@
                 {% endfor %}
             </select>
             <input type="text" name="proposed_phonological_parameter" placeholder="Parámetro fonológico">
+        </fieldset>
+
+        <fieldset id="new-concept-fields" hidden>
+            <legend>Concepto nuevo propuesto</legend>
+            <label>Nombre del concepto propuesto:</label>
+            <input type="text" name="proposed_concept_label">
+            <label>¿Por qué considera que hace falta este concepto?</label>
+            <textarea name="proposed_concept_note"></textarea>
         </fieldset>
 
         <p>
@@ -109,8 +140,23 @@
                     </option>
 
                 {% endfor %}
+                <option value="__new__">+ Registrar nueva fuente</option>
 
             </select>
+            <fieldset id="new-source-fields" hidden>
+                <legend>Nueva fuente</legend>
+                <input type="text" name="source_name" placeholder="Nombre de la fuente">
+                <input type="text" name="source_type" placeholder="Tipo opcional">
+                <input type="text" name="source_reference" placeholder="Referencia opcional">
+                <input type="number" name="start_year" placeholder="Año inicial" min="1" max="9999">
+                <input type="number" name="end_year" placeholder="Año final" min="1" max="9999">
+                <select name="end_year_status">
+                    <option value="">Estado del final</option>
+                    <option value="known">Conocido</option>
+                    <option value="ongoing">En curso</option>
+                    <option value="unknown">Desconocido</option>
+                </select>
+            </fieldset>
             <span id="occurrence-year-help"></span>
             <input type="number" name="occurrence_year" id="occurrence-year" min="1" max="9999">
 
@@ -163,6 +209,8 @@
         const conceptStatus = document.getElementById('concept-status');
         const uncertainty = document.getElementById('concept-uncertainty');
         const classification = document.getElementById('classification-fields');
+        const newConceptFields = document.getElementById('new-concept-fields');
+        const newSourceFields = document.getElementById('new-source-fields');
         const proposalType = document.getElementById('proposal-type');
         const alternative = document.getElementById('proposed-alternative');
         const relationAnswer = document.getElementById('relation-answer');
@@ -176,13 +224,18 @@
                 option.hidden = option.value !== '' && option.dataset.conceptId !== concept.value;
             });
             select.value = '';
+            document.querySelectorAll('.alternative-card').forEach(function (card) {
+                card.hidden = card.dataset.conceptId !== concept.value;
+            });
         }
 
         function updateConcept() {
-            const unsure = conceptStatus.value === 'not_sure';
+            const unsure = concept.value === 'not_sure';
+            const newConcept = concept.value === 'new';
             uncertainty.hidden = !unsure;
-            classification.hidden = unsure;
-            concept.required = !unsure;
+            classification.hidden = unsure || newConcept;
+            newConceptFields.hidden = !newConcept;
+            conceptStatus.value = unsure ? 'not_sure' : newConcept ? 'new' : 'selected';
             filterAlternatives(alternative);
             filterAlternatives(relatedAlternative);
         }
@@ -207,7 +260,11 @@
             if (singleYear) year.value = '';
         }
 
-        conceptStatus.addEventListener('change', updateConcept);
+        source.addEventListener('change', function () {
+            newSourceFields.hidden = source.value !== '__new__';
+            updateYear();
+        });
+
         concept.addEventListener('change', updateConcept);
         proposalType.addEventListener('change', updateProposal);
         relationAnswer.addEventListener('change', updateProposal);

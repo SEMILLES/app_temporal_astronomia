@@ -4,6 +4,7 @@ import sqlite3
 
 from database import conectar
 from routes.alternatives import generated_working_label
+from routes.sources import source_insert_values
 
 
 submissions_bp = Blueprint("submissions", __name__)
@@ -15,7 +16,7 @@ def nuevo_aporte():
     conexion = conectar()
 
     fuentes = conexion.execute("""
-        SELECT source_id, source_name
+        SELECT source_id, source_name, start_year, end_year, end_year_status
         FROM source
         ORDER BY source_name
     """).fetchall()
@@ -27,10 +28,38 @@ def nuevo_aporte():
     """).fetchall()
 
     alternativas = conexion.execute("""
-        SELECT alternative_id, concept_id, working_label
+        SELECT alternative_id, concept_id, working_label, original_code
         FROM alternative
         ORDER BY alternative_id
     """).fetchall()
+
+    alternative_details = []
+    for alternative in alternativas:
+        occurrences = conexion.execute("""
+            SELECT s.source_name, o.occurrence_year, s.start_year,
+                   s.end_year, s.end_year_status, o.original_gloss,
+                   o.source_locator, o.hyperlink
+            FROM assignment AS a
+            JOIN occurrence AS o ON o.occurrence_id = a.occurrence_id
+            JOIN submission AS sub ON sub.occurrence_id = o.occurrence_id
+                AND sub.status = 'accepted'
+            JOIN source AS s ON s.source_id = o.source_id
+            WHERE a.alternative_id = ? AND a.is_current = 1
+            ORDER BY o.occurrence_id
+        """, (alternative["alternative_id"],)).fetchall()
+        visual = conexion.execute("""
+            SELECT m.origin_locator
+            FROM alternative_media AS am
+            JOIN media_asset AS m ON m.media_asset_id = am.media_asset_id
+            WHERE am.alternative_id = ?
+                AND (m.origin_locator LIKE 'http://%' OR m.origin_locator LIKE 'https://%')
+            ORDER BY am.media_asset_id LIMIT 1
+        """, (alternative["alternative_id"],)).fetchone()
+        alternative_details.append({
+            "alternative": alternative,
+            "occurrences": occurrences,
+            "visual_url": visual["origin_locator"] if visual else None
+        })
 
     conexion.close()
 
@@ -38,7 +67,8 @@ def nuevo_aporte():
         "nueva_ocurrencia.html",
         fuentes=fuentes,
         conceptos=conceptos,
-        alternativas=alternativas
+        alternativas=alternativas,
+        alternative_details=alternative_details
     )
 
 
@@ -46,7 +76,16 @@ def nuevo_aporte():
 def guardar_aporte():
 
     source_id = request.form.get("source_id", "")
-    proposed_concept_id = request.form.get("proposed_concept_id") or None
+    concept_choice = request.form.get("concept_choice", "")
+    proposed_concept_id = (
+        concept_choice if concept_choice.isdigit() else None
+    )
+    proposed_concept_label = request.form.get(
+        "proposed_concept_label", ""
+    ).strip() or None
+    proposed_concept_note = request.form.get(
+        "proposed_concept_note", ""
+    ).strip() or None
     proposed_alternative_id = request.form.get("proposed_alternative_id") or None
     proposed_alternative_label = request.form.get(
         "proposed_alternative_label", ""
@@ -62,7 +101,7 @@ def guardar_aporte():
     proposed_phonological_parameter = request.form.get("proposed_phonological_parameter", "").strip() or None
     alternative_uncertainty_note = request.form.get("alternative_uncertainty_note", "").strip() or None
 
-    if not source_id:
+    if not source_id or not concept_choice:
 
         return (
             "La fuente es obligatoria.",
@@ -73,13 +112,35 @@ def guardar_aporte():
 
     try:
 
+        conexion.execute("BEGIN IMMEDIATE")
+
+        if source_id == "__new__":
+            source_values = source_insert_values(request.form)
+            conexion.execute("""
+                INSERT INTO source (
+                    source_name, source_type, source_reference,
+                    start_year, end_year, end_year_status, created_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (*source_values, None))
+            source_id = str(conexion.execute(
+                "SELECT last_insert_rowid()"
+            ).fetchone()[0])
+        elif not source_id.isdigit():
+            raise ValueError
+
         from routes.occurrences import validate_occurrence_year
         occurrence_year = validate_occurrence_year(
             conexion, source_id, occurrence_year
         )
-        if proposed_concept_id is None:
+        if concept_choice == "not_sure":
+            proposed_concept_id = None
             proposed_concept_status = "not_sure"
             if not concept_uncertainty_note:
+                raise ValueError
+        elif concept_choice == "new":
+            proposed_concept_id = None
+            proposed_concept_status = "new"
+            if not proposed_concept_label or not proposed_concept_note:
                 raise ValueError
         else:
             proposed_concept_status = "selected"
@@ -115,16 +176,19 @@ def guardar_aporte():
         conexion.execute("""
             INSERT INTO submission (
                 occurrence_id, proposed_concept_id, proposed_alternative_id,
+                proposed_concept_label, proposed_concept_note,
                 proposed_alternative_label, proposed_concept_status,
                 concept_uncertainty_note, proposed_relation_answer,
                 proposed_related_alternative_id, proposed_phonological_parameter,
                 alternative_uncertainty_note, proposal_type
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             cursor.lastrowid,
             proposed_concept_id,
             proposed_alternative_id,
+            proposed_concept_label,
+            proposed_concept_note,
             proposed_alternative_label,
             proposed_concept_status,
             concept_uncertainty_note,
@@ -171,13 +235,17 @@ def aportes():
             os.submission_id,
             c.preferred_label,
             os.proposed_alternative_id,
+            proposed_alternative.working_label AS proposed_alternative_working_label,
             os.proposed_alternative_label,
             os.proposed_concept_status,
+            os.proposed_concept_label,
+            os.proposed_concept_note,
             os.concept_uncertainty_note,
             os.proposed_relation_answer,
             os.proposed_related_alternative_id,
             os.proposed_phonological_parameter,
             os.alternative_uncertainty_note,
+            os.proposal_type,
             s.source_name,
             o.original_gloss,
             o.hyperlink,
@@ -188,6 +256,8 @@ def aportes():
         FROM submission AS os
         JOIN occurrence AS o ON o.occurrence_id = os.occurrence_id
         LEFT JOIN concept AS c ON os.proposed_concept_id = c.concept_id
+        LEFT JOIN alternative AS proposed_alternative
+            ON proposed_alternative.alternative_id = os.proposed_alternative_id
         JOIN source AS s ON o.source_id = s.source_id
         ORDER BY os.submission_id DESC
     """).fetchall()
@@ -207,13 +277,18 @@ def revisar_aportes():
             os.submission_id,
             c.preferred_label,
             os.proposed_alternative_id,
+            proposed_alternative.working_label AS proposed_alternative_working_label,
             os.proposed_alternative_label,
             os.proposed_concept_status,
+            os.proposed_concept_label,
+            os.proposed_concept_note,
             os.concept_uncertainty_note,
             os.proposed_relation_answer,
             os.proposed_related_alternative_id,
+            related_alternative.working_label AS proposed_related_alternative_working_label,
             os.proposed_phonological_parameter,
             os.alternative_uncertainty_note,
+            os.proposal_type,
             s.source_name,
             o.original_gloss,
             o.hyperlink,
@@ -221,6 +296,10 @@ def revisar_aportes():
         FROM submission AS os
         JOIN occurrence AS o ON o.occurrence_id = os.occurrence_id
         LEFT JOIN concept AS c ON os.proposed_concept_id = c.concept_id
+        LEFT JOIN alternative AS proposed_alternative
+            ON proposed_alternative.alternative_id = os.proposed_alternative_id
+        LEFT JOIN alternative AS related_alternative
+            ON related_alternative.alternative_id = os.proposed_related_alternative_id
         JOIN source AS s ON o.source_id = s.source_id
         WHERE os.status = 'pending'
         ORDER BY os.submission_id
@@ -327,6 +406,20 @@ def decidir_aporte(submission_id):
         elif decision == "create_new":
             if concept_id is None:
                 return "Debe seleccionar un concepto.", 400
+
+            if concept_id == "proposed":
+                proposed = conexion.execute("""
+                    SELECT proposed_concept_label, proposed_concept_note
+                    FROM submission WHERE submission_id = ?
+                """, (submission_id,)).fetchone()
+                if (proposed is None or not proposed["proposed_concept_label"]
+                        or not proposed["proposed_concept_note"]):
+                    return "No hay un concepto nuevo propuesto completo.", 400
+                concept_cursor = conexion.execute("""
+                    INSERT INTO concept (preferred_label)
+                    VALUES (?)
+                """, (proposed["proposed_concept_label"],))
+                concept_id = str(concept_cursor.lastrowid)
 
             if conexion.execute(
                 "SELECT 1 FROM concept WHERE concept_id = ?", (concept_id,)

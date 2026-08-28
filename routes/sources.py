@@ -52,6 +52,13 @@ def source_form_values(form):
     )
 
 
+def source_insert_values(form):
+    values = source_form_values(form)
+    if not values[0]:
+        raise ValueError
+    return values
+
+
 @sources_bp.route("/fuentes")
 def fuentes():
 

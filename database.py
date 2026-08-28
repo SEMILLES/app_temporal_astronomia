@@ -210,6 +210,8 @@ def crear_esquema(conexion):
             submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
             occurrence_id INTEGER NOT NULL UNIQUE,
             proposed_concept_id INTEGER,
+            proposed_concept_label TEXT,
+            proposed_concept_note TEXT,
             proposed_alternative_id INTEGER,
             proposed_alternative_label TEXT,
             proposed_concept_status TEXT,
