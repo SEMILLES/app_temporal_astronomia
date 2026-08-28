@@ -218,6 +218,7 @@ def crear_esquema(conexion):
             concept_uncertainty_note TEXT,
             proposed_relation_answer TEXT,
             proposed_related_alternative_id INTEGER,
+            proposed_related_submission_id INTEGER,
             proposed_phonological_parameter TEXT,
             alternative_uncertainty_note TEXT,
             proposal_type TEXT NOT NULL
@@ -237,6 +238,8 @@ def crear_esquema(conexion):
                 REFERENCES alternative(alternative_id),
             FOREIGN KEY (proposed_related_alternative_id)
                 REFERENCES alternative(alternative_id),
+            FOREIGN KEY (proposed_related_submission_id)
+                REFERENCES submission(submission_id),
             CHECK (
                 (proposal_type = 'existing_alternative'
                     AND proposed_alternative_id IS NOT NULL

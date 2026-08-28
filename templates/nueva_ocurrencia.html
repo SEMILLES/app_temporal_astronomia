@@ -99,14 +99,37 @@
                 <option value="no">No</option>
                 <option value="not_sure">No estoy seguro</option>
             </select>
-            <select name="proposed_related_alternative_id" id="related-alternative">
-                <option value="">Ninguna</option>
-                {% for alternativa in alternativas %}
-                    <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ alternativa['concept_id'] }}">
-                        {{ alternativa['working_label'] or alternativa['alternative_id'] }}
-                    </option>
-                {% endfor %}
-            </select>
+
+            <div id="relation-target-type-block" hidden>
+                <label>¿Con qué forma está relacionada?</label>
+                <select name="relation_target_type" id="relation-target-type">
+                    <option value="">Seleccione una opción</option>
+                    <option value="alternative">Alternativa ya registrada</option>
+                    <option value="submission">Aporte pendiente</option>
+                </select>
+            </div>
+
+            <div id="related-alternative-wrapper" hidden>
+                <select name="proposed_related_alternative_id" id="related-alternative">
+                    <option value="">Ninguna</option>
+                    {% for alternativa in alternativas %}
+                        <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ alternativa['concept_id'] }}">
+                            {{ alternativa['working_label'] or alternativa['alternative_id'] }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div id="related-submission-wrapper" hidden>
+                <select name="proposed_related_submission_id" id="related-submission">
+                    <option value="">Ninguna</option>
+                    {% for submission in related_pending_submissions %}
+                        <option value="{{ submission['submission_id'] }}" data-concept-id="{{ submission['proposed_concept_id'] }}">
+                            Aporte #{{ submission['submission_id'] }} / OCC-{{ '%06d' % submission['submission_id'] }} | {{ submission['source_name'] }} | {{ submission['original_gloss'] or 'sin glosa' }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
             <input type="text" name="proposed_phonological_parameter" placeholder="Parámetro fonológico">
         </fieldset>
 
@@ -214,7 +237,9 @@
         const proposalType = document.getElementById('proposal-type');
         const alternative = document.getElementById('proposed-alternative');
         const relationAnswer = document.getElementById('relation-answer');
+        const relationTargetType = document.getElementById('relation-target-type');
         const relatedAlternative = document.getElementById('related-alternative');
+        const relatedSubmission = document.getElementById('related-submission');
         const source = document.getElementById('source-select');
         const year = document.getElementById('occurrence-year');
         const yearHelp = document.getElementById('occurrence-year-help');
@@ -229,6 +254,25 @@
             });
         }
 
+        function filterPendingSubmissions() {
+            const conceptId = concept.value;
+            Array.from(relatedSubmission.options).forEach(function (option) {
+                option.hidden = option.value !== '' && option.dataset.conceptId !== conceptId;
+            });
+            if (optionSelectedIsHidden()) {
+                relatedSubmission.value = '';
+            }
+        }
+
+        function optionSelectedIsHidden() {
+            const selected = relatedSubmission.value;
+            if (!selected) return false;
+            const selectedOption = Array.from(relatedSubmission.options).find(function (option) {
+                return option.value === selected;
+            });
+            return selectedOption && selectedOption.hidden;
+        }
+
         function updateConcept() {
             const unsure = concept.value === 'not_sure';
             const newConcept = concept.value === 'new';
@@ -238,15 +282,24 @@
             conceptStatus.value = unsure ? 'not_sure' : newConcept ? 'new' : 'selected';
             filterAlternatives(alternative);
             filterAlternatives(relatedAlternative);
+            filterPendingSubmissions();
         }
 
         function updateProposal() {
             const isNew = proposalType.value === 'new_alternative';
+            const isYes = relationAnswer.value === 'yes';
             relationAnswer.hidden = !isNew;
-            relatedAlternative.hidden = !isNew || relationAnswer.value !== 'yes';
+            relationTargetType.parentElement.hidden = !isNew || !isYes;
+            relatedAlternative.parentElement.hidden = !isNew || !isYes || relationTargetType.value !== 'alternative';
+            relatedSubmission.parentElement.hidden = !isNew || !isYes || relationTargetType.value !== 'submission';
             document.querySelector('[name="proposed_phonological_parameter"]').hidden =
-                !isNew || relationAnswer.value !== 'yes';
+                !isNew || !isYes;
             alternative.hidden = proposalType.value !== 'existing_alternative';
+            if (!isNew || !isYes) {
+                relationTargetType.value = '';
+                relatedAlternative.value = '';
+                relatedSubmission.value = '';
+            }
         }
 
         function updateYear() {
@@ -268,6 +321,12 @@
         concept.addEventListener('change', updateConcept);
         proposalType.addEventListener('change', updateProposal);
         relationAnswer.addEventListener('change', updateProposal);
+        relationTargetType.addEventListener('change', updateProposal);
+        relatedSubmission.addEventListener('change', function () {
+            if (relatedSubmission.value) {
+                relationTargetType.value = 'submission';
+            }
+        });
         source.addEventListener('change', updateYear);
         updateConcept();
         updateProposal();

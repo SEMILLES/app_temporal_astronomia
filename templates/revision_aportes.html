@@ -42,8 +42,36 @@
                         {% elif aporte["proposal_type"] == "new_alternative" %}
                             <br>Clasificación propuesta: Nueva alternativa
                             {% if aporte["proposed_relation_answer"] == "yes" %}
-                                <br>Alternativa relacionada propuesta:
-                                {{ aporte["proposed_related_alternative_working_label"] or "Sin etiqueta de trabajo" }}
+                                {% if aporte["proposed_related_submission_id"] %}
+                                    <br>Alternativa relacionada propuesta:
+                                    Aporte #{{ aporte["proposed_related_submission_id"] }} / OCC-{{ '%06d' % aporte["related_submission_occurrence_id"] }}
+                                    {% if aporte["related_submission_source_name"] %}
+                                        <br>Fuente: {{ aporte["related_submission_source_name"] }}
+                                    {% endif %}
+                                    {% if aporte["related_submission_original_gloss"] %}
+                                        <br>Glosa: {{ aporte["related_submission_original_gloss"] }}
+                                    {% endif %}
+                                    <br>Enviado: {{ aporte["related_submission_submitted_at"] or "fecha no especificada" }}
+                                    <br>Estado: {{ aporte["related_submission_status"] or "no determinado" }}
+                                    {% if aporte["related_submission_status"] == "accepted" %}
+                                        {% if aporte["related_submission_current_alternative_id"] %}
+                                            <br>→ ahora clasificado como {{ aporte["related_submission_current_concept_label"] or "concepto" }} — {{ aporte["related_submission_current_working_label"] or "sin etiqueta" }}
+                                        {% else %}
+                                            <br>→ aporte relacionado aceptado, aún sin clasificación
+                                        {% endif %}
+                                    {% elif aporte["related_submission_status"] == "rejected" %}
+                                        <br>→ aporte relacionado rechazado
+                                    {% elif aporte["related_submission_status"] == "pending" %}
+                                        <br>→ la clasificación propuesta depende de un aporte todavía pendiente
+                                    {% else %}
+                                        <br>→ aporte relacionado con otro estado no determinado
+                                    {% endif %}
+                                {% elif aporte["proposed_related_alternative_id"] %}
+                                    <br>Alternativa relacionada propuesta:
+                                    {{ aporte["proposed_related_alternative_working_label"] or "Sin etiqueta de trabajo" }}
+                                {% else %}
+                                    <br>Alternativa relacionada propuesta: no indicada
+                                {% endif %}
                                 <br>Parámetro fonológico propuesto:
                                 {{ aporte["proposed_phonological_parameter"] or "Sin parámetro especificado" }}
                             {% elif aporte["proposed_relation_answer"] == "no" %}
@@ -86,12 +114,20 @@
                         >
                             <p>
                                 <select name="decision" required>
+                                    {% if aporte['accept_proposed_allowed'] %}
+                                        <option value="accept_proposed">Aceptar clasificación propuesta</option>
+                                    {% endif %}
                                     <option value="accept_unclassified">Aceptar sin clasificación</option>
                                     <option value="assign_existing">Aceptar y asignar a alternativa existente</option>
                                     <option value="create_new">Aceptar y crear alternativa nueva</option>
                                     <option value="reject">Rechazar aporte</option>
                                 </select>
                             </p>
+
+                            {% if aporte['proposed_related_submission_id'] and aporte['related_submission_status'] == 'pending' %}
+                                <p><strong>La clasificación propuesta depende de un aporte todavía pendiente. Revise primero el aporte #{{ aporte['proposed_related_submission_id'] }} o elija manualmente otra decisión.</strong></p>
+                            {% endif %}
+
                             <p>
                                 <label>Alternativa existente:</label>
                                 <select class="concept-filter" data-target="review-alternative-{{ aporte['submission_id'] }}">
