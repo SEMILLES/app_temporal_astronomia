@@ -80,19 +80,107 @@ def alternativas(concept_id):
         conexion.close()
         return "El concepto no existe.", 404
 
-    alternatives = conexion.execute("""
-        SELECT alternative_id, working_label, created_at, retired_at
+    alternative_rows = conexion.execute("""
+        SELECT alternative_id, working_label, original_code,
+               created_at, retired_at
         FROM alternative
         WHERE concept_id = ?
         ORDER BY alternative_id
     """, (concept_id,)).fetchall()
+
+    alternatives = {
+        row["alternative_id"]: {
+            "alternative": row,
+            "occurrences": [],
+            "relations": []
+        }
+        for row in alternative_rows
+    }
+
+    occurrence_rows = conexion.execute("""
+        SELECT
+            a.alternative_id,
+            o.occurrence_id,
+            o.occurrence_year,
+            o.original_gloss,
+            o.source_locator,
+            o.hyperlink,
+            s.source_name,
+            s.start_year,
+            s.end_year,
+            s.end_year_status
+        FROM assignment AS a
+        JOIN occurrence AS o ON o.occurrence_id = a.occurrence_id
+        JOIN source AS s ON s.source_id = o.source_id
+        JOIN alternative AS alt
+            ON alt.alternative_id = a.alternative_id
+        WHERE alt.concept_id = ? AND a.is_current = 1
+        ORDER BY a.alternative_id, o.occurrence_id
+    """, (concept_id,)).fetchall()
+
+    for occurrence in occurrence_rows:
+        alternatives[occurrence["alternative_id"]]["occurrences"].append(
+            occurrence
+        )
+
+    relation_rows = conexion.execute("""
+        SELECT
+            r.alternative_a_id,
+            r.alternative_b_id,
+            r.phonological_parameter,
+            alternative_a.working_label AS alternative_a_working_label,
+            alternative_b.working_label AS alternative_b_working_label,
+            concept_a.preferred_label AS alternative_a_concept_label,
+            concept_b.preferred_label AS alternative_b_concept_label
+        FROM alternative_relation AS r
+        JOIN alternative AS alternative_a
+            ON alternative_a.alternative_id = r.alternative_a_id
+        JOIN alternative AS alternative_b
+            ON alternative_b.alternative_id = r.alternative_b_id
+        JOIN concept AS concept_a
+            ON concept_a.concept_id = alternative_a.concept_id
+        JOIN concept AS concept_b
+            ON concept_b.concept_id = alternative_b.concept_id
+        WHERE alternative_a.concept_id = ? OR alternative_b.concept_id = ?
+    """, (concept_id, concept_id)).fetchall()
+
+    for relation in relation_rows:
+        for alternative_id, related_id, related_label, related_concept in (
+            (
+                relation["alternative_a_id"],
+                relation["alternative_b_id"],
+                relation["alternative_b_working_label"],
+                relation["alternative_b_concept_label"]
+            ),
+            (
+                relation["alternative_b_id"],
+                relation["alternative_a_id"],
+                relation["alternative_a_working_label"],
+                relation["alternative_a_concept_label"]
+            )
+        ):
+            if alternative_id in alternatives:
+                alternatives[alternative_id]["relations"].append({
+                    "alternative_id": related_id,
+                    "working_label": related_label,
+                    "concept_label": related_concept,
+                    "phonological_parameter": (
+                        relation["phonological_parameter"]
+                    )
+                })
+
+    alternative_groups = list(alternatives.values())
+    for group in alternative_groups:
+        group["relations"].sort(
+            key=lambda relation: relation["alternative_id"]
+        )
 
     conexion.close()
 
     return render_template(
         "alternativas.html",
         concepto=concepto,
-        alternativas=alternatives
+        alternative_groups=alternative_groups
     )
 
 

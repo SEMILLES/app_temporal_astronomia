@@ -114,9 +114,11 @@ def nuevo_aporte():
     """).fetchall()
 
     alternativas = conexion.execute("""
-        SELECT alternative_id, concept_id, working_label, original_code
-        FROM alternative
-        ORDER BY alternative_id
+        SELECT a.alternative_id, a.concept_id, a.working_label,
+               a.original_code, c.preferred_label
+        FROM alternative AS a
+        JOIN concept AS c ON c.concept_id = a.concept_id
+        ORDER BY a.alternative_id
     """).fetchall()
 
     alternative_details = []

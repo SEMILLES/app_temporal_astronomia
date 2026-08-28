@@ -41,7 +41,7 @@ def ocurrencias():
                        THEN 'Sin clasificación'
                    WHEN al.working_label IS NULL THEN c.preferred_label
                    WHEN c.preferred_label IS NULL THEN al.working_label
-                   ELSE c.preferred_label || ' / ' || al.working_label
+                   ELSE c.preferred_label || '-' || al.working_label
                END AS current_classification
         FROM occurrence AS o
         JOIN submission AS sub

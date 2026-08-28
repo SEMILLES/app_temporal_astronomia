@@ -11,8 +11,11 @@
     <p>Glosa original: {{ occurrence["original_gloss"] or "" }}</p>
     <p>Clasificación vigente:
         {% if occurrence["preferred_label"] %}
-            {{ occurrence["preferred_label"] }} /
-            {{ occurrence["working_label"] or "Sin etiqueta de trabajo" }}
+            {% if occurrence["working_label"] %}
+                {{ occurrence["preferred_label"] }}-{{ occurrence["working_label"] }}
+            {% else %}
+                Sin etiqueta de trabajo
+            {% endif %}
         {% else %}
             Sin clasificación
         {% endif %}
@@ -33,7 +36,7 @@
             {% for group in alternatives_by_concept %}
                 {% for alternativa in group['alternatives'] %}
                     <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ group['concept']['concept_id'] }}">
-                        {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}
+                        {% if alternativa['working_label'] %}{{ group['concept']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
                     </option>
                 {% endfor %}
             {% endfor %}
@@ -74,7 +77,7 @@
                 {% for alternativa in group['alternatives'] %}
                     <li>
                         <span class="alternative-reference-visual" data-alternative-id="{{ alternativa['alternative_id'] }}"></span>
-                        {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}
+                        {% if alternativa['working_label'] %}{{ group['concept']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
                         (ID {{ alternativa['alternative_id'] }})
                     </li>
                 {% endfor %}
@@ -98,7 +101,7 @@
                 <tr>
                     <td>{{ assignment["assignment_id"] }}</td>
                     <td>{{ assignment["preferred_label"] }}</td>
-                    <td>{{ assignment["working_label"] or "Sin etiqueta de trabajo" }}</td>
+                    <td>{% if assignment["working_label"] %}{{ assignment["preferred_label"] }}-{{ assignment["working_label"] }}{% else %}Sin etiqueta de trabajo{% endif %}</td>
                     <td>{{ "Sí" if assignment["is_current"] else "No" }}</td>
                     <td>{{ assignment["supersedes_assignment_id"] or "" }}</td>
                 </tr>

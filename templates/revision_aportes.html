@@ -38,7 +38,7 @@
                         {% if aporte["proposal_type"] == "existing_alternative" %}
                             <br>Clasificación propuesta: Alternativa existente
                             <br>Alternativa propuesta:
-                            {{ aporte["proposed_alternative_working_label"] or "Sin etiqueta de trabajo" }}
+                            {% if aporte["proposed_alternative_working_label"] %}{{ aporte["preferred_label"] }}-{{ aporte["proposed_alternative_working_label"] }}{% else %}Sin etiqueta de trabajo{% endif %}
                         {% elif aporte["proposal_type"] == "new_alternative" %}
                             <br>Clasificación propuesta: Nueva alternativa
                             {% if aporte["proposed_relation_answer"] == "yes" %}
@@ -55,7 +55,7 @@
                                     <br>Estado: {{ aporte["related_submission_status"] or "no determinado" }}
                                     {% if aporte["related_submission_status"] == "accepted" %}
                                         {% if aporte["related_submission_current_alternative_id"] %}
-                                            <br>→ ahora clasificado como {{ aporte["related_submission_current_concept_label"] or "concepto" }} — {{ aporte["related_submission_current_working_label"] or "sin etiqueta" }}
+                                            <br>→ ahora clasificado como {% if aporte["related_submission_current_working_label"] %}{{ aporte["related_submission_current_concept_label"] }}-{{ aporte["related_submission_current_working_label"] }}{% else %}Sin etiqueta de trabajo{% endif %}
                                         {% else %}
                                             <br>→ aporte relacionado aceptado, aún sin clasificación
                                         {% endif %}
@@ -68,7 +68,7 @@
                                     {% endif %}
                                 {% elif aporte["proposed_related_alternative_id"] %}
                                     <br>Alternativa relacionada propuesta:
-                                    {{ aporte["proposed_related_alternative_working_label"] or "Sin etiqueta de trabajo" }}
+                                    {% if aporte["proposed_related_alternative_working_label"] %}{{ aporte["preferred_label"] }}-{{ aporte["proposed_related_alternative_working_label"] }}{% else %}Sin etiqueta de trabajo{% endif %}
                                 {% else %}
                                     <br>Alternativa relacionada propuesta: no indicada
                                 {% endif %}
@@ -141,7 +141,7 @@
                                     {% for group in alternativas_por_concepto %}
                                         {% for alternativa in group['alternativas'] %}
                                             <option value="{{ alternativa['alternative_id'] }}" data-concept-id="{{ group['concepto']['concept_id'] }}">
-                                                {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}
+                                                {% if alternativa['working_label'] %}{{ group['concepto']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
                                             </option>
                                         {% endfor %}
                                     {% endfor %}
@@ -155,7 +155,7 @@
                                     {% if group['alternativas'] %}
                                         {% for alternativa in group['alternativas'] %}
                                             <span class="alternative-reference-visual" data-alternative-id="{{ alternativa['alternative_id'] }}"></span>
-                                            {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}{% if not loop.last %}, {% endif %}
+                                            {% if alternativa['working_label'] %}{{ group['concepto']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}{% if not loop.last %}, {% endif %}
                                         {% endfor %}
                                     {% else %}
                                         Sin alternativas registradas
@@ -190,8 +190,7 @@
                                     {% for group in alternativas_por_concepto %}
                                         {% for alternativa in group['alternativas'] %}
                                             <option value="{{ alternativa['alternative_id'] }}">
-                                                {{ group['concepto']['preferred_label'] }} /
-                                                {{ alternativa['working_label'] or 'Sin etiqueta de trabajo' }}
+                                                {% if alternativa['working_label'] %}{{ group['concepto']['preferred_label'] }}-{{ alternativa['working_label'] }}{% else %}Sin etiqueta de trabajo{% endif %}
                                             </option>
                                         {% endfor %}
                                     {% endfor %}

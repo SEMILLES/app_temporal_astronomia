@@ -3,50 +3,269 @@
 <head>
     <meta charset="UTF-8">
     <title>Alternativas - LeSiCo</title>
+    <style>
+        .alternatives-list {
+            max-width: 900px;
+        }
+
+        .alternative-card {
+            border: 1px solid #aaa;
+            margin: 0.75rem 0;
+            padding: 0.75rem 1rem;
+        }
+
+        .alternative-header {
+            align-items: baseline;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem 0.75rem;
+            justify-content: space-between;
+        }
+
+        .alternative-header h2 {
+            margin: 0;
+        }
+
+        .alternative-meta {
+            color: #555;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+
+        .alternative-details {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem 1.25rem;
+            margin: 0.35rem 0;
+        }
+
+        .alternative-details p,
+        .alternative-section > p {
+            margin: 0.25rem 0;
+        }
+
+        .alternative-section {
+            border-top: 1px solid #ddd;
+            margin-top: 0.65rem;
+            padding-top: 0.55rem;
+        }
+
+        .alternative-section h3 {
+            font-size: 1rem;
+            margin: 0 0 0.4rem;
+        }
+
+        .occurrence-card {
+            border-left: 3px solid #bbb;
+            margin: 0.5rem 0;
+            padding: 0.15rem 0 0.15rem 0.75rem;
+        }
+
+        .occurrence-card h4 {
+            margin: 0 0 0.3rem;
+        }
+
+        .occurrence-metadata {
+            display: grid;
+            gap: 0.2rem 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            margin: 0;
+        }
+
+        .occurrence-field {
+            display: grid;
+            grid-template-columns: max-content 1fr;
+            gap: 0.35rem;
+        }
+
+        .occurrence-field dt {
+            font-weight: bold;
+        }
+
+        .occurrence-field dd {
+            margin: 0;
+        }
+
+        .relations-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.35rem 1rem;
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .relation-id {
+            color: #555;
+            font-size: 0.85rem;
+        }
+
+        .alternative-actions {
+            margin: 0.65rem 0 0;
+            text-align: right;
+        }
+
+        .alternative-actions a {
+            font-size: 0.9rem;
+        }
+
+        .create-alternative {
+            border-top: 1px solid #999;
+            margin-top: 1.25rem;
+            max-width: 900px;
+            padding-top: 0.75rem;
+        }
+    </style>
 </head>
 <body>
     <h1>Alternativas de {{ concepto["preferred_label"] }}</h1>
 
-    <form method="post" action="{{ url_for('alternatives.nueva_alternativa', concept_id=concepto['concept_id']) }}">
-        <label>Número:</label>
-        <select name="working_label_number">
-            <option value="">Sin número</option>
-            {% for number in range(1, 11) %}
-                <option value="{{ number }}">{{ number }}</option>
-            {% endfor %}
-        </select>
-        <label>Letra:</label>
-        <select name="working_label_letter">
-            <option value="">Sin letra</option>
-            {% for letter in "abcdefghijklmnopqrstuvwxyz" %}
-                <option value="{{ letter }}">{{ letter }}</option>
-            {% endfor %}
-        </select>
-        <button type="submit">Crear alternativa</button>
-    </form>
+    <div class="alternatives-list">
+        {% if alternative_groups %}
+            {% for group in alternative_groups %}
+                {% set alternativa = group["alternative"] %}
+                <article class="alternative-card">
+                    <header class="alternative-header">
+                        <h2>
+                            {% if alternativa["working_label"] %}
+                                {{ concepto["preferred_label"] }}-{{ alternativa["working_label"] }}
+                            {% else %}
+                                Sin etiqueta de trabajo
+                            {% endif %}
+                        </h2>
+                        <p class="alternative-meta">
+                            ID de alternativa: {{ alternativa["alternative_id"] }}
+                        </p>
+                    </header>
 
-    {% if alternativas %}
-        <table border="1" cellpadding="8">
-            <tr>
-                <th>ID</th>
-                <th>Etiqueta de trabajo</th>
-                <th>Acciones</th>
-            </tr>
-            {% for alternativa in alternativas %}
-                <tr>
-                    <td>{{ alternativa["alternative_id"] }}</td>
-                    <td>{{ alternativa["working_label"] or "Sin etiqueta de trabajo" }}</td>
-                    <td>
+                    <div class="alternative-details">
+                        {% if alternativa["original_code"] %}
+                            <p>Código original: {{ alternativa["original_code"] }}</p>
+                        {% endif %}
+
+                        {% if alternativa["retired_at"] %}
+                            <p><strong>Estado: Retirada</strong></p>
+                        {% endif %}
+                    </div>
+
+                    <section class="alternative-section">
+                        <h3>Ocurrencias actualmente asignadas</h3>
+
+                        {% if group["occurrences"] %}
+                            {% for ocurrencia in group["occurrences"] %}
+                                <section class="occurrence-card">
+                                    <h4>OCC-{{ '%06d' % ocurrencia["occurrence_id"] }}</h4>
+                                    <dl class="occurrence-metadata">
+                                        <div class="occurrence-field">
+                                            <dt>Fuente:</dt>
+                                            <dd>{{ ocurrencia["source_name"] }}</dd>
+                                        </div>
+
+                                        {% if ocurrencia["occurrence_year"] %}
+                                            <div class="occurrence-field">
+                                                <dt>Año de la ocurrencia:</dt>
+                                                <dd>{{ ocurrencia["occurrence_year"] }}</dd>
+                                            </div>
+                                        {% endif %}
+
+                                        {% if ocurrencia["start_year"] or ocurrencia["end_year"] or ocurrencia["end_year_status"] %}
+                                            <div class="occurrence-field">
+                                                <dt>Período de la fuente:</dt>
+                                                <dd>{{ ocurrencia["start_year"] or "" }}{% if ocurrencia["end_year"] and ocurrencia["end_year"] != ocurrencia["start_year"] %}–{{ ocurrencia["end_year"] }}{% elif ocurrencia["end_year_status"] == "ongoing" %}–en curso{% elif ocurrencia["end_year_status"] == "unknown" %}–final desconocido{% endif %}</dd>
+                                            </div>
+                                        {% endif %}
+
+                                        {% if ocurrencia["original_gloss"] %}
+                                            <div class="occurrence-field">
+                                                <dt>Glosa original:</dt>
+                                                <dd>{{ ocurrencia["original_gloss"] }}</dd>
+                                            </div>
+                                        {% endif %}
+
+                                        {% if ocurrencia["source_locator"] %}
+                                            <div class="occurrence-field">
+                                                <dt>Localización en la fuente:</dt>
+                                                <dd>{{ ocurrencia["source_locator"] }}</dd>
+                                            </div>
+                                        {% endif %}
+
+                                        {% if ocurrencia["hyperlink"] %}
+                                            <div class="occurrence-field">
+                                                <dt>Enlace:</dt>
+                                                <dd>
+                                                    <a href="{{ ocurrencia['hyperlink'] }}" target="_blank" rel="noopener noreferrer">
+                                                        Abrir
+                                                    </a>
+                                                </dd>
+                                            </div>
+                                        {% endif %}
+                                    </dl>
+                                </section>
+                            {% endfor %}
+                        {% else %}
+                            <p>Sin ocurrencias vigentes.</p>
+                        {% endif %}
+                    </section>
+
+                    <section class="alternative-section">
+                        <h3>Alternativas relacionadas</h3>
+
+                        {% if group["relations"] %}
+                            <ul class="relations-list">
+                                {% for relacion in group["relations"] %}
+                                    <li>
+                                        <strong>
+                                            {% if relacion["working_label"] %}
+                                                {{ relacion["concept_label"] }}-{{ relacion["working_label"] }}
+                                            {% else %}
+                                                Sin etiqueta de trabajo
+                                            {% endif %}
+                                        </strong>
+                                        · {{ relacion["phonological_parameter"] or "parámetro no especificado" }}
+                                        <span class="relation-id">
+                                            (ID de alternativa: {{ relacion["alternative_id"] }})
+                                        </span>
+                                    </li>
+                                {% endfor %}
+                            </ul>
+                        {% else %}
+                            <p>Sin alternativas relacionadas.</p>
+                        {% endif %}
+                    </section>
+
+                    <p class="alternative-actions">
                         <a href="{{ url_for('alternatives.editar_alternativa', alternative_id=alternativa['alternative_id']) }}">
-                            Editar
+                            Editar alternativa
                         </a>
-                    </td>
-                </tr>
+                    </p>
+                </article>
             {% endfor %}
-        </table>
-    {% else %}
-        <p>No hay alternativas registradas.</p>
-    {% endif %}
+        {% else %}
+            <p>No hay alternativas registradas.</p>
+        {% endif %}
+    </div>
+
+    <section class="create-alternative">
+        <h2>Crear alternativa</h2>
+
+        <form method="post" action="{{ url_for('alternatives.nueva_alternativa', concept_id=concepto['concept_id']) }}">
+            <label>Número:</label>
+            <select name="working_label_number">
+                <option value="">Sin número</option>
+                {% for number in range(1, 11) %}
+                    <option value="{{ number }}">{{ number }}</option>
+                {% endfor %}
+            </select>
+            <label>Letra:</label>
+            <select name="working_label_letter">
+                <option value="">Sin letra</option>
+                {% for letter in "abcdefghijklmnopqrstuvwxyz" %}
+                    <option value="{{ letter }}">{{ letter }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">Crear alternativa</button>
+        </form>
+    </section>
 
     <p><a href="{{ url_for('concepts.conceptos') }}">Volver a conceptos</a></p>
 </body>
