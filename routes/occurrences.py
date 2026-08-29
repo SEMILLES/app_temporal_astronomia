@@ -26,11 +26,11 @@ def ocurrencias():
     conexion = conectar()
     rows = conexion.execute("""
         SELECT o.occurrence_id, s.source_name, o.original_gloss, o.hyperlink,
+               sub.status AS submission_status,
                c.preferred_label, al.working_label
         FROM occurrence AS o
-        JOIN submission AS sub
+        LEFT JOIN submission AS sub
             ON sub.occurrence_id = o.occurrence_id
-            AND sub.status = 'accepted'
         JOIN source AS s ON o.source_id = s.source_id
         LEFT JOIN assignment AS a
             ON a.occurrence_id = o.occurrence_id AND a.is_current = 1
@@ -50,6 +50,13 @@ def ocurrencias():
                 row["preferred_label"], row["working_label"]
             )
         occurrence["current_classification"] = current_classification
+        workflow_labels = {
+            None: "Sin aporte",
+            "pending": "Pendiente",
+            "accepted": "Aceptado",
+            "rejected": "Rechazado",
+        }
+        occurrence["workflow_status"] = workflow_labels[row["submission_status"]]
         ocurrencias.append(occurrence)
     conexion.close()
     return render_template("ocurrencias.html", ocurrencias=ocurrencias)
@@ -169,12 +176,6 @@ def clasificar_ocurrencia(occurrence_id):
     if occurrence is None:
         conexion.close()
         return "La ocurrencia no existe.", 404
-    accepted = conexion.execute("""
-        SELECT 1 FROM submission WHERE occurrence_id = ? AND status = 'accepted'
-    """, (occurrence_id,)).fetchone()
-    if accepted is None:
-        conexion.close()
-        return "Solo se pueden clasificar ocurrencias aceptadas.", 409
     concepts = conexion.execute(
         "SELECT concept_id, preferred_label FROM concept ORDER BY preferred_label"
     ).fetchall()
@@ -213,13 +214,13 @@ def guardar_clasificacion(occurrence_id):
     conexion = conectar()
     try:
         conexion.execute("BEGIN IMMEDIATE")
-        accepted = conexion.execute(
-            "SELECT 1 FROM submission WHERE occurrence_id = ? AND status = 'accepted'",
-            (occurrence_id,)
+        occurrence_exists = conexion.execute(
+            "SELECT 1 FROM occurrence WHERE occurrence_id = ?",
+            (occurrence_id,),
         ).fetchone()
-        if accepted is None:
+        if occurrence_exists is None:
             conexion.rollback()
-            return "Solo se pueden clasificar ocurrencias aceptadas.", 409
+            return "La ocurrencia no existe.", 404
         if alternative_id is not None:
             if conexion.execute(
                 "SELECT 1 FROM alternative WHERE alternative_id = ?", (alternative_id,)

@@ -130,8 +130,6 @@ def nuevo_aporte():
                    o.source_locator, o.hyperlink
             FROM assignment AS a
             JOIN occurrence AS o ON o.occurrence_id = a.occurrence_id
-            JOIN submission AS sub ON sub.occurrence_id = o.occurrence_id
-                AND sub.status = 'accepted'
             JOIN source AS s ON s.source_id = o.source_id
             WHERE a.alternative_id = ? AND a.is_current = 1
             ORDER BY o.occurrence_id

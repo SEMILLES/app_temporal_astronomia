@@ -24,6 +24,7 @@
         <tr>
             <th>ID</th>
             <th>Clasificación vigente</th>
+            <th>Estado del aporte</th>
             <th>Fuente</th>
             <th>Glosa original</th>
             <th>Enlace</th>
@@ -40,6 +41,10 @@
 
                 <td>
                     {{ ocurrencia["current_classification"] }}
+                </td>
+
+                <td>
+                    {{ ocurrencia["workflow_status"] }}
                 </td>
 
                 <td>
