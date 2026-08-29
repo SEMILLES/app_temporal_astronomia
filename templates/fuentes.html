@@ -27,10 +27,18 @@
             required
         >
 
-        <label>Tipo:</label>
-        <input type="text" name="source_type">
-        <label>Referencia:</label>
-        <input type="text" name="source_reference">
+        <label>Código legacy (opcional):</label>
+        <input type="text" name="legacy_source_code">
+        <label>Alcance (opcional):</label>
+        <select name="source_scope">
+            <option value="">Sin especificar</option>
+            <option value="INSTITUTIONAL">Institucional</option>
+            <option value="PERSONAL">Personal</option>
+        </select>
+        <label>Formato original (opcional):</label>
+        <input type="text" name="format_original">
+        <label>Detalle del formato (opcional):</label>
+        <input type="text" name="format_detail">
         <label>Año inicial:</label>
         <input type="number" name="start_year" min="1" max="9999">
         <label>Año final:</label>
@@ -42,6 +50,12 @@
             <option value="ongoing">En curso</option>
             <option value="unknown">Desconocido</option>
         </select>
+        <label>Región (opcional):</label>
+        <textarea name="region_description"></textarea>
+        <label>Caracterización (opcional):</label>
+        <textarea name="characterization"></textarea>
+        <label>Número de entradas declarado (opcional):</label>
+        <input type="number" name="reported_entry_count" min="0">
 
         <button type="submit">
             Guardar fuente
@@ -60,7 +74,11 @@
         <tr>
             <th>ID</th>
             <th>Nombre</th>
+            <th>Código legacy</th>
+            <th>Alcance</th>
+            <th>Formato</th>
             <th>Periodo</th>
+            <th>Entradas declaradas</th>
             <th>Acciones</th>
         </tr>
 
@@ -76,9 +94,15 @@
                     {{ fuente["source_name"] }}
                 </td>
 
+                <td>{{ fuente["legacy_source_code"] or "" }}</td>
+                <td>{% if fuente["source_scope"] == "INSTITUTIONAL" %}Institucional{% elif fuente["source_scope"] == "PERSONAL" %}Personal{% endif %}</td>
+                <td>{{ fuente["format_original"] or "" }}{% if fuente["format_detail"] %} · {{ fuente["format_detail"] }}{% endif %}</td>
+
                 <td>
                     {{ fuente["start_year"] or "" }}{% if fuente["end_year"] %}–{{ fuente["end_year"] }}{% elif fuente["end_year_status"] == "ongoing" %}–en curso{% elif fuente["end_year_status"] == "unknown" %}–final desconocido{% endif %}
                 </td>
+
+                <td>{{ fuente["reported_entry_count"] if fuente["reported_entry_count"] is not none else "" }}</td>
 
                 <td>
 

@@ -42,13 +42,28 @@ def parse_source_years(form):
 
 def source_form_values(form):
     start_year, end_year, status = parse_source_years(form)
+    source_scope = form.get("source_scope", "").strip() or None
+    if source_scope not in (None, "INSTITUTIONAL", "PERSONAL"):
+        raise ValueError
+    reported_entry_count_value = form.get("reported_entry_count", "").strip()
+    if reported_entry_count_value:
+        if not reported_entry_count_value.isdigit():
+            raise ValueError
+        reported_entry_count = int(reported_entry_count_value)
+    else:
+        reported_entry_count = None
     return (
         form.get("source_name", "").strip(),
-        form.get("source_type", "").strip() or None,
-        form.get("source_reference", "").strip() or None,
+        form.get("legacy_source_code", "").strip() or None,
+        source_scope,
+        form.get("format_original", "").strip() or None,
+        form.get("format_detail", "").strip() or None,
         start_year,
         end_year,
         status,
+        form.get("region_description", "").strip() or None,
+        form.get("characterization", "").strip() or None,
+        reported_entry_count,
     )
 
 
@@ -64,8 +79,10 @@ def fuentes():
 
     conexion = conectar()
     fuentes = conexion.execute("""
-        SELECT source_id, source_name, source_type, source_reference,
-               start_year, end_year, end_year_status
+        SELECT source_id, source_name, legacy_source_code, source_scope,
+               format_original, format_detail, start_year, end_year,
+               end_year_status, region_description, characterization,
+               reported_entry_count
         FROM source ORDER BY source_name
     """).fetchall()
     conexion.close()
@@ -78,7 +95,7 @@ def nueva_fuente():
     try:
         values = source_form_values(request.form)
     except ValueError:
-        return "Los años o el estado de la fuente no son válidos.", 400
+        return "Los metadatos de la fuente no son válidos.", 400
     if not values[0]:
         return "El nombre de la fuente es obligatorio.", 400
 
@@ -86,9 +103,11 @@ def nueva_fuente():
     try:
         conexion.execute("""
             INSERT INTO source (
-                source_name, source_type, source_reference,
-                start_year, end_year, end_year_status, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                source_name, legacy_source_code, source_scope,
+                format_original, format_detail, start_year, end_year,
+                end_year_status, region_description, characterization,
+                reported_entry_count, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (*values, None))
         conexion.commit()
     except sqlite3.IntegrityError:
@@ -104,8 +123,10 @@ def editar_fuente(source_id):
 
     conexion = conectar()
     fuente = conexion.execute("""
-        SELECT source_id, source_name, source_type, source_reference,
-               start_year, end_year, end_year_status
+        SELECT source_id, source_name, legacy_source_code, source_scope,
+               format_original, format_detail, start_year, end_year,
+               end_year_status, region_description, characterization,
+               reported_entry_count
         FROM source WHERE source_id = ?
     """, (source_id,)).fetchone()
     conexion.close()
@@ -120,7 +141,7 @@ def actualizar_fuente(source_id):
     try:
         values = source_form_values(request.form)
     except ValueError:
-        return "Los años o el estado de la fuente no son válidos.", 400
+        return "Los metadatos de la fuente no son válidos.", 400
     if not values[0]:
         return "El nombre de la fuente es obligatorio.", 400
 
@@ -129,23 +150,47 @@ def actualizar_fuente(source_id):
         conexion.execute("BEGIN IMMEDIATE")
         actual = conexion.execute("""
             SELECT source_name, source_type, source_reference,
-                   start_year, end_year, end_year_status
+                   legacy_source_code, source_scope, format_original,
+                   format_detail, start_year, end_year, end_year_status,
+                   region_description, characterization, reported_entry_count
             FROM source WHERE source_id = ?
         """, (source_id,)).fetchone()
         if actual is None:
             conexion.rollback()
             return "La fuente no existe.", 404
-        if tuple(actual) != values:
+        previous_editable_state = (
+            actual["source_name"], actual["legacy_source_code"],
+            actual["source_scope"], actual["format_original"],
+            actual["format_detail"], actual["start_year"],
+            actual["end_year"], actual["end_year_status"],
+            actual["region_description"], actual["characterization"],
+            actual["reported_entry_count"],
+        )
+        if previous_editable_state != values:
             conexion.execute("""
                 INSERT INTO source_revision (
                     source_id, source_name, source_type, source_reference,
-                    start_year, end_year, end_year_status, change_note
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            """, (source_id, *tuple(actual), request.form.get("change_note") or None))
+                    legacy_source_code, source_scope, format_original,
+                    format_detail, start_year, end_year, end_year_status,
+                    region_description, characterization,
+                    reported_entry_count, change_note
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                source_id, actual["source_name"], actual["source_type"],
+                actual["source_reference"], actual["legacy_source_code"],
+                actual["source_scope"], actual["format_original"],
+                actual["format_detail"], actual["start_year"],
+                actual["end_year"], actual["end_year_status"],
+                actual["region_description"], actual["characterization"],
+                actual["reported_entry_count"],
+                request.form.get("change_note") or None,
+            ))
         conexion.execute("""
             UPDATE source SET
-                source_name = ?, source_type = ?, source_reference = ?,
-                start_year = ?, end_year = ?, end_year_status = ?,
+                source_name = ?, legacy_source_code = ?, source_scope = ?,
+                format_original = ?, format_detail = ?, start_year = ?,
+                end_year = ?, end_year_status = ?, region_description = ?,
+                characterization = ?, reported_entry_count = ?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE source_id = ?
         """, (*values, source_id))

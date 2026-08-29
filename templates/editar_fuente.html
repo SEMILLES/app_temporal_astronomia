@@ -41,12 +41,36 @@
         </p>
 
         <p>
-            <label>Tipo:</label>
-            <input type="text" name="source_type" value="{{ fuente['source_type'] or '' }}">
+            <label>Código legacy (opcional):</label>
+            <input type="text" name="legacy_source_code" value="{{ fuente['legacy_source_code'] or '' }}">
         </p>
         <p>
-            <label>Referencia:</label>
-            <input type="text" name="source_reference" value="{{ fuente['source_reference'] or '' }}">
+            <label>Alcance (opcional):</label>
+            <select name="source_scope">
+                <option value="" {% if not fuente['source_scope'] %}selected{% endif %}>Sin especificar</option>
+                <option value="INSTITUTIONAL" {% if fuente['source_scope'] == 'INSTITUTIONAL' %}selected{% endif %}>Institucional</option>
+                <option value="PERSONAL" {% if fuente['source_scope'] == 'PERSONAL' %}selected{% endif %}>Personal</option>
+            </select>
+        </p>
+        <p>
+            <label>Formato original (opcional):</label>
+            <input type="text" name="format_original" value="{{ fuente['format_original'] or '' }}">
+        </p>
+        <p>
+            <label>Detalle del formato (opcional):</label>
+            <input type="text" name="format_detail" value="{{ fuente['format_detail'] or '' }}">
+        </p>
+        <p>
+            <label>Región (opcional):</label>
+            <textarea name="region_description">{{ fuente['region_description'] or '' }}</textarea>
+        </p>
+        <p>
+            <label>Caracterización (opcional):</label>
+            <textarea name="characterization">{{ fuente['characterization'] or '' }}</textarea>
+        </p>
+        <p>
+            <label>Número de entradas declarado (opcional):</label>
+            <input type="number" name="reported_entry_count" value="{{ fuente['reported_entry_count'] if fuente['reported_entry_count'] is not none else '' }}" min="0">
         </p>
         <p>
             <label>Año inicial:</label>

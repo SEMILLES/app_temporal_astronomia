@@ -39,6 +39,15 @@ def crear_esquema(conexion):
             start_year INTEGER,
             end_year INTEGER,
             end_year_status TEXT,
+            legacy_source_code TEXT,
+            source_scope TEXT
+                CHECK (source_scope IN ('INSTITUTIONAL', 'PERSONAL')),
+            format_original TEXT,
+            format_detail TEXT,
+            region_description TEXT,
+            characterization TEXT,
+            reported_entry_count INTEGER
+                CHECK (reported_entry_count >= 0),
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             ,updated_at TEXT,
             created_by TEXT,
@@ -75,6 +84,15 @@ def crear_esquema(conexion):
             start_year INTEGER,
             end_year INTEGER,
             end_year_status TEXT,
+            legacy_source_code TEXT,
+            source_scope TEXT
+                CHECK (source_scope IN ('INSTITUTIONAL', 'PERSONAL')),
+            format_original TEXT,
+            format_detail TEXT,
+            region_description TEXT,
+            characterization TEXT,
+            reported_entry_count INTEGER
+                CHECK (reported_entry_count >= 0),
             changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             changed_by TEXT,
             change_note TEXT,
@@ -83,6 +101,25 @@ def crear_esquema(conexion):
 
         CREATE INDEX IF NOT EXISTS idx_source_revision_source
             ON source_revision(source_id);
+
+        CREATE TABLE IF NOT EXISTS source_systematization (
+            source_systematization_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id INTEGER NOT NULL,
+            status TEXT NOT NULL
+                CHECK (status IN (
+                    'NOT_STARTED', 'PARTIAL', 'COMPLETE', 'UNKNOWN'
+                )),
+            reviewed_at TEXT NOT NULL,
+            coverage_note TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            FOREIGN KEY (source_id) REFERENCES source(source_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_source_systematization_source_reviewed
+            ON source_systematization(
+                source_id, reviewed_at, source_systematization_id
+            );
 
         CREATE TABLE IF NOT EXISTS occurrence_revision (
             occurrence_revision_id INTEGER PRIMARY KEY AUTOINCREMENT,
