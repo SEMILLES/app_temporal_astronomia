@@ -62,9 +62,12 @@ def crear_esquema(conexion):
 
         CREATE TABLE IF NOT EXISTS occurrence (
             occurrence_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            legacy_occurrence_id TEXT,
             source_id INTEGER NOT NULL,
             original_gloss TEXT,
             hyperlink TEXT,
+            legacy_source_detail_1 TEXT,
+            legacy_source_detail_2 TEXT,
             source_locator TEXT,
             provenance_note TEXT,
             occurrence_year INTEGER,
@@ -124,9 +127,12 @@ def crear_esquema(conexion):
         CREATE TABLE IF NOT EXISTS occurrence_revision (
             occurrence_revision_id INTEGER PRIMARY KEY AUTOINCREMENT,
             occurrence_id INTEGER NOT NULL,
+            legacy_occurrence_id TEXT,
             source_id INTEGER NOT NULL,
             original_gloss TEXT,
             hyperlink TEXT,
+            legacy_source_detail_1 TEXT,
+            legacy_source_detail_2 TEXT,
             source_locator TEXT,
             provenance_note TEXT,
             occurrence_year INTEGER,

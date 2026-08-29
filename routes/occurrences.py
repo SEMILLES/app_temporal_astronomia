@@ -16,17 +16,7 @@ def validate_occurrence_year(conexion, source_id, value):
     if not value.isdigit() or len(value) != 4:
         raise ValueError
     year = int(value)
-    source = conexion.execute("""
-        SELECT start_year, end_year, end_year_status
-        FROM source WHERE source_id = ?
-    """, (source_id,)).fetchone()
-    if source is None:
-        raise ValueError
-    if source["start_year"] is not None and year < source["start_year"]:
-        raise ValueError
-    if (source["end_year_status"] == "known"
-            and source["end_year"] is not None
-            and year > source["end_year"]):
+    if year < 1:
         raise ValueError
     return year
 
@@ -107,8 +97,9 @@ def actualizar_ocurrencia(occurrence_id):
     try:
         conexion.execute("BEGIN IMMEDIATE")
         actual = conexion.execute("""
-            SELECT source_id, original_gloss, hyperlink, source_locator,
-                   provenance_note, occurrence_year
+            SELECT legacy_occurrence_id, source_id, original_gloss, hyperlink,
+                   legacy_source_detail_1, legacy_source_detail_2,
+                   source_locator, provenance_note, occurrence_year
             FROM occurrence WHERE occurrence_id = ?
         """, (occurrence_id,)).fetchone()
         if actual is None:
@@ -121,16 +112,26 @@ def actualizar_ocurrencia(occurrence_id):
             int(source_id), original_gloss, hyperlink, source_locator,
             provenance_note, occurrence_year
         )
-        if new_state != tuple(actual):
+        previous_editable_state = (
+            actual["source_id"], actual["original_gloss"], actual["hyperlink"],
+            actual["source_locator"], actual["provenance_note"],
+            actual["occurrence_year"]
+        )
+        if new_state != previous_editable_state:
             conexion.execute("""
                 INSERT INTO occurrence_revision (
-                    occurrence_id, source_id, original_gloss, hyperlink,
-                    source_locator, provenance_note, occurrence_year, change_note
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    occurrence_id, legacy_occurrence_id, source_id,
+                    original_gloss, hyperlink, legacy_source_detail_1,
+                    legacy_source_detail_2, source_locator, provenance_note,
+                    occurrence_year, change_note
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                occurrence_id, actual["source_id"], actual["original_gloss"],
-                actual["hyperlink"], actual["source_locator"],
-                actual["provenance_note"], actual["occurrence_year"], change_note
+                occurrence_id, actual["legacy_occurrence_id"],
+                actual["source_id"], actual["original_gloss"],
+                actual["hyperlink"], actual["legacy_source_detail_1"],
+                actual["legacy_source_detail_2"], actual["source_locator"],
+                actual["provenance_note"], actual["occurrence_year"],
+                change_note
             ))
         cursor = conexion.execute("""
             UPDATE occurrence SET
