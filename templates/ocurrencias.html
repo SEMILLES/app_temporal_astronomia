@@ -90,6 +90,20 @@
                         Clasificar
                     </a>
 
+                    <a href="{{
+                        url_for(
+                            'occurrences.mostrar_gramatica',
+                            occurrence_id=ocurrencia['occurrence_id']
+                        )
+                    }}">
+                        Gramática
+                        {% if ocurrencia["has_current_grammar"] %}
+                            (registrada)
+                        {% else %}
+                            (sin análisis)
+                        {% endif %}
+                    </a>
+
                 </td>
 
             </tr>

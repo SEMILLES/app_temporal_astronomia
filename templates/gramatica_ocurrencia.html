@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Gramática de occurrence - LeSiCo</title>
+</head>
+<body>
+    <h1>Gramática de occurrence {{ occurrence["occurrence_id"] }}</h1>
+
+    <p><strong>Fuente:</strong> {{ occurrence["source_name"] }}</p>
+    <p><strong>Glosa original:</strong> {{ occurrence["original_gloss"] or "" }}</p>
+    {% if occurrence["hyperlink"] %}
+        <p><a href="{{ occurrence['hyperlink'] }}" target="_blank">Abrir enlace de la occurrence</a></p>
+    {% endif %}
+
+    {% if message %}<p role="status">{{ message }}</p>{% endif %}
+    {% if error %}<p role="alert">{{ error }}</p>{% endif %}
+
+    <form method="post" action="{{ url_for('occurrences.guardar_gramatica', occurrence_id=occurrence['occurrence_id']) }}">
+        <p>
+            <label>Género:</label>
+            <input type="text" name="gender" list="gender-options" value="{{ form_values['gender'] or '' if form_values else '' }}">
+            <datalist id="gender-options"><option value="SIN-MARCA"></datalist>
+        </p>
+        <p>
+            <label>Plural:</label>
+            <input type="text" name="plural" list="plural-options" value="{{ form_values['plural'] or '' if form_values else '' }}">
+            <datalist id="plural-options"><option value="SIN-MARCA"></datalist>
+        </p>
+        <p>
+            <label>Agentivo:</label>
+            <input type="text" name="agentive" list="agentive-options" value="{{ form_values['agentive'] or '' if form_values else '' }}">
+            <datalist id="agentive-options"><option value="SIN-MARCA"></datalist>
+        </p>
+        <p>
+            <label>Forma conjugada:</label>
+            <input type="text" name="conjugated_form" list="conjugated-form-options" value="{{ form_values['conjugated_form'] or '' if form_values else '' }}">
+            <datalist id="conjugated-form-options">
+                <option value="SIN-MARCA">
+                <option value="SÍ">
+            </datalist>
+        </p>
+        <p>
+            <label>Negación:</label>
+            <input type="text" name="negation" list="negation-options" value="{{ form_values['negation'] or '' if form_values else '' }}">
+            <datalist id="negation-options">
+                <option value="SIN-NEG">
+                <option value="CON-NEG">
+            </datalist>
+        </p>
+        <p>
+            <label>Nota gramatical:</label>
+            <textarea name="grammar_note">{{ form_values['grammar_note'] or '' if form_values else '' }}</textarea><br>
+            <small>Información lingüística que pertenece a este análisis.</small>
+        </p>
+        <p>
+            <label>Nota del cambio:</label>
+            <textarea name="change_note">{{ form_values['change_note'] or '' if form_values and form_values['change_note'] else '' }}</textarea><br>
+            <small>Motivo de esta corrección. Opcional y no forma parte del análisis.</small>
+        </p>
+        <button type="submit">
+            {% if current %}Guardar corrección{% else %}Registrar análisis gramatical{% endif %}
+        </button>
+    </form>
+
+    <h2>Historial de análisis</h2>
+    {% if history %}
+        {% for version in history %}
+            <section>
+                <h3>
+                    Versión #{{ version["occurrence_grammar_id"] }}
+                    — {{ "Vigente" if version["is_current"] else "Histórica" }}
+                </h3>
+                <p><strong>Fecha:</strong> {{ version["created_at"] }}</p>
+                <ul>
+                    <li>Género: {{ version["gender"] if version["gender"] is not none else "No registrado" }}</li>
+                    <li>Plural: {{ version["plural"] if version["plural"] is not none else "No registrado" }}</li>
+                    <li>Agentivo: {{ version["agentive"] if version["agentive"] is not none else "No registrado" }}</li>
+                    <li>Forma conjugada: {{ version["conjugated_form"] if version["conjugated_form"] is not none else "No registrado" }}</li>
+                    <li>Negación: {{ version["negation"] if version["negation"] is not none else "No registrado" }}</li>
+                    <li>Nota gramatical: {{ version["grammar_note"] if version["grammar_note"] is not none else "No registrado" }}</li>
+                    <li>Nota del cambio: {{ version["change_note"] if version["change_note"] is not none else "No registrado" }}</li>
+                    {% if version["created_by"] %}<li>Creado por: {{ version["created_by"] }}</li>{% endif %}
+                </ul>
+            </section>
+        {% endfor %}
+    {% else %}
+        <p>No hay análisis gramaticales registrados.</p>
+    {% endif %}
+
+    <p><a href="{{ url_for('occurrences.ocurrencias') }}">Volver a occurrences</a></p>
+</body>
+</html>

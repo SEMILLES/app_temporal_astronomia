@@ -4,6 +4,11 @@ import sqlite3
 
 from database import conectar
 from concept_labels import alternative_display_label, human_concept_label
+from occurrence_grammar import (
+    EmptyGrammarError,
+    OccurrenceNotFoundError,
+    create_or_replace_occurrence_grammar,
+)
 from routes.submissions import crear_o_reemplazar_assignment
 
 
@@ -27,7 +32,12 @@ def ocurrencias():
     rows = conexion.execute("""
         SELECT o.occurrence_id, s.source_name, o.original_gloss, o.hyperlink,
                sub.status AS submission_status,
-               c.preferred_label, al.working_label
+               c.preferred_label, al.working_label,
+               EXISTS (
+                   SELECT 1 FROM occurrence_grammar AS og
+                   WHERE og.occurrence_id = o.occurrence_id
+                     AND og.is_current = 1
+               ) AS has_current_grammar
         FROM occurrence AS o
         LEFT JOIN submission AS sub
             ON sub.occurrence_id = o.occurrence_id
@@ -157,6 +167,117 @@ def actualizar_ocurrencia(occurrence_id):
     finally:
         conexion.close()
     return redirect(url_for("occurrences.ocurrencias"))
+
+
+def _load_grammar_page_data(conexion, occurrence_id):
+    occurrence = conexion.execute("""
+        SELECT o.occurrence_id, o.original_gloss, o.hyperlink, s.source_name
+        FROM occurrence AS o
+        JOIN source AS s ON s.source_id = o.source_id
+        WHERE o.occurrence_id = ?
+    """, (occurrence_id,)).fetchone()
+    if occurrence is None:
+        return None, None, []
+    current = conexion.execute("""
+        SELECT occurrence_grammar_id, gender, plural, agentive,
+               conjugated_form, negation, grammar_note, is_current,
+               supersedes_occurrence_grammar_id, created_at, created_by,
+               change_note
+        FROM occurrence_grammar
+        WHERE occurrence_id = ? AND is_current = 1
+    """, (occurrence_id,)).fetchone()
+    history = conexion.execute("""
+        SELECT occurrence_grammar_id, gender, plural, agentive,
+               conjugated_form, negation, grammar_note, is_current,
+               supersedes_occurrence_grammar_id, created_at, created_by,
+               change_note
+        FROM occurrence_grammar
+        WHERE occurrence_id = ?
+        ORDER BY is_current DESC, occurrence_grammar_id DESC
+    """, (occurrence_id,)).fetchall()
+    return occurrence, current, history
+
+
+@occurrences_bp.route("/ocurrencias/<int:occurrence_id>/gramatica")
+def mostrar_gramatica(occurrence_id):
+    conexion = conectar()
+    try:
+        occurrence, current, history = _load_grammar_page_data(
+            conexion, occurrence_id
+        )
+    finally:
+        conexion.close()
+    if occurrence is None:
+        return "La ocurrencia no existe.", 404
+    result_messages = {
+        "saved": "Análisis gramatical guardado.",
+        "noop": "No hubo cambios en el análisis gramatical.",
+    }
+    form_values = dict(current) if current is not None else {}
+    form_values["change_note"] = ""
+    return render_template(
+        "gramatica_ocurrencia.html",
+        occurrence=occurrence,
+        current=current,
+        history=history,
+        form_values=form_values,
+        message=result_messages.get(request.args.get("result")),
+        error=None,
+    )
+
+
+@occurrences_bp.route(
+    "/ocurrencias/<int:occurrence_id>/gramatica", methods=["POST"]
+)
+def guardar_gramatica(occurrence_id):
+    form_values = {
+        "gender": request.form.get("gender"),
+        "plural": request.form.get("plural"),
+        "agentive": request.form.get("agentive"),
+        "conjugated_form": request.form.get("conjugated_form"),
+        "negation": request.form.get("negation"),
+        "grammar_note": request.form.get("grammar_note"),
+        "change_note": request.form.get("change_note"),
+    }
+    conexion = conectar()
+    try:
+        _, created = create_or_replace_occurrence_grammar(
+            conexion,
+            occurrence_id,
+            gender=form_values["gender"],
+            plural=form_values["plural"],
+            agentive=form_values["agentive"],
+            conjugated_form=form_values["conjugated_form"],
+            negation=form_values["negation"],
+            grammar_note=form_values["grammar_note"],
+            created_by=None,
+            change_note=form_values["change_note"],
+        )
+    except OccurrenceNotFoundError:
+        return "La ocurrencia no existe.", 404
+    except EmptyGrammarError:
+        occurrence, current, history = _load_grammar_page_data(
+            conexion, occurrence_id
+        )
+        return render_template(
+            "gramatica_ocurrencia.html",
+            occurrence=occurrence,
+            current=current,
+            history=history,
+            form_values=form_values,
+            message=None,
+            error="El análisis gramatical debe contener al menos un dato.",
+        ), 400
+    except Exception:
+        return "No fue posible guardar el análisis gramatical.", 500
+    finally:
+        conexion.close()
+    result = "saved" if created else "noop"
+    return redirect(url_for(
+        "occurrences.mostrar_gramatica",
+        occurrence_id=occurrence_id,
+        result=result,
+    ))
 
 
 @occurrences_bp.route("/ocurrencias/<int:occurrence_id>/clasificar")
