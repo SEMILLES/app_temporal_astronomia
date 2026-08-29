@@ -146,6 +146,32 @@ def crear_esquema(conexion):
         CREATE INDEX IF NOT EXISTS idx_occurrence_revision_occurrence
             ON occurrence_revision(occurrence_id);
 
+        CREATE TABLE IF NOT EXISTS occurrence_grammar (
+            occurrence_grammar_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurrence_id INTEGER NOT NULL,
+            gender TEXT,
+            plural TEXT,
+            agentive TEXT,
+            conjugated_form TEXT,
+            negation TEXT,
+            grammar_note TEXT,
+            is_current INTEGER NOT NULL DEFAULT 1
+                CHECK (is_current IN (0, 1)),
+            supersedes_occurrence_grammar_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_by TEXT,
+            change_note TEXT,
+            FOREIGN KEY (occurrence_id)
+                REFERENCES occurrence(occurrence_id),
+            FOREIGN KEY (supersedes_occurrence_grammar_id)
+                REFERENCES occurrence_grammar(occurrence_grammar_id)
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS one_current_grammar_per_occurrence
+            ON occurrence_grammar(occurrence_id) WHERE is_current = 1;
+        CREATE INDEX IF NOT EXISTS idx_occurrence_grammar_occurrence
+            ON occurrence_grammar(occurrence_id);
+
         CREATE TABLE IF NOT EXISTS alternative (
             alternative_id INTEGER PRIMARY KEY AUTOINCREMENT,
             concept_id INTEGER NOT NULL,
