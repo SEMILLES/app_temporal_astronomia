@@ -67,13 +67,13 @@ class OccurrenceSchemaTests(unittest.TestCase):
         for _ in range(2):
             self.connection.execute(
                 "INSERT INTO occurrence (source_id, legacy_occurrence_id) "
-                "VALUES (?, '10982-ASTRONOMÍA')",
+                "VALUES (?, 'LEGACY-PRUEBA-001')",
                 (self.source_id,),
             )
         self.assertEqual(
             self.connection.execute(
                 "SELECT COUNT(*) FROM occurrence "
-                "WHERE legacy_occurrence_id = '10982-ASTRONOMÍA'"
+                "WHERE legacy_occurrence_id = 'LEGACY-PRUEBA-001'"
             ).fetchone()[0],
             2,
         )

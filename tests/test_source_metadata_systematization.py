@@ -200,7 +200,7 @@ class SourceRouteTests(unittest.TestCase):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                "Original", "legacy type", "legacy reference", "7DBLSC",
+                "Original", "legacy type", "legacy reference", "CODIGO-LEGACY-FICTICIO",
                 "INSTITUTIONAL", "VIDEO", "seña + definición", "Bogotá",
                 "Original characterization", 100,
             ),
@@ -221,7 +221,7 @@ class SourceRouteTests(unittest.TestCase):
             "/fuentes/1/actualizar",
             data={
                 "source_name": "Updated",
-                "legacy_source_code": "0MISC",
+                "legacy_source_code": "CODIGO-COMPARTIDO-FICTICIO",
                 "source_scope": "PERSONAL",
                 "format_original": "PAPER",
                 "format_detail": "printed material",
@@ -251,7 +251,7 @@ class SourceRouteTests(unittest.TestCase):
         self.assertEqual(revision["source_name"], "Original")
         self.assertEqual(revision["source_type"], "legacy type")
         self.assertEqual(revision["source_reference"], "legacy reference")
-        self.assertEqual(revision["legacy_source_code"], "7DBLSC")
+        self.assertEqual(revision["legacy_source_code"], "CODIGO-LEGACY-FICTICIO")
         self.assertEqual(revision["source_scope"], "INSTITUTIONAL")
         self.assertEqual(revision["format_original"], "VIDEO")
         self.assertEqual(revision["format_detail"], "seña + definición")
@@ -264,7 +264,7 @@ class SourceRouteTests(unittest.TestCase):
             "/fuentes/nueva",
             data={
                 "source_name": "New source",
-                "legacy_source_code": "0MISC",
+                "legacy_source_code": "CODIGO-COMPARTIDO-FICTICIO",
                 "source_scope": "PERSONAL",
                 "format_original": "VIDEO",
                 "format_detail": "seña + definición",
@@ -290,7 +290,7 @@ class SourceRouteTests(unittest.TestCase):
         self.assertEqual(
             created,
             (
-                "0MISC", "PERSONAL", "VIDEO", "seña + definición", 2024,
+                "CODIGO-COMPARTIDO-FICTICIO", "PERSONAL", "VIDEO", "seña + definición", 2024,
                 "ongoing", "Colombia", "Test source", 0, None, None,
             ),
         )

@@ -1,0 +1,3 @@
+occurrence_reconstruction_key	legacy_occurrence_id	alternative_canonica	fuente	observacion_original	categories	provenance_note_candidate	provenance_decision	review_note
+legacy:PRUEBA-001	PRUEBA-001	FENOMENO-ALFA-1a	CENTRO-DE-PRUEBA	Observación ficticia	OCCURRENCE_PROVENANCE	Candidato ficticio	ACCEPT	
+legacy:PRUEBA-002	PRUEBA-002	FENOMENO-ALFA-1b	REPOSITORIO-FICTICIO-A	Revisión ficticia	OTHER_REVIEW		REVIEW	Pendiente ficticio
