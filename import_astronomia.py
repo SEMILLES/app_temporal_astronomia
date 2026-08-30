@@ -11,6 +11,7 @@ import argparse
 import csv
 import hashlib
 import re
+import sys
 from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
@@ -741,14 +742,58 @@ def format_report(result: DryRunResult) -> str:
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Valida los inputs reconstruidos de Astronomía sin escribir en SQLite.")
-    parser.add_argument("--dry-run", action="store_true", required=True, help="Ejecuta únicamente validaciones de lectura.")
+def main(
+    argv: list[str] | None = None,
+    expectations: CorpusExpectations = DEFAULT_EXPECTATIONS,
+) -> int:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Valida los inputs reconstruidos de Astronomía y permite "
+            "persistirlos explícitamente en SQLite."
+        )
+    )
+    action = parser.add_mutually_exclusive_group(required=True)
+    action.add_argument("--dry-run", action="store_true", help="Ejecuta únicamente validaciones de lectura.")
+    action.add_argument("--apply", action="store_true", help="Valida y persiste en una SQLite explícita.")
+    parser.add_argument("--database", help="Archivo SQLite destino obligatorio para --apply.")
     parser.add_argument("input_directory", help="Directorio que contiene los artefactos reconstruidos.")
     args = parser.parse_args(argv)
-    result = run_dry_run(args.input_directory)
+    if args.apply and not args.database:
+        parser.error("--apply exige --database")
+    if args.dry_run and args.database:
+        parser.error("--database solo puede usarse con --apply")
+
+    result = run_dry_run(args.input_directory, expectations)
+    if not result.ready_for_apply:
+        print(format_report(result))
+        return 1
+    if args.dry_run:
+        print(format_report(result))
+        return 0
+
+    from astronomy_apply import apply_validated_plan_to_database
+
+    try:
+        apply_validated_plan_to_database(result.validated_plan, args.database)
+    except Exception as exc:
+        print(f"APPLY ERROR: {exc}", file=sys.stderr)
+        return 1
     print(format_report(result))
-    return 0 if result.ready_for_apply else 1
+    models = result.validated_plan
+    print("")
+    print("APPLY COMPLETED")
+    print(f"DATABASE: {args.database}")
+    print(
+        "COUNTS: "
+        f"sources={len(models.sources)} "
+        f"concepts={len(models.concepts)} "
+        f"alternatives={len(models.alternatives)} "
+        f"relations={len(models.relations)} "
+        f"occurrences={len(models.occurrences)} "
+        f"assignments={len(models.assignments)} "
+        f"grammar={len(models.grammar)}"
+    )
+    return 0
 
 
 if __name__ == "__main__":

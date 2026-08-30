@@ -218,7 +218,7 @@ class ImportAstronomiaDryRunTests(unittest.TestCase):
         else:
             self.assertEqual(database_hash, hashlib.sha256(database.read_bytes()).hexdigest())
 
-    def test_apply_is_not_supported(self):
+    def test_apply_requires_database(self):
         result = subprocess.run([sys.executable, str(ROOT / "import_astronomia.py"), "--apply", str(FIXTURES)],
                                 capture_output=True, text=True, check=False)
         self.assertNotEqual(result.returncode, 0)
