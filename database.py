@@ -1,8 +1,35 @@
+import os
 import sqlite3
 from pathlib import Path
 
 
-BASE_DATOS = Path(__file__).resolve().parent / "lesico_prototipo.db"
+DEFAULT_BASE_DATOS = Path(__file__).resolve().parent / "lesico_prototipo.db"
+_configured_database = os.environ.get("LESICO_DATABASE_PATH")
+USING_EXPLICIT_DATABASE = _configured_database is not None
+if USING_EXPLICIT_DATABASE:
+    if not _configured_database.strip():
+        raise RuntimeError("LESICO_DATABASE_PATH no puede estar vacía")
+    BASE_DATOS = Path(_configured_database).expanduser().resolve()
+else:
+    BASE_DATOS = DEFAULT_BASE_DATOS
+
+
+REQUIRED_APPLICATION_TABLES = frozenset({
+    "source",
+    "concept",
+    "occurrence",
+    "alternative",
+    "assignment",
+    "alternative_relation",
+    "occurrence_grammar",
+    "source_revision",
+    "source_systematization",
+    "occurrence_revision",
+    "media_asset",
+    "occurrence_media",
+    "alternative_media",
+    "submission",
+})
 
 
 def conectar():
@@ -16,6 +43,46 @@ def conectar():
     )
 
     return conexion
+
+
+def validar_base_explicita():
+    if not BASE_DATOS.is_file():
+        raise RuntimeError(
+            f"LESICO_DATABASE_PATH no existe o no es un archivo: {BASE_DATOS}"
+        )
+
+    try:
+        uri = BASE_DATOS.as_uri() + "?mode=ro"
+        conexion = sqlite3.connect(uri, uri=True)
+        try:
+            conexion.execute("PRAGMA query_only = ON")
+            tables = {
+                row[0]
+                for row in conexion.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+        finally:
+            conexion.close()
+    except sqlite3.Error as error:
+        raise RuntimeError(
+            f"LESICO_DATABASE_PATH no es una SQLite utilizable: {BASE_DATOS}"
+        ) from error
+
+    missing = sorted(REQUIRED_APPLICATION_TABLES - tables)
+    if missing:
+        raise RuntimeError(
+            "LESICO_DATABASE_PATH no contiene las tablas requeridas: "
+            + ", ".join(missing)
+        )
+
+
+def preparar_base_para_startup():
+    print(f"Database: {BASE_DATOS}")
+    if USING_EXPLICIT_DATABASE:
+        validar_base_explicita()
+    else:
+        crear_base()
 
 
 def crear_base():

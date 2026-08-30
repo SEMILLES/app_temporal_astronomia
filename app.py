@@ -1,6 +1,6 @@
 from flask import Flask
 
-from database import crear_base
+from database import preparar_base_para_startup
 from concept_labels import alternative_display_label, human_concept_label
 
 from routes.main import main_bp
@@ -26,8 +26,8 @@ app.register_blueprint(submissions_bp)
 app.register_blueprint(alternatives_bp)
 
 
-# Crear tablas necesarias
-crear_base()
+# Preparar o validar la base activa antes de servir la aplicación
+preparar_base_para_startup()
 
 
 if __name__ == "__main__":
