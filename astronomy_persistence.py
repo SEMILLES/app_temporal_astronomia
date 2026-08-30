@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlite3 import Connection
 
-from import_astronomia import ValidatedImportPlan
+from astronomy_import_models import ValidatedImportPlan
 from occurrence_grammar import create_or_replace_occurrence_grammar
 
 

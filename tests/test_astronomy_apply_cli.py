@@ -1,7 +1,10 @@
+import csv
 import hashlib
 import io
 import shutil
 import sqlite3
+import subprocess
+import sys
 import tempfile
 import unittest
 from contextlib import redirect_stderr, redirect_stdout
@@ -14,11 +17,19 @@ from astronomy_apply import (
     validate_existing_database,
 )
 from database import crear_esquema
-from import_astronomia import main, run_dry_run
+from import_astronomia import (
+    EXCLUDED_HEADERS,
+    OBSERVATION_HEADERS,
+    OCCURRENCE_HEADERS,
+    SOURCE_HEADERS,
+    main,
+    run_dry_run,
+)
 from tests.test_import_astronomia_dry_run import EXPECTATIONS, FIXTURES
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SCRIPT = ROOT / "import_astronomia.py"
 PROTOTYPE = ROOT / "lesico_prototipo.db"
 
 
@@ -62,6 +73,208 @@ class AstronomyApplyCliTests(unittest.TestCase):
     def file_hash(self, path):
         return hashlib.sha256(path.read_bytes()).hexdigest()
 
+    def write_tsv(self, path, headers, rows):
+        with path.open("w", encoding="utf-8", newline="") as stream:
+            writer = csv.DictWriter(
+                stream, fieldnames=headers, delimiter="\t", lineterminator="\n"
+            )
+            writer.writeheader()
+            writer.writerows(rows)
+
+    def create_default_contract_synthetic_inputs(self):
+        inputs = self.directory / "subprocess-inputs"
+        inputs.mkdir()
+
+        sources = []
+        institutional_names = [
+            "DBLSC",
+            "Planetario de Medellín",
+            "UNIVERSIDAD NACIONAL",
+            *[f"FUENTE-INSTITUCIONAL-{index:02d}" for index in range(4, 41)],
+        ]
+        personal_names = [
+            f"REPOSITORIO-PERSONAL-FICTICIO-{index}" for index in range(1, 5)
+        ]
+        for index, name in enumerate(
+            [*institutional_names, *personal_names], 1
+        ):
+            row = {header: "" for header in SOURCE_HEADERS}
+            row.update({
+                "source_reconstruction_key": f"source:synthetic-{index:02d}",
+                "source_name": name,
+                "legacy_source_code": (
+                    "0MISC" if name in personal_names else f"SYN-{index:02d}"
+                ),
+                "source_scope": (
+                    "PERSONAL" if name in personal_names else "INSTITUTIONAL"
+                ),
+                "create_source_systematization": "0",
+            })
+            sources.append(row)
+        self.write_tsv(
+            inputs / "reconstruccion_sources_astronomia_v1.tsv",
+            SOURCE_HEADERS,
+            sources,
+        )
+
+        concepts = [
+            "LUZ",
+            "CONTAMINACIÓN-LUMÍNICA",
+            *[f"CONCEPTO-SINTETICO-{index:03d}" for index in range(3, 151)],
+        ]
+        alternatives = [(concept, f"{concept}-1a") for concept in concepts]
+        alternatives.append(("LUZ", "LUZ-1b"))
+        alternatives.extend(
+            (concept, f"{concept}-1b") for concept in concepts[2:79]
+        )
+        alternative_lines = [
+            "# Corpus sintético para regresión subprocess",
+            "",
+            "## Alternatives",
+            "",
+            "| Concept | Canonical code | Legacy code | C4 | C5 | C6 | C7 | C8 |",
+            "|---|---|---|---|---|---|---|---|",
+        ]
+        for index, (concept, code) in enumerate(alternatives):
+            legacy = f"LEGACY-SINTETICO-{index + 1:03d}" if index < 27 else "—"
+            alternative_lines.append(
+                f"| {concept} | {code} | {legacy} | x | x | x | x | x |"
+            )
+        alternative_lines.extend([
+            "",
+            "## Relaciones fonológicas confirmadas",
+            "",
+            "| Alternative A | Alternative B | Parameter | Note |",
+            "|---|---|---|---|",
+            "| LUZ-1a | LUZ-1b | CM_1 | sintética |",
+        ])
+        for concept in concepts[2:20]:
+            alternative_lines.append(
+                f"| {concept}-1a | {concept}-1b | CM_1 | sintética |"
+            )
+        (inputs / "reconstruccion_alternatives_astronomia_v2.md").write_text(
+            "\n".join(alternative_lines) + "\n", encoding="utf-8"
+        )
+
+        occurrences = []
+
+        def occurrence_row(
+            legacy_id, gloss, concept, alternative, source,
+            conjugated="SIN-MARCA", negation="SIN-NEG",
+        ):
+            row = {header: "" for header in OCCURRENCE_HEADERS}
+            row.update({
+                "Área de conocimiento": "AREA-SINTETICA",
+                "Legacy occurrence": legacy_id,
+                "Glosa original": gloss,
+                "Concepto canónico": concept,
+                "Alternative canónica": alternative,
+                "Assignment": "ASIGNADA",
+                "Fuente": source,
+                "Alcance": "INSTITUTIONAL",
+                "Género": "SIN-MARCA",
+                "Plural": "SIN-MARCA",
+                "Negación": negation,
+                "Forma conjugada": conjugated,
+                "Agentivo": "SIN-MARCA",
+            })
+            return row
+
+        occurrences.extend([
+            occurrence_row(
+                "2183-LUZ", "LUZ", "LUZ", "LUZ-1a", "DBLSC",
+                conjugated="SÍ",
+            ),
+            occurrence_row(
+                "11162-LUZ", "LUZ", "LUZ", "LUZ-1b",
+                "Planetario de Medellín", conjugated="SÍ",
+            ),
+            occurrence_row(
+                "", "CONTAMINACIÓN LUMÍNICA", "CONTAMINACIÓN-LUMÍNICA",
+                "CONTAMINACIÓN-LUMÍNICA-1a", "UNIVERSIDAD NACIONAL",
+                negation="CON-NEG",
+            ),
+        ])
+        for index in range(1, 233):
+            concept = concepts[2 + (index % 148)]
+            occurrences.append(
+                occurrence_row(
+                    f"LEGACY-SINTETICO-{index:03d}",
+                    f"GLOSA-LEGACY-SINTETICA-{index:03d}",
+                    concept,
+                    f"{concept}-1a",
+                    institutional_names[index % len(institutional_names)],
+                )
+            )
+        for index in range(1, 19):
+            concept = concepts[2 + ((index + 50) % 148)]
+            occurrences.append(
+                occurrence_row(
+                    "",
+                    f"GLOSA-NUEVA-SINTETICA-{index:03d}",
+                    concept,
+                    f"{concept}-1a",
+                    "UNIVERSIDAD NACIONAL",
+                )
+            )
+        self.write_tsv(
+            inputs / "reconstruccion_occurrences_astronomia_v1.tsv",
+            OCCURRENCE_HEADERS,
+            occurrences,
+        )
+
+        observation_rows = []
+        for index, occurrence in enumerate(occurrences[:115]):
+            legacy_id = occurrence["Legacy occurrence"]
+            key = (
+                f"legacy:{legacy_id}"
+                if legacy_id
+                else "unal:"
+                + occurrence["Fuente"]
+                + "|"
+                + occurrence["Alternative canónica"]
+                + "|"
+                + occurrence["Glosa original"]
+            )
+            row = {header: "" for header in OBSERVATION_HEADERS}
+            row.update({
+                "occurrence_reconstruction_key": key,
+                "legacy_occurrence_id": legacy_id,
+                "alternative_canonica": occurrence["Alternative canónica"],
+                "fuente": occurrence["Fuente"],
+                "observacion_original": f"Observación sintética {index + 1}",
+                "categories": (
+                    "OCCURRENCE_PROVENANCE" if index < 21 else "OTHER_REVIEW"
+                ),
+                "provenance_note_candidate": (
+                    f"Candidato sintético {index + 1}" if index < 21 else ""
+                ),
+                "provenance_decision": (
+                    "PROPOSED" if index < 21 else "NOT_APPLICABLE"
+                ),
+            })
+            observation_rows.append(row)
+        self.write_tsv(
+            inputs / "revision_observaciones_astronomia_v1.tsv",
+            OBSERVATION_HEADERS,
+            observation_rows,
+        )
+        self.write_tsv(
+            inputs / "occurrences_excluidas_astronomia_v1.tsv",
+            EXCLUDED_HEADERS,
+            [
+                {
+                    "Legacy occurrence": f"EXCLUIDA-SINTETICA-{index}",
+                    "Razón de exclusión": "Razón enteramente sintética",
+                }
+                for index in range(1, 4)
+            ],
+        )
+        (inputs / "resumen_occurrences_astronomia_v1.md").write_text(
+            "# Resumen sintético subprocess\n", encoding="utf-8"
+        )
+        return inputs
+
     def test_apply_new_path_happy_path(self):
         database_path = self.directory / "new.db"
         result = self.run_cli(
@@ -98,6 +311,62 @@ class AstronomyApplyCliTests(unittest.TestCase):
                     "assignment": 4,
                     "occurrence_grammar": 4,
                 },
+            )
+        finally:
+            connection.close()
+
+    def test_script_entrypoint_uses_canonical_validated_plan_identity(self):
+        inputs = self.create_default_contract_synthetic_inputs()
+        database_path = self.directory / "subprocess.db"
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(SCRIPT),
+                "--apply",
+                str(inputs),
+                "--database",
+                str(database_path),
+            ],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn(
+            "plan debe ser una instancia de ValidatedImportPlan",
+            result.stderr,
+        )
+        self.assertTrue(database_path.is_file())
+        connection = sqlite3.connect(database_path)
+        try:
+            self.assertEqual(
+                {
+                    table: connection.execute(
+                        f"SELECT COUNT(*) FROM {table}"
+                    ).fetchone()[0]
+                    for table in (
+                        "source",
+                        "concept",
+                        "alternative",
+                        "alternative_relation",
+                        "occurrence",
+                        "assignment",
+                        "occurrence_grammar",
+                    )
+                },
+                {
+                    "source": 44,
+                    "concept": 150,
+                    "alternative": 228,
+                    "alternative_relation": 19,
+                    "occurrence": 253,
+                    "assignment": 253,
+                    "occurrence_grammar": 253,
+                },
+            )
+            self.assertEqual(
+                connection.execute("PRAGMA foreign_key_check").fetchall(), []
             )
         finally:
             connection.close()
