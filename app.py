@@ -1,3 +1,4 @@
+import os
 from flask import Flask
 
 from database import preparar_base_para_startup
@@ -16,6 +17,7 @@ from source_period import format_source_period
 
 
 app = Flask(__name__)
+app.config["SECRET_KEY"] = os.environ.get("LESICO_SECRET_KEY")
 
 app.jinja_env.filters["human_concept_label"] = human_concept_label
 app.jinja_env.filters["alternative_display_label"] = alternative_display_label

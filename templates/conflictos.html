@@ -1,9 +1,10 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><title>Conflictos</title><body>
 <h1>Conflictos</h1>
+{% if message %}<p role="status">{{ message }}</p>{% endif %}
 <p><a href="{{ url_for('conflicts.new_conflict') }}">Crear conflicto manual</a></p>
 <form method="post" action="{{ url_for('conflicts.validate_conflicts') }}"><button>Ejecutar validación global</button></form>
 <form method="get"><label>Estado <select name="status"><option value="open">Abiertos</option><option value="resolved" {% if filters.get('status')=='resolved' %}selected{% endif %}>Resueltos</option><option value="all" {% if filters.get('status')=='all' %}selected{% endif %}>Todos</option></select></label>
 <label>Severidad <select name="severity"><option value="">Todas</option><option value="blocking">Blocking</option><option value="non_blocking">Non-blocking</option></select></label>
 <label>Origen <select name="origin"><option value="">Todos</option><option value="automatic">Automático</option><option value="manual">Manual</option></select></label><button>Filtrar</button></form>
 <table><thead><tr><th>ID</th><th>Tipo/regla</th><th>Publicación</th><th>Descripción</th><th>Subjects</th><th>Origen</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody>
-{% for c in conflicts %}<tr><td>{{ c.conflict_id }}</td><td>{{ c.rule_code or 'Manual' }}</td><td>{{ 'Bloquea publicación' if c.severity=='blocking' else 'NO bloquea publicación' }}</td><td>{{ c.description }}</td><td>{{ c.subject_count }}</td><td>{{ c.detection_source }}</td><td>{{ c.created_at }}</td><td>{{ c.status }}</td><td><a href="{{ url_for('conflicts.conflict_detail',conflict_id=c.conflict_id) }}">Abrir</a></td></tr>{% else %}<tr><td colspan="9">No hay conflictos.</td></tr>{% endfor %}</tbody></table></body></html>
+{% for c in conflicts %}<tr><td>{{ c.conflict_id }}</td><td>{{ c.rule_code or ui_label(c.origin_kind) }}</td><td>{{ ui_label(c.severity) }}</td><td>{{ c.description }}</td><td><ul>{% for label in c.subject_labels %}<li>{{ label }}</li>{% endfor %}</ul></td><td>{{ ui_label(c.detection_source) }}</td><td>{{ local_timestamp(c.created_at) }}</td><td>{{ ui_label(c.status) }}</td><td><a href="{{ url_for('conflicts.conflict_detail',conflict_id=c.conflict_id) }}">Abrir</a></td></tr>{% else %}<tr><td colspan="9">No hay conflictos.</td></tr>{% endfor %}</tbody></table></body></html>
