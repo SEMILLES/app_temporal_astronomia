@@ -59,6 +59,15 @@ def nuevo_aporte():
 @submissions_bp.route("/aportes", methods=["POST"])
 @submissions_bp.route("/ocurrencias/guardar", methods=["POST"])
 def guardar_aporte():
+    role=getattr(g,"current_access_role",None)
+    if (role in ("reviewer","master") and request.form.get("reference_kind")=="new"
+            and request.form.get("concept_immediate_action") in ("new","existing")):
+        db=conectar()
+        try:result=preview_operation(db,_concept_immediate_operation(request.form))
+        except (ValueError,sqlite3.IntegrityError) as error:
+            context=_context(db,error=str(error));return render_template("nueva_ocurrencia.html",**context),400
+        finally:db.close()
+        return render_template("confirmar_aceptacion_inmediata.html",kind="concept",occurrence_id=None,payload=list(request.form.lists()),preflight=result,summary=None)
     db = conectar()
     try:
         occurrence_id = complete_registration(db, **_evidence(request.form), **_reference(request.form), collaborator_id=request.form.get("collaborator_id"), access_role=getattr(g, "current_access_role", None))
@@ -174,13 +183,34 @@ def _rows(db, pending=False):
         als.reference_concept_proposal_id,als.proposed_existing_alternative_id,
         als.phonological_relation_answer,als.resolved_alternative_id,als.is_legacy,
         COALESCE(context.preferred_label,cp.proposed_label) AS context_label,
-        cp.status AS concept_proposal_status,cp.resolved_concept_id
+        cp.status AS concept_proposal_status,cp.resolved_concept_id,
+        COALESCE(context.preferred_label,cp_resolved.preferred_label,
+                 occurrence_context.preferred_label,occurrence_cp_resolved.preferred_label,
+                 cp.proposed_label,occurrence_cp.proposed_label) AS display_concept,
+        resolved_concept.preferred_label AS resolved_concept_label,
+        resolved_alt.working_label AS resolved_working_label,
+        proposed_concept.preferred_label AS proposed_concept_label,
+        proposed_alt.working_label AS proposed_working_label,
+        current_concept.preferred_label AS current_concept_label,
+        current_alt.working_label AS current_working_label
         FROM submission s JOIN occurrence o USING(occurrence_id)
         JOIN source src ON src.source_id=o.source_id
         LEFT JOIN grammar_submission gs USING(submission_id)
         LEFT JOIN alternative_submission als USING(submission_id)
         LEFT JOIN concept context ON context.concept_id=als.reference_concept_id
         LEFT JOIN concept_proposal cp ON cp.concept_proposal_id=als.reference_concept_proposal_id
+        LEFT JOIN concept cp_resolved ON cp_resolved.concept_id=cp.resolved_concept_id
+        LEFT JOIN alternative resolved_alt ON resolved_alt.alternative_id=als.resolved_alternative_id
+        LEFT JOIN concept resolved_concept ON resolved_concept.concept_id=resolved_alt.concept_id
+        LEFT JOIN alternative proposed_alt ON proposed_alt.alternative_id=als.proposed_existing_alternative_id
+        LEFT JOIN concept proposed_concept ON proposed_concept.concept_id=proposed_alt.concept_id
+        LEFT JOIN occurrence_concept_reference occurrence_ref ON occurrence_ref.occurrence_id=o.occurrence_id AND occurrence_ref.is_current=1
+        LEFT JOIN concept occurrence_context ON occurrence_context.concept_id=occurrence_ref.concept_id
+        LEFT JOIN concept_proposal occurrence_cp ON occurrence_cp.concept_proposal_id=occurrence_ref.concept_proposal_id
+        LEFT JOIN concept occurrence_cp_resolved ON occurrence_cp_resolved.concept_id=occurrence_cp.resolved_concept_id
+        LEFT JOIN assignment current_assignment ON current_assignment.occurrence_id=o.occurrence_id AND current_assignment.is_current=1
+        LEFT JOIN alternative current_alt ON current_alt.alternative_id=current_assignment.alternative_id
+        LEFT JOIN concept current_concept ON current_concept.concept_id=current_alt.concept_id
         {where} ORDER BY s.submission_id DESC""").fetchall()
 
 
