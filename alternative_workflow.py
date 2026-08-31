@@ -123,6 +123,10 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
         raise AlternativeWorkflowError("Debe responder sobre la relación fonológica.")
     if proposal_kind == "UNSURE" and note is None:
         raise AlternativeWorkflowError("Una propuesta incierta exige una nota de análisis.")
+    if proposal_kind == "NEW" and morphology is None:
+        raise AlternativeWorkflowError(
+            "Una propuesta NEW exige cantidad de componentes o N/A."
+        )
     if proposal_kind == "EXISTING": answer = None
     validated = [_validate_relation_target(connection, relation) for relation in relations]
     for target_alternative_id, target_submission_id, _, _ in validated:
@@ -170,7 +174,15 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
         """, (submission_id, proposal_kind, concept_id, proposal_id,
               proposed_existing_alternative_id, answer, note))
         if morphology is not None:
-            store_submission_morphology(connection,submission_id,**morphology)
+            normalized_morphology = store_submission_morphology(
+                connection,submission_id,**morphology
+            )
+            if (proposal_kind == "NEW"
+                    and normalized_morphology["component_count"] is None
+                    and not normalized_morphology["component_count_not_applicable"]):
+                raise AlternativeWorkflowError(
+                    "Una propuesta NEW exige cantidad de componentes o N/A."
+                )
         for alternative_id, target_id, parameter, uncertain in validated:
             if target_id == submission_id:
                 raise AlternativeWorkflowError("Una submission no puede relacionarse consigo misma.")

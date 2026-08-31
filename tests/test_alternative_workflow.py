@@ -32,6 +32,8 @@ class AlternativeWorkflowTests(unittest.TestCase):
     def tearDown(self): self.db.close(); self.tmp.cleanup()
 
     def create(self, occurrence=5, kind="NEW", **kwargs):
+        if kind == "NEW" and "morphology" not in kwargs:
+            kwargs["morphology"]={"component_count_not_applicable":True}
         return create_alternative_submission(self.db,occurrence,kind,**kwargs)
 
     def test_existing_validation(self):

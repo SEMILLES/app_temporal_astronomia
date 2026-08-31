@@ -2,6 +2,7 @@ import sqlite3
 
 from concept_labels import InvalidConceptLabel, normalize_concept_label
 from activity import record_activity
+from source_period import validate_occurrence_year
 
 
 class RegistrationError(ValueError):
@@ -18,7 +19,7 @@ def _year(value):
     if value is None:
         return None
     if not value.isdigit() or len(value) != 4 or int(value) < 1:
-        raise RegistrationError("El año de la occurrence no es válido.")
+        raise RegistrationError("El año de la ocurrencia no es válido.")
     return int(value)
 
 
@@ -91,6 +92,10 @@ def save_draft(connection, draft_id=None, *, collaborator_id=None, access_role=N
             if values.get("reference_concept_proposal_id") else None
         ),
     }
+    if data["source_id"] is not None:
+        data["occurrence_year"] = validate_occurrence_year(
+            connection, data["source_id"], values.get("occurrence_year")
+        )
     if data["reference_concept_id"] and data["reference_concept_proposal_id"]:
         raise RegistrationError("Un borrador no puede tener dos referencias conceptuales.")
     if draft_id is None:
@@ -159,7 +164,8 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
         cursor = connection.execute(
             "INSERT INTO occurrence (source_id, original_gloss, hyperlink, "
             "occurrence_year, source_locator, provenance_note) VALUES (?, ?, ?, ?, ?, ?)",
-            (int(source_id), gloss, _text(hyperlink), _year(occurrence_year),
+            (int(source_id), gloss, _text(hyperlink),
+             validate_occurrence_year(connection, source_id, occurrence_year),
              _text(source_locator), _text(provenance_note)),
         )
         occurrence_id = cursor.lastrowid

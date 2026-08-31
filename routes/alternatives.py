@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for, g
+from flask import Blueprint, render_template, request, redirect, url_for, g, abort
 
 import sqlite3
 import re
@@ -194,7 +194,7 @@ def alternativas(concept_id):
     methods=["POST"]
 )
 def nueva_alternativa(concept_id):
-
+    abort(404)
     try:
         working_label = structured_working_label(request.form)
     except ValueError:
@@ -230,7 +230,7 @@ def nueva_alternativa(concept_id):
 
 @alternatives_bp.route("/alternativas/<int:alternative_id>/editar")
 def editar_alternativa(alternative_id):
-
+    abort(404)
     conexion = conectar()
     alternative = conexion.execute("""
         SELECT alternative_id, concept_id, working_label
@@ -259,7 +259,7 @@ def editar_alternativa(alternative_id):
     methods=["POST"]
 )
 def actualizar_alternativa(alternative_id):
-
+    abort(404)
     fallback = request.form.get("working_label_fallback", "").strip() or None
     try:
         working_label = structured_working_label(request.form, fallback)

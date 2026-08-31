@@ -1,10 +1,10 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><title>Registrar evidencia</title><body>
-<h1>{% if draft %}Continuar borrador{% else %}Registrar occurrence{% endif %}</h1>
+<h1>{% if draft %}Continuar borrador{% else %}Registrar ocurrencia{% endif %}</h1>
 {% if error %}<p role="alert">{{ error }}</p>{% endif %}
 <form method="post" action="{{ url_for('submissions.completar_borrador', draft_id=draft['draft_id']) if draft else url_for('submissions.guardar_aporte') }}">
-<p><label>1. Fuente <select name="source_id" required><option value="">Seleccione</option>{% for source in fuentes %}<option value="{{ source['source_id'] }}" {% if draft and draft['source_id']==source['source_id'] %}selected{% endif %}>{{ source['source_name'] }}{% if source['start_year'] %} ({{ source['start_year'] }}{% if source['end_year'] %}–{{ source['end_year'] }}{% endif %}){% endif %}</option>{% endfor %}</select></label></p>
+<p><label>1. Fuente <select name="source_id" required><option value="">Seleccione</option>{% for source in fuentes %}<option value="{{ source['source_id'] }}" data-min-year="{{ source['start_year'] or '' }}" data-max-year="{{ source['end_year'] or '' }}" {% if draft and draft['source_id']==source['source_id'] %}selected{% endif %}>{{ source['source_name'] }}{% set period=source['start_year']|source_period(source['end_year']) %}{% if period %} ({{ period }}){% endif %}</option>{% endfor %}</select></label></p>
 <p><label>2. Evidencia/glosa <input name="original_gloss" value="{{ draft['original_gloss'] if draft and draft['original_gloss'] else '' }}" required></label></p>
-<p><label>3. Año de la occurrence <input name="occurrence_year" inputmode="numeric" value="{{ draft['occurrence_year'] if draft and draft['occurrence_year'] else '' }}"></label> <small>Dato propio de la occurrence; no se deriva de la fuente.</small></p>
+<p><label>3. Año de la ocurrencia <input name="occurrence_year" type="number" min="1" max="9999" value="{{ draft['occurrence_year'] if draft and draft['occurrence_year'] else '' }}"></label> <small>Dato opcional propio de la ocurrencia; no se deriva de la fuente.</small></p>
 <p><label>Localizador <input name="source_locator" value="{{ draft['source_locator'] if draft and draft['source_locator'] else '' }}"></label></p>
 <p><label>Enlace <input name="hyperlink"></label></p>
 <p><label>Nota de procedencia <textarea name="provenance_note">{{ draft['provenance_note'] if draft and draft['provenance_note'] else '' }}</textarea></label></p>
@@ -15,6 +15,6 @@
 </fieldset>
 <button type="submit">Completar registro</button>
 <button type="submit" formnovalidate formaction="{{ url_for('submissions.guardar_borrador', draft_id=draft['draft_id']) if draft else url_for('submissions.guardar_borrador') }}">Guardar borrador{% if draft %} actual{% endif %}</button>
-</form>
+</form><script>(function(){const source=document.querySelector('[name=source_id]'),year=document.querySelector('[name=occurrence_year]');function limits(){const option=source.options[source.selectedIndex];year.min=option&&option.dataset.minYear||'1';year.max=option&&option.dataset.maxYear||'9999'}source.addEventListener('change',limits);limits()})();</script>
 <p><a href="{{ url_for('submissions.borradores') }}">Ver borradores</a> · <a href="{{ url_for('occurrences.ocurrencias') }}">Volver</a></p>
 </body></html>

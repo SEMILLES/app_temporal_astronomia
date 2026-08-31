@@ -9,20 +9,10 @@ from grammar_workflow import GrammarWorkflowError, create_grammar_submission
 from grammatical_marks import GRAMMATICAL_MARK_VOCABULARIES
 from alternative_workflow import AlternativeWorkflowError, create_alternative_submission
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
+from source_period import validate_occurrence_year
 
 
 occurrences_bp = Blueprint("occurrences", __name__)
-
-
-def validate_occurrence_year(conexion, source_id, value):
-    if value in (None, ""):
-        return None
-    if not value.isdigit() or len(value) != 4:
-        raise ValueError
-    year = int(value)
-    if year < 1:
-        raise ValueError
-    return year
 
 
 @occurrences_bp.route("/ocurrencias")
@@ -170,7 +160,7 @@ def actualizar_ocurrencia(occurrence_id):
         conexion.commit()
     except (sqlite3.IntegrityError, ValueError):
         conexion.rollback()
-        return "La fuente o el año de la occurrence no son válidos.", 400
+        return "La fuente o el año de la ocurrencia no son válidos.", 400
     finally:
         conexion.close()
     return redirect(url_for("occurrences.ocurrencias"))
@@ -412,8 +402,20 @@ def guardar_clasificacion(occurrence_id):
         relation={"phonological_parameter":parameter,"uncertain":str(index) in uncertain}
         relation["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None
         relations.append(relation)
+    if not target_types:
+        kinds=[value for key,value in request.form.items() if key.startswith("relation_target_type_")]
+        alternative_ids=request.form.getlist("relation_alternative_id")
+        submission_ids=request.form.getlist("relation_submission_id")
+        for index,kind in enumerate(kinds):
+            target=(submission_ids[index] if kind=="submission" and index<len(submission_ids)
+                    else alternative_ids[index] if index<len(alternative_ids) else "")
+            parameter=parameters[index] if index<len(parameters) else ""
+            if not target and not parameter: continue
+            relation={"phonological_parameter":parameter,"uncertain":str(index) in uncertain}
+            relation["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None
+            relations.append(relation)
     morphology=None
-    if request.form.get("record_morphology")=="yes":
+    if proposal_kind=="NEW":
         count_choice=request.form.get("morphology_component_count")
         not_applicable=count_choice=="N/A"
         component_count=None if count_choice in (None,"","N/A") else count_choice

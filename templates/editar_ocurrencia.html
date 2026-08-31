@@ -40,6 +40,8 @@
 
                     <option
                         value="{{ fuente['source_id'] }}"
+                        data-min-year="{{ fuente['start_year'] or '' }}"
+                        data-max-year="{{ fuente['end_year'] or '' }}"
 
                         {% if fuente["source_id"] == ocurrencia["source_id"] %}
                             selected
@@ -94,7 +96,7 @@
         </p>
 
         <p>
-            <label>Año de la occurrence (opcional):</label>
+            <label>Año de la ocurrencia (opcional):</label>
             <input
                 type="number"
                 name="occurrence_year"
@@ -124,7 +126,7 @@
 
     <p>
         <a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=ocurrencia['occurrence_id']) }}">
-            Clasificar occurrence
+            Clasificar ocurrencia
         </a>
     </p>
 
@@ -134,6 +136,7 @@
         </a>
     </p>
 
+<script>(function(){const source=document.querySelector('[name=source_id]'),year=document.querySelector('[name=occurrence_year]');function limits(){const option=source.options[source.selectedIndex];year.min=option&&option.dataset.minYear||'1';year.max=option&&option.dataset.maxYear||'9999'}source.addEventListener('change',limits);limits()})();</script>
 </body>
 
 </html>

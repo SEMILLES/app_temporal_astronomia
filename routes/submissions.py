@@ -11,8 +11,11 @@ from alternative_workflow import (
 )
 from alternative_nomenclature import calculate_nomenclature_preview
 from alternative_morphology import submission_morphology
+from concept_labels import alternative_display_label
+from source_period import format_source_period
 
 submissions_bp = Blueprint("submissions", __name__)
+submissions_bp.add_app_template_filter(format_source_period, "source_period")
 
 
 def _context(db, draft=None, error=None):
@@ -179,7 +182,11 @@ def _alternative_review_context(db, rows):
     for row in rows:
         if row["submission_type"] != "ALTERNATIVE": continue
         concept_id=row["reference_concept_id"] or row["resolved_concept_id"]
-        alternatives=db.execute("SELECT alternative_id,working_label FROM alternative WHERE concept_id=? AND retired_at IS NULL ORDER BY working_label",(concept_id,)).fetchall() if concept_id else []
+        alternatives=[dict(item) for item in db.execute("SELECT a.alternative_id,a.working_label,c.preferred_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.concept_id=? AND a.retired_at IS NULL ORDER BY a.working_label",(concept_id,)).fetchall()] if concept_id else []
+        for alternative in alternatives:
+            alternative["display_label"]=alternative_display_label(
+                alternative["preferred_label"],alternative["working_label"]
+            )
         relations=db.execute("""
             SELECT r.*,a.working_label AS target_working_label,
                    ts.status AS target_submission_status,

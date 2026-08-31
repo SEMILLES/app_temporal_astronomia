@@ -118,8 +118,8 @@ class OccurrenceRegistrationTests(unittest.TestCase):
     def test_route_registration_has_order_and_creates_no_submission(self):
         page = self.client.get("/aportes/nuevo").get_data(as_text=True)
         self.assertLess(page.index("Fuente"), page.index("Evidencia/glosa"))
-        self.assertLess(page.index("Evidencia/glosa"), page.index("Año de la occurrence"))
-        self.assertLess(page.index("Año de la occurrence"), page.index("Concepto de referencia"))
+        self.assertLess(page.index("Evidencia/glosa"), page.index("Año de la ocurrencia"))
+        self.assertLess(page.index("Año de la ocurrencia"), page.index("Concepto de referencia"))
         response = self.client.post("/aportes", data=dict(source_id="1", original_gloss="ROUTE", occurrence_year="2024", reference_kind="concept", reference_concept_id="1"))
         self.assertEqual(response.status_code, 302)
         db = self.connect(); counts = self.counts(db); db.close()

@@ -234,11 +234,6 @@
                         {% endif %}
                     </section>
 
-                    <p class="alternative-actions">
-                        <a href="{{ url_for('alternatives.editar_alternativa', alternative_id=alternativa['alternative_id']) }}">
-                            Editar alternativa
-                        </a>
-                    </p>
                 </article>
             {% endfor %}
         {% else %}
@@ -246,27 +241,7 @@
         {% endif %}
     </div>
 
-    <section class="create-alternative">
-        <h2>Crear alternativa</h2>
-
-        <form method="post" action="{{ url_for('alternatives.nueva_alternativa', concept_id=concepto['concept_id']) }}">
-            <label>Número:</label>
-            <select name="working_label_number">
-                <option value="">Sin número</option>
-                {% for number in range(1, 11) %}
-                    <option value="{{ number }}">{{ number }}</option>
-                {% endfor %}
-            </select>
-            <label>Letra:</label>
-            <select name="working_label_letter">
-                <option value="">Sin letra</option>
-                {% for letter in "abcdefghijklmnopqrstuvwxyz" %}
-                    <option value="{{ letter }}">{{ letter }}</option>
-                {% endfor %}
-            </select>
-            <button type="submit">Crear alternativa</button>
-        </form>
-    </section>
+    <p>La creación y la renumeración de alternativas se realizan mediante el workflow de análisis y revisión.</p>
 
     <p><a href="{{ url_for('concepts.conceptos') }}">Volver a conceptos</a></p>
 </body>

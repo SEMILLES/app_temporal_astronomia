@@ -110,20 +110,17 @@ class OccurrenceSchemaTests(unittest.TestCase):
         ).fetchall()
         self.assertEqual(actual, [(None, "null"), (2024, "integer")])
 
-    def test_occurrence_year_is_independent_of_source_period(self):
+    def test_occurrence_year_respects_known_source_period(self):
         self.connection.execute(
             "UPDATE source SET start_year = 2020, end_year = 2021, "
             "end_year_status = 'known' WHERE source_id = ?",
             (self.source_id,),
         )
-        self.assertEqual(
-            validate_occurrence_year(self.connection, self.source_id, "1999"),
-            1999,
-        )
-        self.assertEqual(
-            validate_occurrence_year(self.connection, self.source_id, "2025"),
-            2025,
-        )
+        for value in ("1999", "2025"):
+            with self.assertRaises(ValueError):
+                validate_occurrence_year(self.connection, self.source_id, value)
+        self.assertEqual(validate_occurrence_year(
+            self.connection, self.source_id, "2021"), 2021)
 
     def test_occurrence_year_rejects_invalid_values(self):
         for value in ("", "0", "0000", "24", "202A", "10000"):
@@ -235,7 +232,7 @@ class OccurrenceRouteTests(unittest.TestCase):
                 "hyperlink": "https://new.example",
                 "source_locator": "locator nuevo",
                 "provenance_note": "Nota nueva",
-                "occurrence_year": "1999",
+                "occurrence_year": "2021",
                 "change_note": "Corrección sintética",
             },
         )
@@ -254,7 +251,7 @@ class OccurrenceRouteTests(unittest.TestCase):
         self.assertEqual(occurrence["legacy_occurrence_id"], "244-¿CÓMO ESTÁS?")
         self.assertEqual(occurrence["legacy_source_detail_1"], "Página  4")
         self.assertEqual(occurrence["legacy_source_detail_2"], "Video A / 00:02:03")
-        self.assertEqual(occurrence["occurrence_year"], 1999)
+        self.assertEqual(occurrence["occurrence_year"], 2021)
         self.assertEqual(revision["legacy_occurrence_id"], "244-¿CÓMO ESTÁS?")
         self.assertEqual(revision["legacy_source_detail_1"], "Página  4")
         self.assertEqual(revision["legacy_source_detail_2"], "Video A / 00:02:03")

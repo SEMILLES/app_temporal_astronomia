@@ -11,12 +11,14 @@ from routes.submissions import submissions_bp
 from routes.alternatives import alternatives_bp
 from routes.collaborators import collaborators_bp
 from access_control import install_access_context
+from source_period import format_source_period
 
 
 app = Flask(__name__)
 
 app.jinja_env.filters["human_concept_label"] = human_concept_label
 app.jinja_env.filters["alternative_display_label"] = alternative_display_label
+app.jinja_env.filters["source_period"] = format_source_period
 
 
 # Registrar grupos de rutas

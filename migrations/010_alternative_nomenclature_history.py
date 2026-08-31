@@ -92,4 +92,5 @@ def migrate(database_path=DATABASE_PATH, backup_path=BACKUP_PATH):
 
 
 if __name__ == "__main__":
-    print("Migration 010 aplicada." if migrate() else "Migration 010 ya aplicada.")
+    from migration_cli import run_migration_cli
+    run_migration_cli(migrate, "010")

@@ -25,9 +25,9 @@ class AlternativeRouteTests(unittest.TestCase):
     def connect(self): db=sqlite3.connect(self.path);db.row_factory=sqlite3.Row;db.execute("PRAGMA foreign_keys=ON");return db
 
     def test_analysis_page_shows_context_canonical_and_pending_proposals(self):
-        self.client.post("/ocurrencias/3/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO"})
+        self.client.post("/ocurrencias/3/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"})
         page=self.client.get("/ocurrencias/2/clasificar").get_data(as_text=True)
-        for text in ("TO-ANALYZE","Concepto contextual","Alternative 1","KNOWN","Propuesta pendiente","TARGET"):
+        for text in ("TO-ANALYZE","Concepto contextual","TEST-1","KNOWN","TEST — [PENDIENTE #","TARGET"):
             self.assertIn(text,page)
 
     def test_route_creates_existing_submission_not_assignment(self):
@@ -40,8 +40,8 @@ class AlternativeRouteTests(unittest.TestCase):
         db=self.connect();self.assertEqual(db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0],1);db.close()
 
     def test_route_review_new_auto_and_legacy_detail_read_only(self):
-        self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO"});db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];db.close()
-        review=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("Preview de nomenclatura",review); self.assertIn("Referencia temporal",review)
+        self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"});db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];db.close()
+        review=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("TEST — [PENDIENTE #",review); self.assertIn("Preview de nomenclatura",review); self.assertIn("Referencia temporal",review)
         self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","nomenclature_mode":"automatic"}).status_code,302)
         db=self.connect();self.assertEqual(db.execute("SELECT count(*) FROM alternative").fetchone()[0],2);snapshot=tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone());db.close()
         self.assertEqual(self.client.get(f"/aportes/{sid}").status_code,200);db=self.connect();self.assertEqual(tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()),snapshot);db.close()

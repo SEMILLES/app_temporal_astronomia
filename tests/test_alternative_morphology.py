@@ -104,8 +104,8 @@ class MorphologyReviewTests(unittest.TestCase):
     def tearDown(self):self.db.close()
     def proposal(self,morphology=True):return create_alternative_submission(self.db,2,"NEW",phonological_relation_answer="NO",morphology=self.morphology if morphology else None)
 
-    def test_new_without_morphology_and_existing_rejects_morphology_input(self):
-        self.assertIsInstance(self.proposal(False),int);self.db.execute("UPDATE submission SET status='resolved',resolution='rejected' WHERE submission_id=1");self.db.commit()
+    def test_new_requires_morphology_and_existing_rejects_morphology_input(self):
+        with self.assertRaises(AlternativeWorkflowError): self.proposal(False)
         with self.assertRaises(MorphologyValidationError):create_alternative_submission(self.db,2,"EXISTING",proposed_existing_alternative_id=1,morphology=self.morphology)
 
     def test_proposal_persists_components_less_than_count(self):

@@ -349,8 +349,5 @@ def migrate(database_path=DATABASE_PATH, backup_path=BACKUP_PATH):
 
 
 if __name__ == "__main__":
-    changed = migrate()
-    if changed:
-        print("Migracion 009 completada. Backup conservado en:", BACKUP_PATH)
-    else:
-        print("Migracion 009 ya estaba aplicada; no se realizaron cambios.")
+    from migration_cli import run_migration_cli
+    run_migration_cli(migrate, "009")
