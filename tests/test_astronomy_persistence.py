@@ -316,9 +316,9 @@ class AstronomyPersistenceTests(unittest.TestCase):
                    cb.preferred_label || '-' || ab.working_label,
                    r.phonological_parameter
             FROM alternative_relation AS r
-            JOIN alternative AS aa ON aa.alternative_id = r.alternative_a_id
+            JOIN alternative AS aa ON aa.alternative_id = r.alternative_low_id
             JOIN concept AS ca ON ca.concept_id = aa.concept_id
-            JOIN alternative AS ab ON ab.alternative_id = r.alternative_b_id
+            JOIN alternative AS ab ON ab.alternative_id = r.alternative_high_id
             JOIN concept AS cb ON cb.concept_id = ab.concept_id
             """
         ).fetchall()

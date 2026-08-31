@@ -29,6 +29,12 @@ REQUIRED_APPLICATION_TABLES = frozenset({
     "occurrence_media",
     "alternative_media",
     "submission",
+    "concept_proposal",
+    "occurrence_draft",
+    "occurrence_concept_reference",
+    "alternative_submission",
+    "alternative_submission_relation",
+    "grammar_submission",
 })
 
 
@@ -217,10 +223,26 @@ def crear_esquema(conexion):
             occurrence_grammar_id INTEGER PRIMARY KEY AUTOINCREMENT,
             occurrence_id INTEGER NOT NULL,
             gender TEXT,
+            gender_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (gender_uncertain IN (0, 1)
+                    AND (gender IS NOT NULL OR gender_uncertain = 0)),
             plural TEXT,
+            plural_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (plural_uncertain IN (0, 1)
+                    AND (plural IS NOT NULL OR plural_uncertain = 0)),
             agentive TEXT,
+            agentive_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (agentive_uncertain IN (0, 1)
+                    AND (agentive IS NOT NULL OR agentive_uncertain = 0)),
             conjugated_form TEXT,
+            conjugated_form_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (conjugated_form_uncertain IN (0, 1)
+                    AND (conjugated_form IS NOT NULL
+                        OR conjugated_form_uncertain = 0)),
             negation TEXT,
+            negation_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (negation_uncertain IN (0, 1)
+                    AND (negation IS NOT NULL OR negation_uncertain = 0)),
             grammar_note TEXT,
             is_current INTEGER NOT NULL DEFAULT 1
                 CHECK (is_current IN (0, 1)),
@@ -228,10 +250,13 @@ def crear_esquema(conexion):
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT,
             change_note TEXT,
+            created_from_submission_id INTEGER,
             FOREIGN KEY (occurrence_id)
                 REFERENCES occurrence(occurrence_id),
             FOREIGN KEY (supersedes_occurrence_grammar_id)
-                REFERENCES occurrence_grammar(occurrence_grammar_id)
+                REFERENCES occurrence_grammar(occurrence_grammar_id),
+            FOREIGN KEY (created_from_submission_id)
+                REFERENCES submission(submission_id)
         );
 
         CREATE UNIQUE INDEX IF NOT EXISTS one_current_grammar_per_occurrence
@@ -259,10 +284,13 @@ def crear_esquema(conexion):
             supersedes_assignment_id INTEGER,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT,
+            created_from_submission_id INTEGER,
             FOREIGN KEY (occurrence_id) REFERENCES occurrence(occurrence_id),
             FOREIGN KEY (alternative_id) REFERENCES alternative(alternative_id),
             FOREIGN KEY (supersedes_assignment_id)
-                REFERENCES assignment(assignment_id)
+                REFERENCES assignment(assignment_id),
+            FOREIGN KEY (created_from_submission_id)
+                REFERENCES submission(submission_id)
         );
 
         CREATE UNIQUE INDEX IF NOT EXISTS one_current_assignment_per_occurrence
@@ -274,23 +302,36 @@ def crear_esquema(conexion):
 
         CREATE TABLE IF NOT EXISTS alternative_relation (
             alternative_relation_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            alternative_a_id INTEGER NOT NULL,
-            alternative_b_id INTEGER NOT NULL,
-            phonological_parameter TEXT,
+            alternative_low_id INTEGER NOT NULL,
+            alternative_high_id INTEGER NOT NULL,
+            phonological_parameter TEXT NOT NULL,
+            is_current INTEGER NOT NULL DEFAULT 1
+                CHECK (is_current IN (0, 1)),
+            supersedes_alternative_relation_id INTEGER,
+            created_from_submission_id INTEGER,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT,
-            FOREIGN KEY (alternative_a_id) REFERENCES alternative(alternative_id),
-            FOREIGN KEY (alternative_b_id) REFERENCES alternative(alternative_id),
-            CHECK (alternative_a_id <> alternative_b_id)
+            FOREIGN KEY (alternative_low_id)
+                REFERENCES alternative(alternative_id),
+            FOREIGN KEY (alternative_high_id)
+                REFERENCES alternative(alternative_id),
+            FOREIGN KEY (supersedes_alternative_relation_id)
+                REFERENCES alternative_relation(alternative_relation_id),
+            FOREIGN KEY (created_from_submission_id)
+                REFERENCES submission(submission_id),
+            CHECK (alternative_low_id < alternative_high_id)
         );
 
-        CREATE UNIQUE INDEX IF NOT EXISTS one_symmetric_alternative_relation
-            ON alternative_relation (
-                CASE WHEN alternative_a_id < alternative_b_id
-                    THEN alternative_a_id ELSE alternative_b_id END,
-                CASE WHEN alternative_a_id < alternative_b_id
-                    THEN alternative_b_id ELSE alternative_a_id END
-            );
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            one_current_alternative_relation_per_parameter
+            ON alternative_relation(
+                alternative_low_id, alternative_high_id,
+                phonological_parameter
+            ) WHERE is_current = 1;
+        CREATE INDEX IF NOT EXISTS idx_alternative_relation_low
+            ON alternative_relation(alternative_low_id);
+        CREATE INDEX IF NOT EXISTS idx_alternative_relation_high
+            ON alternative_relation(alternative_high_id);
 
         CREATE TABLE IF NOT EXISTS media_asset (
             media_asset_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -342,54 +383,214 @@ def crear_esquema(conexion):
             FOREIGN KEY (media_asset_id) REFERENCES media_asset(media_asset_id)
         );
 
-        CREATE TABLE IF NOT EXISTS submission (
-            submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            occurrence_id INTEGER NOT NULL UNIQUE,
-            proposed_concept_id INTEGER,
-            proposed_concept_label TEXT,
-            proposed_concept_note TEXT,
-            proposed_alternative_id INTEGER,
-            proposed_alternative_label TEXT,
-            proposed_concept_status TEXT,
-            concept_uncertainty_note TEXT,
-            proposed_relation_answer TEXT,
-            proposed_related_alternative_id INTEGER,
-            proposed_related_submission_id INTEGER,
-            proposed_phonological_parameter TEXT,
-            alternative_uncertainty_note TEXT,
-            proposal_type TEXT NOT NULL
-                CHECK (proposal_type IN (
-                    'existing_alternative', 'new_alternative', 'not_sure'
-                )),
-            status TEXT NOT NULL DEFAULT 'pending'
-                CHECK (status IN ('pending', 'accepted', 'rejected')),
-            submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            submitted_by TEXT,
-            reviewed_at TEXT,
-            reviewed_by TEXT,
-            review_comment TEXT,
-            FOREIGN KEY (occurrence_id) REFERENCES occurrence(occurrence_id),
-            FOREIGN KEY (proposed_concept_id) REFERENCES concept(concept_id),
-            FOREIGN KEY (proposed_alternative_id)
-                REFERENCES alternative(alternative_id),
-            FOREIGN KEY (proposed_related_alternative_id)
-                REFERENCES alternative(alternative_id),
-            FOREIGN KEY (proposed_related_submission_id)
-                REFERENCES submission(submission_id),
+        CREATE TABLE IF NOT EXISTS concept_proposal (
+            concept_proposal_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            proposed_label TEXT NOT NULL,
+            status TEXT NOT NULL
+                CHECK (status IN ('pending', 'resolved', 'rejected')),
+            resolved_concept_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TEXT,
+            resolution_note TEXT,
+            FOREIGN KEY (resolved_concept_id) REFERENCES concept(concept_id),
             CHECK (
-                (proposal_type = 'existing_alternative'
-                    AND proposed_alternative_id IS NOT NULL
-                    AND proposed_alternative_label IS NULL)
-                OR (proposal_type = 'new_alternative'
-                    AND proposed_alternative_id IS NULL
-                        )
-                OR (proposal_type = 'not_sure'
-                    AND proposed_alternative_id IS NULL
-                    AND proposed_alternative_label IS NULL)
+                (status = 'pending' AND resolved_concept_id IS NULL)
+                OR (status = 'resolved' AND resolved_concept_id IS NOT NULL)
+                OR (status = 'rejected' AND resolved_concept_id IS NULL)
             )
         );
 
-        CREATE INDEX IF NOT EXISTS idx_submission_status ON submission(status);
+        CREATE TABLE IF NOT EXISTS occurrence_draft (
+            draft_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_id INTEGER,
+            original_gloss TEXT,
+            occurrence_year INTEGER,
+            source_locator TEXT,
+            provenance_note TEXT,
+            reference_concept_id INTEGER,
+            reference_concept_proposal_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (source_id) REFERENCES source(source_id),
+            FOREIGN KEY (reference_concept_id) REFERENCES concept(concept_id),
+            FOREIGN KEY (reference_concept_proposal_id)
+                REFERENCES concept_proposal(concept_proposal_id),
+            CHECK (NOT (
+                reference_concept_id IS NOT NULL
+                AND reference_concept_proposal_id IS NOT NULL
+            ))
+        );
+
+        CREATE TABLE IF NOT EXISTS occurrence_concept_reference (
+            occurrence_concept_reference_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurrence_id INTEGER NOT NULL,
+            concept_id INTEGER,
+            concept_proposal_id INTEGER,
+            is_current INTEGER NOT NULL DEFAULT 1
+                CHECK (is_current IN (0, 1)),
+            supersedes_occurrence_concept_reference_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (occurrence_id) REFERENCES occurrence(occurrence_id),
+            FOREIGN KEY (concept_id) REFERENCES concept(concept_id),
+            FOREIGN KEY (concept_proposal_id)
+                REFERENCES concept_proposal(concept_proposal_id),
+            FOREIGN KEY (supersedes_occurrence_concept_reference_id)
+                REFERENCES occurrence_concept_reference(
+                    occurrence_concept_reference_id
+                ),
+            CHECK ((concept_id IS NOT NULL) != (concept_proposal_id IS NOT NULL))
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            one_current_occurrence_concept_reference
+            ON occurrence_concept_reference(occurrence_id)
+            WHERE is_current = 1;
+        CREATE INDEX IF NOT EXISTS idx_occurrence_concept_reference_occurrence
+            ON occurrence_concept_reference(occurrence_id);
+
+        CREATE TABLE IF NOT EXISTS submission (
+            submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            occurrence_id INTEGER NOT NULL,
+            submission_type TEXT NOT NULL
+                CHECK (submission_type IN ('GRAMMAR', 'ALTERNATIVE')),
+            status TEXT NOT NULL
+                CHECK (status IN ('pending', 'resolved')),
+            resolution TEXT CHECK (resolution IN ('accepted', 'rejected')),
+            submitted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            resolved_at TEXT,
+            submitted_by TEXT,
+            reviewed_by TEXT,
+            review_note TEXT,
+            legacy_reviewed_at TEXT,
+            FOREIGN KEY (occurrence_id) REFERENCES occurrence(occurrence_id),
+            CHECK (
+                (status = 'pending' AND resolution IS NULL)
+                OR (status = 'resolved'
+                    AND resolution IS NOT NULL
+                    AND resolution IN ('accepted', 'rejected'))
+            )
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            one_pending_submission_per_occurrence_type
+            ON submission(occurrence_id, submission_type)
+            WHERE status = 'pending';
         CREATE INDEX IF NOT EXISTS idx_submission_occurrence
             ON submission(occurrence_id);
+        CREATE INDEX IF NOT EXISTS idx_submission_status
+            ON submission(status);
+
+        CREATE TABLE IF NOT EXISTS alternative_submission (
+            submission_id INTEGER PRIMARY KEY,
+            proposal_kind TEXT NOT NULL
+                CHECK (proposal_kind IN ('EXISTING', 'NEW', 'UNSURE')),
+            reference_concept_id INTEGER,
+            reference_concept_proposal_id INTEGER,
+            proposed_existing_alternative_id INTEGER,
+            phonological_relation_answer TEXT
+                CHECK (phonological_relation_answer IN (
+                    'YES', 'NO', 'UNSURE'
+                )),
+            analysis_note TEXT,
+            resolved_alternative_id INTEGER,
+            is_legacy INTEGER NOT NULL DEFAULT 0
+                CHECK (is_legacy IN (0, 1)),
+            legacy_proposed_alternative_label TEXT,
+            legacy_proposed_concept_note TEXT,
+            legacy_proposed_concept_status TEXT,
+            legacy_concept_uncertainty_note TEXT,
+            legacy_alternative_uncertainty_note TEXT,
+            legacy_proposed_relation_answer TEXT,
+            legacy_related_alternative_id INTEGER,
+            legacy_related_submission_id INTEGER,
+            legacy_phonological_parameter TEXT,
+            FOREIGN KEY (submission_id) REFERENCES submission(submission_id),
+            FOREIGN KEY (reference_concept_id) REFERENCES concept(concept_id),
+            FOREIGN KEY (reference_concept_proposal_id)
+                REFERENCES concept_proposal(concept_proposal_id),
+            FOREIGN KEY (proposed_existing_alternative_id)
+                REFERENCES alternative(alternative_id),
+            FOREIGN KEY (resolved_alternative_id)
+                REFERENCES alternative(alternative_id),
+            CHECK (
+                (is_legacy = 1 AND NOT (
+                    reference_concept_id IS NOT NULL
+                    AND reference_concept_proposal_id IS NOT NULL
+                ))
+                OR (is_legacy = 0 AND (
+                    (reference_concept_id IS NOT NULL)
+                    != (reference_concept_proposal_id IS NOT NULL)
+                ))
+            ),
+            CHECK (
+                is_legacy = 1
+                OR proposal_kind != 'EXISTING'
+                OR proposed_existing_alternative_id IS NOT NULL
+            ),
+            CHECK (
+                proposal_kind = 'EXISTING'
+                OR proposed_existing_alternative_id IS NULL
+            )
+        );
+
+        CREATE TABLE IF NOT EXISTS alternative_submission_relation (
+            alternative_submission_relation_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            submission_id INTEGER NOT NULL,
+            target_alternative_id INTEGER,
+            target_submission_id INTEGER,
+            phonological_parameter TEXT NOT NULL,
+            uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (uncertain IN (0, 1)),
+            FOREIGN KEY (submission_id)
+                REFERENCES alternative_submission(submission_id),
+            FOREIGN KEY (target_alternative_id)
+                REFERENCES alternative(alternative_id),
+            FOREIGN KEY (target_submission_id)
+                REFERENCES submission(submission_id),
+            CHECK (
+                (target_alternative_id IS NOT NULL)
+                != (target_submission_id IS NOT NULL)
+            )
+        );
+
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            one_alternative_relation_target_per_parameter
+            ON alternative_submission_relation(
+                submission_id, target_alternative_id, phonological_parameter
+            ) WHERE target_alternative_id IS NOT NULL;
+        CREATE UNIQUE INDEX IF NOT EXISTS
+            one_submission_relation_target_per_parameter
+            ON alternative_submission_relation(
+                submission_id, target_submission_id, phonological_parameter
+            ) WHERE target_submission_id IS NOT NULL;
+        CREATE INDEX IF NOT EXISTS
+            idx_alternative_submission_relation_submission
+            ON alternative_submission_relation(submission_id);
+
+        CREATE TABLE IF NOT EXISTS grammar_submission (
+            submission_id INTEGER PRIMARY KEY,
+            gender TEXT,
+            gender_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (gender_uncertain IN (0, 1)
+                    AND (gender IS NOT NULL OR gender_uncertain = 0)),
+            plural TEXT,
+            plural_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (plural_uncertain IN (0, 1)
+                    AND (plural IS NOT NULL OR plural_uncertain = 0)),
+            agentive TEXT,
+            agentive_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (agentive_uncertain IN (0, 1)
+                    AND (agentive IS NOT NULL OR agentive_uncertain = 0)),
+            conjugated_form TEXT,
+            conjugated_form_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (conjugated_form_uncertain IN (0, 1)
+                    AND (conjugated_form IS NOT NULL
+                        OR conjugated_form_uncertain = 0)),
+            negation TEXT,
+            negation_uncertain INTEGER NOT NULL DEFAULT 0
+                CHECK (negation_uncertain IN (0, 1)
+                    AND (negation IS NOT NULL OR negation_uncertain = 0)),
+            note TEXT,
+            FOREIGN KEY (submission_id) REFERENCES submission(submission_id)
+        );
     """)

@@ -143,15 +143,13 @@ class OccurrenceGrammarBehaviorTests(unittest.TestCase):
             change_note="Initial analysis",
         )
         row = self.connection.execute(
-            "SELECT * FROM occurrence_grammar WHERE occurrence_grammar_id = ?",
+            "SELECT occurrence_id, gender, negation, is_current, "
+            "supersedes_occurrence_grammar_id "
+            "FROM occurrence_grammar WHERE occurrence_grammar_id = ?",
             (grammar_id,),
         ).fetchone()
         self.assertTrue(created)
-        self.assertEqual(row[1], 1)
-        self.assertEqual(row[2], "SIN-MARCA")
-        self.assertEqual(row[6], "SIN-NEG")
-        self.assertEqual(row[8], 1)
-        self.assertIsNone(row[9])
+        self.assertEqual(row, (1, "SIN-MARCA", "SIN-NEG", 1, None))
         self.assertEqual(
             self.connection.execute("SELECT COUNT(*) FROM submission").fetchone()[0],
             0,

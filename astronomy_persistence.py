@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from sqlite3 import Connection
 
+from alternative_relations import create_current_relation
 from astronomy_import_models import ValidatedImportPlan
 from occurrence_grammar import create_or_replace_occurrence_grammar
 
@@ -108,17 +109,11 @@ def _insert_relations(
     alternative_ids: dict[str, int],
 ) -> None:
     for relation in plan.relations:
-        connection.execute(
-            """
-            INSERT INTO alternative_relation (
-                alternative_a_id, alternative_b_id, phonological_parameter
-            ) VALUES (?, ?, ?)
-            """,
-            (
-                alternative_ids[relation.alternative_a],
-                alternative_ids[relation.alternative_b],
-                relation.parameter,
-            ),
+        create_current_relation(
+            connection,
+            alternative_ids[relation.alternative_a],
+            alternative_ids[relation.alternative_b],
+            relation.parameter,
         )
 
 
