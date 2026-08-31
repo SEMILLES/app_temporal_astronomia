@@ -1,5 +1,6 @@
 from grammatical_marks import validate_grammatical_marks
 from occurrence_grammar import create_or_replace_occurrence_grammar
+from activity import record_activity, resolve_collaborator
 
 
 FIELDS = ("gender", "plural", "agentive", "conjugated_form", "negation")
@@ -9,7 +10,8 @@ class GrammarWorkflowError(ValueError):
     pass
 
 
-def create_grammar_submission(connection, occurrence_id, values, *, submitted_by=None):
+def create_grammar_submission(connection, occurrence_id, values, *, submitted_by=None,
+                              collaborator_id=None, access_role=None):
     current = connection.execute(
         "SELECT * FROM occurrence_grammar WHERE occurrence_id = ? AND is_current = 1",
         (occurrence_id,),
@@ -45,6 +47,10 @@ def create_grammar_submission(connection, occurrence_id, values, *, submitted_by
             f"VALUES (?, {', '.join('?' for _ in params)})",
             (submission_id, *params),
         )
+        if access_role:
+            record_activity(connection, "grammar_submission_created",
+                            entity_type="submission", entity_id=submission_id,
+                            collaborator_id=collaborator_id, access_role=access_role)
         connection.commit()
         return submission_id
     except Exception:
@@ -52,7 +58,8 @@ def create_grammar_submission(connection, occurrence_id, values, *, submitted_by
         raise
 
 
-def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_by=None, review_note=None):
+def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_by=None,
+                               review_note=None, collaborator_id=None, access_role=None):
     if decision not in ("accepted", "rejected"):
         raise GrammarWorkflowError("Decisión no válida.")
     try:
@@ -79,6 +86,12 @@ def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_
             "WHERE submission_id = ?",
             (decision, reviewed_by, (review_note or "").strip() or None, submission_id),
         )
+        if access_role:
+            record_activity(connection,
+                            "grammar_submission_accepted" if decision == "accepted" else "grammar_submission_rejected",
+                            entity_type="submission", entity_id=submission_id,
+                            collaborator_id=collaborator_id, access_role=access_role,
+                            comment=review_note)
         connection.commit()
     except Exception:
         connection.rollback()

@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for, g
 
 import sqlite3
 
@@ -269,7 +269,11 @@ def guardar_gramatica(occurrence_id):
         form_values[field + "_uncertain"] = request.form.get(field + "_uncertain")
     conexion = conectar()
     try:
-        create_grammar_submission(conexion, occurrence_id, form_values)
+        create_grammar_submission(
+            conexion, occurrence_id, form_values,
+            collaborator_id=request.form.get("collaborator_id"),
+            access_role=getattr(g, "current_access_role", None),
+        )
     except GrammarWorkflowError as error:
         occurrence, current, history, pending = _load_grammar_page_data(
             conexion, occurrence_id
@@ -430,6 +434,8 @@ def guardar_clasificacion(occurrence_id):
             phonological_relation_answer=request.form.get("phonological_relation_answer"),
             relations=relations,analysis_note=request.form.get("analysis_note"),
             morphology=morphology,
+            collaborator_id=request.form.get("collaborator_id"),
+            access_role=getattr(g, "current_access_role", None),
         )
     except (AlternativeWorkflowError,ValueError,sqlite3.IntegrityError) as error:
         return str(error),400

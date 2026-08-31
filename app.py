@@ -9,6 +9,8 @@ from routes.concepts import concepts_bp
 from routes.occurrences import occurrences_bp
 from routes.submissions import submissions_bp
 from routes.alternatives import alternatives_bp
+from routes.collaborators import collaborators_bp
+from access_control import install_access_context
 
 
 app = Flask(__name__)
@@ -24,6 +26,9 @@ app.register_blueprint(concepts_bp)
 app.register_blueprint(occurrences_bp)
 app.register_blueprint(submissions_bp)
 app.register_blueprint(alternatives_bp)
+app.register_blueprint(collaborators_bp)
+
+install_access_context(app)
 
 
 # Preparar o validar la base activa antes de servir la aplicación

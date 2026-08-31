@@ -1,6 +1,6 @@
 import sqlite3
 
-from flask import Blueprint, redirect, render_template, request, url_for
+from flask import Blueprint, redirect, render_template, request, url_for, g
 
 from database import conectar
 from grammar_workflow import GrammarWorkflowError, resolve_grammar_submission
@@ -55,7 +55,7 @@ def nuevo_aporte():
 def guardar_aporte():
     db = conectar()
     try:
-        occurrence_id = complete_registration(db, **_evidence(request.form), **_reference(request.form))
+        occurrence_id = complete_registration(db, **_evidence(request.form), **_reference(request.form), collaborator_id=request.form.get("collaborator_id"), access_role=getattr(g, "current_access_role", None))
     except (RegistrationError, sqlite3.IntegrityError, ValueError) as error:
         context = _context(db, error=str(error))
         return render_template("nueva_ocurrencia.html", **context), 400
@@ -83,7 +83,7 @@ def guardar_borrador(draft_id=None):
     values.update(reference_concept_id=refs["concept_id"], reference_concept_proposal_id=refs["concept_proposal_id"])
     db = conectar()
     try:
-        save_draft(db, draft_id=draft_id, **values)
+        save_draft(db, draft_id=draft_id, collaborator_id=request.form.get("collaborator_id"), access_role=getattr(g, "current_access_role", None), **values)
     except (RegistrationError, sqlite3.IntegrityError, ValueError) as error:
         return str(error), 400
     finally:
@@ -108,7 +108,11 @@ def editar_borrador(draft_id):
 def eliminar_borrador(draft_id):
     db = conectar()
     try:
+        db.execute("BEGIN IMMEDIATE")
         cursor = db.execute("DELETE FROM occurrence_draft WHERE draft_id=?", (draft_id,))
+        if cursor.rowcount and getattr(g, "current_access_role", None):
+            from activity import record_activity
+            record_activity(db,"occurrence_draft_deleted",entity_type="occurrence_draft",entity_id=draft_id,collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
         db.commit()
     finally:
         db.close()
@@ -119,7 +123,7 @@ def eliminar_borrador(draft_id):
 def completar_borrador(draft_id):
     db = conectar()
     try:
-        occurrence_id = complete_registration(db, draft_id=draft_id, **_evidence(request.form), **_reference(request.form))
+        occurrence_id = complete_registration(db, draft_id=draft_id, **_evidence(request.form), **_reference(request.form), collaborator_id=request.form.get("collaborator_id"), access_role=getattr(g, "current_access_role", None))
     except (RegistrationError, sqlite3.IntegrityError, ValueError) as error:
         return str(error), 400
     finally:
@@ -224,18 +228,18 @@ def decidir_aporte(submission_id):
         if row is None:
             return "El aporte no existe.", 404
         if row[0] == "GRAMMAR":
-            resolve_grammar_submission(db, submission_id, decision, reviewed_by=request.form.get("reviewed_by"), review_note=request.form.get("review_note"))
+            resolve_grammar_submission(db, submission_id, decision, reviewed_by=request.form.get("reviewed_by"), review_note=request.form.get("review_note"), collaborator_id=request.form.get("collaborator_id"), access_role=getattr(g, "current_access_role", None))
         elif decision == "rejected":
-            reject_alternative_submission(db,submission_id,reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+            reject_alternative_submission(db,submission_id,reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
         else:
             concept_resolution=None
             action=request.form.get("concept_resolution_action")
             if action: concept_resolution={"action":action,"concept_id":request.form.get("resolved_concept_id") or None,"label":request.form.get("new_concept_label") or None}
             if decision == "existing":
-                review_as_existing(db,submission_id,request.form.get("alternative_id"),concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+                review_as_existing(db,submission_id,request.form.get("alternative_id"),concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
             elif decision == "new":
                 labels={key[6:]:value for key,value in request.form.items() if key.startswith("label_")}
-                review_as_new(db,submission_id,concept_resolution=concept_resolution,approve_relations=request.form.get("approve_relations")=="yes",nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=request.form.get("approve_morphology")=="yes")
+                review_as_new(db,submission_id,concept_resolution=concept_resolution,approve_relations=request.form.get("approve_relations")=="yes",nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=request.form.get("approve_morphology")=="yes",collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
             else: raise AlternativeWorkflowError("Decisión de review no válida.")
     except (AlternativeWorkflowError,GrammarWorkflowError, sqlite3.IntegrityError, ValueError) as error:
         return str(error), 400

@@ -41,6 +41,8 @@ REQUIRED_APPLICATION_TABLES = frozenset({
     "alternative_submission_component",
     "alternative_morphology",
     "alternative_component",
+    "collaborator",
+    "activity_event",
 })
 
 
@@ -680,4 +682,22 @@ def crear_esquema(conexion):
             CHECK(component_alternative_id IS NOT NULL OR component_label IS NOT NULL OR note IS NOT NULL)
         );
         CREATE INDEX IF NOT EXISTS idx_alternative_component_target ON alternative_component(component_alternative_id);
+        CREATE TABLE IF NOT EXISTS collaborator (
+            collaborator_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            display_name TEXT NOT NULL CHECK(length(trim(display_name)) > 0),
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        );
+        CREATE TABLE IF NOT EXISTS activity_event (
+            activity_event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_type TEXT NOT NULL CHECK(length(trim(event_type)) > 0),
+            entity_type TEXT, entity_id INTEGER, collaborator_id INTEGER,
+            collaborator_name_snapshot TEXT,
+            access_role TEXT NOT NULL CHECK(access_role IN ('analyst','reviewer','master')),
+            occurred_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            comment TEXT,
+            FOREIGN KEY(collaborator_id) REFERENCES collaborator(collaborator_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_activity_event_collaborator ON activity_event(collaborator_id,occurred_at);
+        CREATE INDEX IF NOT EXISTS idx_activity_event_entity ON activity_event(entity_type,entity_id,occurred_at);
     """)

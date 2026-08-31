@@ -16,6 +16,7 @@ from assignments import create_or_replace_assignment
 from concept_labels import normalize_concept_label
 from phonological_parameters import validate_phonological_parameter
 from alternative_morphology import store_submission_morphology,materialize_submission_morphology
+from activity import record_activity
 
 
 class AlternativeWorkflowError(ValueError):
@@ -102,7 +103,8 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
                                   proposed_existing_alternative_id=None,
                                   phonological_relation_answer=None,
                                   relations=(), analysis_note=None,
-                                  submitted_by=None,morphology=None):
+                                  submitted_by=None,morphology=None,
+                                  collaborator_id=None,access_role=None):
     proposal_kind = (proposal_kind or "").upper()
     if proposal_kind not in ("EXISTING", "NEW", "UNSURE"):
         raise AlternativeWorkflowError("Tipo de propuesta no válido.")
@@ -178,6 +180,10 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
                     phonological_parameter,uncertain
                 ) VALUES(?,?,?,?,?)
             """, (submission_id, alternative_id, target_id, parameter, uncertain))
+        if access_role:
+            record_activity(connection,"alternative_submission_created",
+                            entity_type="submission",entity_id=submission_id,
+                            collaborator_id=collaborator_id,access_role=access_role)
         _finish(connection, name, owns)
         return submission_id
     except sqlite3.IntegrityError as error:
@@ -274,12 +280,34 @@ def _resolve_submission(connection, submission_id, alternative_id, reviewer, not
     connection.execute("""UPDATE submission SET status='resolved',resolution='accepted',resolved_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE submission_id=?""", (reviewer, (note or "").strip() or None, submission_id))
 
 
+def _proposal_is_pending(connection, submission):
+    proposal_id = submission["reference_concept_proposal_id"]
+    if proposal_id is None: return False
+    row = connection.execute("SELECT status FROM concept_proposal WHERE concept_proposal_id=?",(proposal_id,)).fetchone()
+    return row is not None and row[0] == "pending"
+
+
+def _record_concept_resolution(connection, submission, was_pending,
+                               collaborator_id, access_role):
+    proposal_id = submission["reference_concept_proposal_id"]
+    if access_role and was_pending and proposal_id is not None:
+        row = connection.execute(
+            "SELECT status FROM concept_proposal WHERE concept_proposal_id=?",
+            (proposal_id,),
+        ).fetchone()
+        if row is not None and row[0] != "pending":
+            record_activity(connection,"concept_proposal_resolved",
+                            entity_type="concept_proposal",entity_id=proposal_id,
+                            collaborator_id=collaborator_id,access_role=access_role)
+
+
 def review_as_existing(connection, submission_id, alternative_id, *,
                        concept_resolution=None, relation_policy="preserve",
-                       reviewed_by=None, review_note=None):
+                       reviewed_by=None, review_note=None, collaborator_id=None,
+                       access_role=None):
     name="review_alternative_existing"; owns=_transaction(connection,name)
     try:
-        submission=_submission(connection,submission_id); concept_id=_resolve_concept(connection,submission,concept_resolution)
+        submission=_submission(connection,submission_id); proposal_was_pending=_proposal_is_pending(connection,submission); concept_id=_resolve_concept(connection,submission,concept_resolution)
         if not _valid_alternative(connection,int(alternative_id),concept_id):
             raise AlternativeWorkflowError("La alternative seleccionada no pertenece al concept resuelto o está retirada.")
         if relation_policy not in ("preserve","union"):
@@ -287,6 +315,10 @@ def review_as_existing(connection, submission_id, alternative_id, *,
         if relation_policy == "union": _materialize_relations(connection,int(alternative_id),submission_id)
         create_or_replace_assignment(connection,submission["occurrence_id"],int(alternative_id),created_by=reviewed_by,created_from_submission_id=submission_id)
         _resolve_submission(connection,submission_id,int(alternative_id),reviewed_by,review_note)
+        if access_role:
+            _record_concept_resolution(connection,submission,proposal_was_pending,collaborator_id,access_role)
+            record_activity(connection,"assignment_created_or_replaced",entity_type="occurrence",entity_id=submission["occurrence_id"],collaborator_id=collaborator_id,access_role=access_role)
+            record_activity(connection,"alternative_submission_accepted",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)
         _finish(connection,name,owns); return int(alternative_id)
     except Exception: _rollback(connection,name,owns); raise
 
@@ -294,10 +326,10 @@ def review_as_existing(connection, submission_id, alternative_id, *,
 def review_as_new(connection, submission_id, *, concept_resolution=None,
                   approve_relations=False, nomenclature_mode="automatic",
                   labels=None, reason=None, reviewed_by=None, review_note=None,
-                  approve_morphology=False):
+                  approve_morphology=False, collaborator_id=None, access_role=None):
     name="review_alternative_new"; owns=_transaction(connection,name)
     try:
-        submission=_submission(connection,submission_id); concept_id=_resolve_concept(connection,submission,concept_resolution)
+        submission=_submission(connection,submission_id); proposal_was_pending=_proposal_is_pending(connection,submission); concept_id=_resolve_concept(connection,submission,concept_resolution)
         new_id=connection.execute("INSERT INTO alternative(concept_id,working_label) VALUES(?,NULL)",(concept_id,)).lastrowid
         targets=_relation_targets(connection,submission_id) if approve_relations else []
         edges=[(new_id,target) for target,_ in targets if target != new_id]
@@ -315,7 +347,7 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
             if nomenclature_mode == "adjusted" and preview["conclusive"] and final == preview["suggestions"]:
                 origin="automatic_assisted"; event_reason=reason or "Reordenamiento cronológico asociado a aprobación de alternativa/relación."
         else: raise InvalidNomenclatureError("Modo de nomenclatura no válido.")
-        apply_nomenclature(connection,concept_id,final,origin=origin,reason=event_reason,submission_id=submission_id,created_by=reviewed_by,required_edges=edges)
+        renumber_id=apply_nomenclature(connection,concept_id,final,origin=origin,reason=event_reason,submission_id=submission_id,created_by=reviewed_by,required_edges=edges)
         if approve_relations: _materialize_relations(connection,new_id,submission_id)
         create_or_replace_assignment(connection,submission["occurrence_id"],new_id,created_by=reviewed_by,created_from_submission_id=submission_id)
         if approve_morphology:
@@ -323,14 +355,25 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
                 connection, submission_id, new_id, created_by=reviewed_by
             )
         _resolve_submission(connection,submission_id,new_id,reviewed_by,review_note)
+        if access_role:
+            _record_concept_resolution(connection,submission,proposal_was_pending,collaborator_id,access_role)
+            record_activity(connection,"alternative_created",entity_type="alternative",entity_id=new_id,collaborator_id=collaborator_id,access_role=access_role)
+            record_activity(connection,"renumber_event_created",entity_type="renumber_event",entity_id=renumber_id,collaborator_id=collaborator_id,access_role=access_role)
+            for target_id, _ in targets:
+                record_activity(connection,"alternative_relation_created",entity_type="alternative",entity_id=new_id,collaborator_id=collaborator_id,access_role=access_role)
+            record_activity(connection,"alternative_submission_accepted",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)
+            record_activity(connection,"assignment_created_or_replaced",entity_type="occurrence",entity_id=submission["occurrence_id"],collaborator_id=collaborator_id,access_role=access_role)
+            if approve_morphology: record_activity(connection,"alternative_morphology_created_or_replaced",entity_type="alternative",entity_id=new_id,collaborator_id=collaborator_id,access_role=access_role)
         _finish(connection,name,owns); return new_id
     except Exception: _rollback(connection,name,owns); raise
 
 
-def reject_alternative_submission(connection, submission_id, *, reviewed_by=None, review_note=None):
+def reject_alternative_submission(connection, submission_id, *, reviewed_by=None,
+                                  review_note=None, collaborator_id=None, access_role=None):
     name="reject_alternative"; owns=_transaction(connection,name)
     try:
         _submission(connection,submission_id)
         connection.execute("UPDATE submission SET status='resolved',resolution='rejected',resolved_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE submission_id=?",(reviewed_by,(review_note or "").strip() or None,submission_id))
+        if access_role: record_activity(connection,"alternative_submission_rejected",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)
         _finish(connection,name,owns)
     except Exception: _rollback(connection,name,owns); raise

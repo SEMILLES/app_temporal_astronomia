@@ -1,6 +1,7 @@
 import sqlite3
 
 from concept_labels import InvalidConceptLabel, normalize_concept_label
+from activity import record_activity
 
 
 class RegistrationError(ValueError):
@@ -69,7 +70,7 @@ def resolve_concept_reference(connection, concept_id=None,
     return None, cursor.lastrowid
 
 
-def save_draft(connection, draft_id=None, **values):
+def save_draft(connection, draft_id=None, *, collaborator_id=None, access_role=None, **values):
     fields = (
         "source_id", "original_gloss", "occurrence_year", "source_locator",
         "provenance_note", "reference_concept_id",
@@ -98,6 +99,10 @@ def save_draft(connection, draft_id=None, **values):
             f"VALUES ({', '.join('?' for _ in fields)})",
             tuple(data[field] for field in fields),
         )
+        if access_role:
+            record_activity(connection, "occurrence_draft_created", entity_type="occurrence_draft",
+                            entity_id=cursor.lastrowid, collaborator_id=collaborator_id,
+                            access_role=access_role)
         connection.commit()
         return cursor.lastrowid
     cursor = connection.execute(
@@ -117,7 +122,8 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
                           original_gloss=None, occurrence_year=None,
                           source_locator=None, provenance_note=None,
                           hyperlink=None, concept_id=None,
-                          concept_proposal_id=None, proposed_label=None):
+                          concept_proposal_id=None, proposed_label=None,
+                          collaborator_id=None, access_role=None):
     owns_transaction = not connection.in_transaction
     try:
         connection.execute("BEGIN IMMEDIATE" if owns_transaction else "SAVEPOINT registration")
@@ -146,6 +152,10 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
         reference_concept_id, reference_proposal_id = resolve_concept_reference(
             connection, concept_id, concept_proposal_id, proposed_label
         )
+        if access_role and proposed_label not in (None, "") and reference_proposal_id is not None:
+            record_activity(connection, "concept_proposal_created",
+                            entity_type="concept_proposal", entity_id=reference_proposal_id,
+                            collaborator_id=collaborator_id, access_role=access_role)
         cursor = connection.execute(
             "INSERT INTO occurrence (source_id, original_gloss, hyperlink, "
             "occurrence_year, source_locator, provenance_note) VALUES (?, ?, ?, ?, ?, ?)",
@@ -160,6 +170,10 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
         )
         if draft_id is not None:
             connection.execute("DELETE FROM occurrence_draft WHERE draft_id = ?", (draft_id,))
+        if access_role:
+            record_activity(connection, "occurrence_registered", entity_type="occurrence",
+                            entity_id=occurrence_id, collaborator_id=collaborator_id,
+                            access_role=access_role)
         connection.commit() if owns_transaction else connection.execute("RELEASE SAVEPOINT registration")
         return occurrence_id
     except Exception:

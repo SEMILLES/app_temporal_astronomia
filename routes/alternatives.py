@@ -1,9 +1,10 @@
-from flask import Blueprint, render_template, request, redirect, url_for
+from flask import Blueprint, render_template, request, redirect, url_for, g
 
 import sqlite3
 import re
 
 from database import conectar
+from activity import record_activity
 
 
 alternatives_bp = Blueprint("alternatives", __name__)
@@ -206,10 +207,17 @@ def nueva_alternativa(concept_id):
         ).fetchone() is None:
             return "El concepto no existe.", 404
 
-        conexion.execute("""
+        conexion.execute("BEGIN IMMEDIATE")
+        alternative_id = conexion.execute("""
             INSERT INTO alternative (concept_id, working_label)
             VALUES (?, ?)
-        """, (concept_id, working_label))
+        """, (concept_id, working_label)).lastrowid
+        role = getattr(g, "current_access_role", None)
+        if role:
+            record_activity(conexion,"alternative_created",entity_type="alternative",
+                            entity_id=alternative_id,
+                            collaborator_id=request.form.get("collaborator_id"),
+                            access_role=role)
         conexion.commit()
     except sqlite3.IntegrityError:
         conexion.rollback()

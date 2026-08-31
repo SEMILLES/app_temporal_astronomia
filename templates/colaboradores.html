@@ -1,0 +1,5 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><title>Colaboradores</title><body>
+<h1>Colaboradores</h1>
+<form method="post"><label>Nombre <input name="display_name" required></label><button>Añadir</button></form>
+<ul>{% for collaborator in collaborators %}<li><form method="post" action="{{ url_for('collaborators.rename_collaborator',collaborator_id=collaborator['collaborator_id']) }}"><input name="display_name" value="{{ collaborator['display_name'] }}" required><button>Guardar nombre</button></form></li>{% else %}<li>No hay colaboradores registrados.</li>{% endfor %}</ul>
+</body></html>
