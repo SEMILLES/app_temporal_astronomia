@@ -24,7 +24,8 @@ def _year(value):
 
 
 def resolve_concept_reference(connection, concept_id=None,
-                              concept_proposal_id=None, proposed_label=None):
+                              concept_proposal_id=None, proposed_label=None,
+                              force_new_proposal=False):
     choices = sum(value not in (None, "") for value in (
         concept_id, concept_proposal_id, proposed_label
     ))
@@ -48,11 +49,17 @@ def resolve_concept_reference(connection, concept_id=None,
         return None, int(concept_proposal_id)
 
     normalized = normalize_concept_label(proposed_label)
+    if force_new_proposal:
+        cursor = connection.execute(
+            "INSERT INTO concept_proposal (proposed_label, status) VALUES (?, 'pending')",
+            (normalized,),
+        )
+        return None, cursor.lastrowid
     concept = connection.execute(
         "SELECT concept_id FROM concept WHERE UPPER(preferred_label) = UPPER(?)",
         (normalized,),
     ).fetchone()
-    if concept is not None:
+    if concept is not None and not force_new_proposal:
         return concept[0], None
     proposals = connection.execute(
         "SELECT concept_proposal_id, proposed_label FROM concept_proposal "
@@ -128,7 +135,8 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
                           source_locator=None, provenance_note=None,
                           hyperlink=None, concept_id=None,
                           concept_proposal_id=None, proposed_label=None,
-                          collaborator_id=None, access_role=None):
+                          collaborator_id=None, access_role=None,
+                          force_new_proposal=False):
     owns_transaction = not connection.in_transaction
     try:
         connection.execute("BEGIN IMMEDIATE" if owns_transaction else "SAVEPOINT registration")
@@ -155,7 +163,8 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
         ).fetchone() is None:
             raise RegistrationError("La fuente no existe.")
         reference_concept_id, reference_proposal_id = resolve_concept_reference(
-            connection, concept_id, concept_proposal_id, proposed_label
+            connection, concept_id, concept_proposal_id, proposed_label,
+            force_new_proposal=force_new_proposal
         )
         if access_role and proposed_label not in (None, "") and reference_proposal_id is not None:
             record_activity(connection, "concept_proposal_created",

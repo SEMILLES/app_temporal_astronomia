@@ -10,9 +10,61 @@ from grammatical_marks import GRAMMATICAL_MARK_VOCABULARIES
 from alternative_workflow import AlternativeWorkflowError, create_alternative_submission
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
 from source_period import validate_occurrence_year
+from access_control import requires_reviewer
+from immediate_acceptance import (ImmediateAcceptanceError,ImmediateBlockingError,
+    alternative_operation,confirm_operation,grammar_operation,preview_operation)
 
 
 occurrences_bp = Blueprint("occurrences", __name__)
+
+
+def _grammar_values(form):
+    values={field:form.get(field) for field in ("gender","plural","agentive","conjugated_form","negation","note")}
+    for field in ("gender","plural","agentive","conjugated_form","negation"):values[field+"_uncertain"]=form.get(field+"_uncertain")
+    return values
+
+
+def _alternative_payload(form):
+    proposal_kind=form.get("proposal_kind");relations=[]
+    types=form.getlist("relation_target_type");targets=form.getlist("relation_target_id");parameters=form.getlist("relation_parameter");uncertain=set(form.getlist("relation_uncertain"))
+    if types:
+        for index,(kind,target,parameter) in enumerate(zip(types,targets,parameters)):
+            if not target and not parameter:continue
+            item={"phonological_parameter":parameter,"uncertain":str(index) in uncertain};item["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None;relations.append(item)
+    else:
+        kinds=[value for key,value in form.items() if key.startswith("relation_target_type_")];alternative_ids=form.getlist("relation_alternative_id");submission_ids=form.getlist("relation_submission_id")
+        for index,kind in enumerate(kinds):
+            target=(submission_ids[index] if kind=="submission" and index<len(submission_ids) else alternative_ids[index] if index<len(alternative_ids) else "");parameter=parameters[index] if index<len(parameters) else ""
+            if not target and not parameter:continue
+            item={"phonological_parameter":parameter,"uncertain":str(index) in uncertain};item["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None;relations.append(item)
+    morphology=None
+    if proposal_kind=="NEW":
+        choice=form.get("morphology_component_count");components=[]
+        for position,alternative,label,note in zip(form.getlist("component_position"),form.getlist("component_alternative_id"),form.getlist("component_label"),form.getlist("component_note")):
+            if not alternative and not label.strip() and not note.strip():continue
+            components.append({"position":position,"component_alternative_id":alternative or None,"component_label":label,"note":note})
+        morphology={"component_count":None if choice in (None,"","N/A") else choice,"component_count_not_applicable":choice=="N/A","free_permutation":form.get("free_permutation"),"note":form.get("morphology_note"),"components":components}
+    return {"proposal_kind":proposal_kind,"proposed_existing_alternative_id":form.get("proposed_existing_alternative_id") or None,"phonological_relation_answer":form.get("phonological_relation_answer"),"relations":relations,"analysis_note":form.get("analysis_note"),"morphology":morphology}
+
+
+def _alternative_decision(form):
+    action=form.get("concept_resolution_action");concept_resolution={"action":action,"concept_id":form.get("resolved_concept_id") or None,"label":form.get("new_concept_label") or None} if action else None
+    return {"decision":form.get("canonical_decision"),"alternative_id":form.get("canonical_alternative_id") or form.get("proposed_existing_alternative_id"),"relation_policy":form.get("relation_policy","preserve"),"concept_resolution":concept_resolution,"approve_relations":form.get("approve_relations")=="yes","approve_morphology":form.get("approve_morphology")=="yes","nomenclature_mode":form.get("nomenclature_mode","automatic"),"labels":{key[6:]:value for key,value in form.items() if key.startswith("label_")},"nomenclature_reason":form.get("nomenclature_reason")}
+
+
+def _actor(form):return {"collaborator_id":form.get("collaborator_id"),"access_role":getattr(g,"current_access_role",None)}
+
+
+def _confirmation(template_kind,occurrence_id,operation):
+    db=conectar()
+    try:
+        occurrence=db.execute("SELECT occurrence_id,original_gloss FROM occurrence WHERE occurrence_id=?",(occurrence_id,)).fetchone()
+        current=db.execute("SELECT * FROM occurrence_grammar WHERE occurrence_id=? AND is_current=1",(occurrence_id,)).fetchone() if template_kind=="grammar" else None
+        result=preview_operation(db,operation)
+    except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
+    finally:db.close()
+    summary={"occurrence":dict(occurrence) if occurrence else None,"current":dict(current) if current else None,"proposed":_grammar_values(request.form) if template_kind=="grammar" else _alternative_payload(request.form),"decision":_alternative_decision(request.form) if template_kind=="alternative" else None}
+    return render_template("confirmar_aceptacion_inmediata.html",kind=template_kind,occurrence_id=occurrence_id,payload=list(request.form.lists()),preflight=result,summary=summary)
 
 
 @occurrences_bp.route("/ocurrencias")
@@ -227,6 +279,7 @@ def mostrar_gramatica(occurrence_id):
         return "La ocurrencia no existe.", 404
     result_messages = {
         "submitted": "Propuesta gramatical enviada a revisión.",
+        "accepted": "Análisis gramatical aceptado inmediatamente.",
     }
     form_values = dict(current) if current is not None else {}
     form_values["note"] = current["grammar_note"] if current is not None else ""
@@ -247,16 +300,7 @@ def mostrar_gramatica(occurrence_id):
     "/ocurrencias/<int:occurrence_id>/gramatica", methods=["POST"]
 )
 def guardar_gramatica(occurrence_id):
-    form_values = {
-        "gender": request.form.get("gender"),
-        "plural": request.form.get("plural"),
-        "agentive": request.form.get("agentive"),
-        "conjugated_form": request.form.get("conjugated_form"),
-        "negation": request.form.get("negation"),
-        "note": request.form.get("note"),
-    }
-    for field in ("gender", "plural", "agentive", "conjugated_form", "negation"):
-        form_values[field + "_uncertain"] = request.form.get(field + "_uncertain")
+    form_values = _grammar_values(request.form)
     conexion = conectar()
     try:
         create_grammar_submission(
@@ -301,6 +345,25 @@ def guardar_gramatica(occurrence_id):
         occurrence_id=occurrence_id,
         result="submitted",
     ))
+
+
+@occurrences_bp.post("/ocurrencias/<int:occurrence_id>/gramatica/aceptacion-inmediata/preview")
+@requires_reviewer
+def preview_grammar_immediate(occurrence_id):
+    operation=grammar_operation(occurrence_id,_grammar_values(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    return _confirmation("grammar",occurrence_id,operation)
+
+
+@occurrences_bp.post("/ocurrencias/<int:occurrence_id>/gramatica/aceptacion-inmediata/confirmar")
+@requires_reviewer
+def confirm_grammar_immediate(occurrence_id):
+    if request.form.get("confirm_immediate")!="yes":return "Debe confirmar explícitamente la aceptación inmediata.",400
+    db=conectar();operation=grammar_operation(occurrence_id,_grammar_values(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    try:confirm_operation(db,operation)
+    except ImmediateBlockingError as error:return str(error),409
+    except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
+    finally:db.close()
+    return redirect(url_for("occurrences.mostrar_gramatica",occurrence_id=occurrence_id,result="accepted"))
 
 
 @occurrences_bp.route("/ocurrencias/<int:occurrence_id>/clasificar")
@@ -369,6 +432,7 @@ def clasificar_ocurrencia(occurrence_id):
         GROUP BY a.alternative_id,a.working_label,c.preferred_label
         ORDER BY c.preferred_label,a.working_label
     """).fetchall()
+    concepts=conexion.execute("SELECT concept_id,preferred_label FROM concept ORDER BY preferred_label").fetchall()
     history = conexion.execute("""
         SELECT a.assignment_id, a.alternative_id, a.is_current,
                a.created_at, a.supersedes_assignment_id,
@@ -385,6 +449,7 @@ def clasificar_ocurrencia(occurrence_id):
         existing_pending=existing_pending,
         phonological_parameters=PHONOLOGICAL_PARAMETERS, history=history,
         component_alternatives=component_alternatives,
+        concepts=concepts,
     )
 
 
@@ -444,3 +509,22 @@ def guardar_clasificacion(occurrence_id):
     finally:
         conexion.close()
     return redirect(url_for("occurrences.clasificar_ocurrencia", occurrence_id=occurrence_id))
+
+
+@occurrences_bp.post("/ocurrencias/<int:occurrence_id>/clasificar/aceptacion-inmediata/preview")
+@requires_reviewer
+def preview_alternative_immediate(occurrence_id):
+    operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    return _confirmation("alternative",occurrence_id,operation)
+
+
+@occurrences_bp.post("/ocurrencias/<int:occurrence_id>/clasificar/aceptacion-inmediata/confirmar")
+@requires_reviewer
+def confirm_alternative_immediate(occurrence_id):
+    if request.form.get("confirm_immediate")!="yes":return "Debe confirmar explícitamente la aceptación inmediata.",400
+    db=conectar();operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    try:confirm_operation(db,operation)
+    except ImmediateBlockingError as error:return str(error),409
+    except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
+    finally:db.close()
+    return redirect(url_for("occurrences.clasificar_ocurrencia",occurrence_id=occurrence_id))

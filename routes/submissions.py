@@ -13,6 +13,9 @@ from alternative_nomenclature import calculate_nomenclature_preview
 from alternative_morphology import submission_morphology
 from concept_labels import alternative_display_label
 from source_period import format_source_period
+from immediate_acceptance import (ImmediateAcceptanceError, run_normal_review,
+    concept_registration_operation,preview_operation,confirm_operation)
+from access_control import requires_reviewer
 
 submissions_bp = Blueprint("submissions", __name__)
 submissions_bp.add_app_template_filter(format_source_period, "source_period")
@@ -65,6 +68,33 @@ def guardar_aporte():
     finally:
         db.close()
     return redirect(url_for("occurrences.editar_ocurrencia", occurrence_id=occurrence_id))
+
+
+def _concept_immediate_operation(form):
+    if form.get("reference_kind")!="new":raise ImmediateAcceptanceError("La aceptación conceptual inmediata exige proponer un concept nuevo.")
+    decision={"action":form.get("concept_immediate_action"),"concept_id":form.get("concept_immediate_existing_id") or None,"label":form.get("proposed_label")}
+    return concept_registration_operation(_evidence(form),form.get("proposed_label"),decision,actor_context={"collaborator_id":form.get("collaborator_id"),"access_role":getattr(g,"current_access_role",None)})
+
+
+@submissions_bp.post("/aportes/concepto/aceptacion-inmediata/preview")
+@requires_reviewer
+def preview_concept_immediate():
+    db=conectar()
+    try:result=preview_operation(db,_concept_immediate_operation(request.form))
+    except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
+    finally:db.close()
+    return render_template("confirmar_aceptacion_inmediata.html",kind="concept",occurrence_id=None,payload=list(request.form.lists()),preflight=result)
+
+
+@submissions_bp.post("/aportes/concepto/aceptacion-inmediata/confirmar")
+@requires_reviewer
+def confirm_concept_immediate():
+    if request.form.get("confirm_immediate")!="yes":return "Debe confirmar explícitamente la aceptación inmediata.",400
+    db=conectar()
+    try:result=confirm_operation(db,_concept_immediate_operation(request.form))
+    except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
+    finally:db.close()
+    return redirect(url_for("occurrences.editar_ocurrencia",occurrence_id=result["result"]["occurrence_id"]))
 
 
 @submissions_bp.route("/borradores")
@@ -235,7 +265,9 @@ def decidir_aporte(submission_id):
         if row is None:
             return "El aporte no existe.", 404
         if row[0] == "GRAMMAR":
-            resolve_grammar_submission(db, submission_id, decision, reviewed_by=request.form.get("reviewed_by"), review_note=request.form.get("review_note"), collaborator_id=request.form.get("collaborator_id"), access_role=getattr(g, "current_access_role", None))
+            operation=lambda connection: resolve_grammar_submission(connection, submission_id, decision, reviewed_by=request.form.get("reviewed_by"), review_note=request.form.get("review_note"), collaborator_id=request.form.get("collaborator_id"), access_role=getattr(g, "current_access_role", None))
+            if decision=="accepted":run_normal_review(db,operation,request.form.get("review_note"))
+            else:operation(db)
         elif decision == "rejected":
             reject_alternative_submission(db,submission_id,reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
         else:
@@ -243,12 +275,12 @@ def decidir_aporte(submission_id):
             action=request.form.get("concept_resolution_action")
             if action: concept_resolution={"action":action,"concept_id":request.form.get("resolved_concept_id") or None,"label":request.form.get("new_concept_label") or None}
             if decision == "existing":
-                review_as_existing(db,submission_id,request.form.get("alternative_id"),concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
+                run_normal_review(db,lambda connection: review_as_existing(connection,submission_id,request.form.get("alternative_id"),concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
             elif decision == "new":
                 labels={key[6:]:value for key,value in request.form.items() if key.startswith("label_")}
-                review_as_new(db,submission_id,concept_resolution=concept_resolution,approve_relations=request.form.get("approve_relations")=="yes",nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=request.form.get("approve_morphology")=="yes",collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
+                run_normal_review(db,lambda connection: review_as_new(connection,submission_id,concept_resolution=concept_resolution,approve_relations=request.form.get("approve_relations")=="yes",nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=request.form.get("approve_morphology")=="yes",collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
             else: raise AlternativeWorkflowError("Decisión de review no válida.")
-    except (AlternativeWorkflowError,GrammarWorkflowError, sqlite3.IntegrityError, ValueError) as error:
+    except (AlternativeWorkflowError,GrammarWorkflowError,ImmediateAcceptanceError, sqlite3.IntegrityError, ValueError) as error:
         return str(error), 400
     finally:
         db.close()

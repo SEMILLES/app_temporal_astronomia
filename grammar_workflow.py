@@ -11,6 +11,23 @@ class GrammarWorkflowError(ValueError):
     pass
 
 
+def _transaction(connection,name):
+    owns=not connection.in_transaction
+    connection.execute("BEGIN IMMEDIATE" if owns else f"SAVEPOINT {name}")
+    return owns
+
+
+def _finish(connection,name,owns):
+    connection.commit() if owns else connection.execute(f"RELEASE SAVEPOINT {name}")
+
+
+def _rollback(connection,name,owns):
+    if owns: connection.rollback()
+    else:
+        connection.execute(f"ROLLBACK TO SAVEPOINT {name}")
+        connection.execute(f"RELEASE SAVEPOINT {name}")
+
+
 def create_grammar_submission(connection, occurrence_id, values, *, submitted_by=None,
                               collaborator_id=None, access_role=None):
     current = connection.execute(
@@ -29,8 +46,8 @@ def create_grammar_submission(connection, occurrence_id, values, *, submitted_by
         if marks[field] is None and flag:
             raise GrammarWorkflowError("Un campo sin analizar no puede marcarse con duda.")
         flags[field] = flag
+    name="create_grammar_submission";owns=_transaction(connection,name)
     try:
-        connection.execute("BEGIN IMMEDIATE")
         cursor = connection.execute(
             "INSERT INTO submission (occurrence_id, submission_type, status, submitted_by) "
             "VALUES (?, 'GRAMMAR', 'pending', ?)", (occurrence_id, submitted_by)
@@ -52,10 +69,10 @@ def create_grammar_submission(connection, occurrence_id, values, *, submitted_by
             record_activity(connection, "grammar_submission_created",
                             entity_type="submission", entity_id=submission_id,
                             collaborator_id=collaborator_id, access_role=access_role)
-        connection.commit()
+        _finish(connection,name,owns)
         return submission_id
     except Exception:
-        connection.rollback()
+        _rollback(connection,name,owns)
         raise
 
 
@@ -63,8 +80,8 @@ def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_
                                review_note=None, collaborator_id=None, access_role=None):
     if decision not in ("accepted", "rejected"):
         raise GrammarWorkflowError("Decisión no válida.")
+    name="resolve_grammar_submission";owns=_transaction(connection,name)
     try:
-        connection.execute("BEGIN IMMEDIATE")
         row = connection.execute(
             "SELECT s.*, gs.* FROM submission s JOIN grammar_submission gs USING (submission_id) "
             "WHERE s.submission_id = ? AND s.submission_type = 'GRAMMAR' AND s.status = 'pending'",
@@ -95,7 +112,7 @@ def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_
                             comment=review_note)
         detect_conflicts_after_change(connection,"occurrence",row["occurrence_id"],
             actor_context={"collaborator_id":collaborator_id,"access_role":access_role})
-        connection.commit()
+        _finish(connection,name,owns)
     except Exception:
-        connection.rollback()
+        _rollback(connection,name,owns)
         raise
