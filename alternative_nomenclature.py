@@ -189,4 +189,6 @@ def apply_nomenclature(connection, concept_id, labels, *, origin, reason=None,
             (event_id, alternative_id, old, new),
         )
         connection.execute("UPDATE alternative SET working_label=? WHERE alternative_id=?", (new, alternative_id))
+    from conflicts import detect_conflicts_after_change
+    detect_conflicts_after_change(connection,"renumber_event",event_id)
     return event_id

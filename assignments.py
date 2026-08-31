@@ -61,6 +61,8 @@ def create_or_replace_assignment(
             occurrence_id, alternative_id, supersedes_id, created_by,
             created_from_submission_id,
         ))
+        from conflicts import detect_conflicts_after_change
+        detect_conflicts_after_change(connection,"assignment",cursor.lastrowid)
         if owns_transaction:
             connection.commit()
         else:

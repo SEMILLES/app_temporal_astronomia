@@ -96,6 +96,8 @@ def create_current_relation(
             low_id, high_id, parameter, created_by,
             created_from_submission_id,
         ))
+        from conflicts import detect_conflicts_after_change
+        detect_conflicts_after_change(connection,"alternative_relation",cursor.lastrowid)
         _finish(connection, savepoint, owns_transaction)
         return cursor.lastrowid
     except Exception:
@@ -151,6 +153,8 @@ def replace_current_relation(
             low_id, high_id, parameter, previous_relation_id,
             created_by, created_from_submission_id,
         ))
+        from conflicts import detect_conflicts_after_change
+        detect_conflicts_after_change(connection,"alternative_relation",cursor.lastrowid)
         _finish(connection, savepoint, owns_transaction)
         return cursor.lastrowid
     except Exception:
@@ -169,6 +173,8 @@ def retire_current_relation(connection, relation_id):
         )
         if cursor.rowcount != 1:
             raise RelationNotFoundError("La relacion current no existe.")
+        from conflicts import detect_conflicts_after_change
+        detect_conflicts_after_change(connection,"alternative_relation",relation_id)
         _finish(connection, savepoint, owns_transaction)
     except Exception:
         _rollback(connection, savepoint, owns_transaction)

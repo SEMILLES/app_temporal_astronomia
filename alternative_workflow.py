@@ -17,6 +17,7 @@ from concept_labels import normalize_concept_label
 from phonological_parameters import validate_phonological_parameter
 from alternative_morphology import store_submission_morphology,materialize_submission_morphology
 from activity import record_activity
+from conflicts import detect_conflicts_after_change
 
 
 class AlternativeWorkflowError(ValueError):
@@ -331,6 +332,8 @@ def review_as_existing(connection, submission_id, alternative_id, *,
             _record_concept_resolution(connection,submission,proposal_was_pending,collaborator_id,access_role)
             record_activity(connection,"assignment_created_or_replaced",entity_type="occurrence",entity_id=submission["occurrence_id"],collaborator_id=collaborator_id,access_role=access_role)
             record_activity(connection,"alternative_submission_accepted",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)
+        detect_conflicts_after_change(connection,"submission",submission_id,
+            actor_context={"collaborator_id":collaborator_id,"access_role":access_role})
         _finish(connection,name,owns); return int(alternative_id)
     except Exception: _rollback(connection,name,owns); raise
 
@@ -376,6 +379,10 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
             record_activity(connection,"alternative_submission_accepted",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)
             record_activity(connection,"assignment_created_or_replaced",entity_type="occurrence",entity_id=submission["occurrence_id"],collaborator_id=collaborator_id,access_role=access_role)
             if approve_morphology: record_activity(connection,"alternative_morphology_created_or_replaced",entity_type="alternative",entity_id=new_id,collaborator_id=collaborator_id,access_role=access_role)
+        detect_conflicts_after_change(connection,"submission",submission_id,
+            actor_context={"collaborator_id":collaborator_id,"access_role":access_role})
+        detect_conflicts_after_change(connection,"alternative",new_id,
+            actor_context={"collaborator_id":collaborator_id,"access_role":access_role})
         _finish(connection,name,owns); return new_id
     except Exception: _rollback(connection,name,owns); raise
 

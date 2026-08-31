@@ -89,6 +89,8 @@ def create_or_replace_alternative_morphology(connection,alternative_id,*,
         cursor=connection.execute("INSERT INTO alternative_morphology(alternative_id,component_count,component_count_not_applicable,free_permutation,note,is_current,supersedes_alternative_morphology_id,created_from_submission_id,created_by) VALUES(?,?,?,?,?,1,?,?,?)",(alternative_id,morphology["component_count"],morphology["component_count_not_applicable"],morphology["free_permutation"],morphology["note"],supersedes,created_from_submission_id,_text(created_by)))
         morphology_id=cursor.lastrowid
         for item in morphology["components"]: connection.execute("INSERT INTO alternative_component(alternative_morphology_id,position,component_alternative_id,component_label,note) VALUES(?,?,?,?,?)",(morphology_id,item["position"],item["component_alternative_id"],item["component_label"],item["note"]))
+        from conflicts import detect_conflicts_after_change
+        detect_conflicts_after_change(connection,"alternative_morphology",morphology_id)
         connection.commit() if owns else connection.execute("RELEASE SAVEPOINT morphology_operation")
         return morphology_id,True
     except Exception:

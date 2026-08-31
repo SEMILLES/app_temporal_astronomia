@@ -10,6 +10,7 @@ from routes.occurrences import occurrences_bp
 from routes.submissions import submissions_bp
 from routes.alternatives import alternatives_bp
 from routes.collaborators import collaborators_bp
+from routes.conflicts import conflicts_bp
 from access_control import install_access_context
 from source_period import format_source_period
 
@@ -29,6 +30,7 @@ app.register_blueprint(occurrences_bp)
 app.register_blueprint(submissions_bp)
 app.register_blueprint(alternatives_bp)
 app.register_blueprint(collaborators_bp)
+app.register_blueprint(conflicts_bp)
 
 install_access_context(app)
 

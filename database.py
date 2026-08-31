@@ -43,6 +43,9 @@ REQUIRED_APPLICATION_TABLES = frozenset({
     "alternative_component",
     "collaborator",
     "activity_event",
+    "conflict",
+    "conflict_subject",
+    "conflict_resolution_attempt",
 })
 
 
@@ -700,4 +703,47 @@ def crear_esquema(conexion):
         );
         CREATE INDEX IF NOT EXISTS idx_activity_event_collaborator ON activity_event(collaborator_id,occurred_at);
         CREATE INDEX IF NOT EXISTS idx_activity_event_entity ON activity_event(entity_type,entity_id,occurred_at);
+        CREATE TABLE IF NOT EXISTS conflict (
+            conflict_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            origin_kind TEXT NOT NULL CHECK(origin_kind IN ('automatic','manual')),
+            rule_code TEXT,
+            severity TEXT NOT NULL CHECK(severity IN ('blocking','non_blocking')),
+            status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved')),
+            description TEXT NOT NULL CHECK(length(trim(description))>0),
+            justification TEXT, resolution_criteria TEXT,
+            subject_signature TEXT NOT NULL CHECK(length(trim(subject_signature))>0),
+            detection_source TEXT NOT NULL CHECK(detection_source IN ('workflow','global_validation','manual')),
+            triggering_entity_type TEXT, triggering_entity_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, resolved_at TEXT,
+            created_by_collaborator_id INTEGER, created_by_name_snapshot TEXT,
+            created_access_role TEXT CHECK(created_access_role IN ('reviewer','master')),
+            FOREIGN KEY(created_by_collaborator_id) REFERENCES collaborator(collaborator_id),
+            CHECK((origin_kind='automatic' AND rule_code IS NOT NULL) OR
+                (origin_kind='manual' AND rule_code IS NULL AND justification IS NOT NULL AND length(trim(justification))>0 AND resolution_criteria IS NOT NULL AND length(trim(resolution_criteria))>0)),
+            CHECK((status='open' AND resolved_at IS NULL) OR (status='resolved' AND resolved_at IS NOT NULL)),
+            CHECK(origin_kind!='manual' OR created_access_role IN ('reviewer','master'))
+        );
+        CREATE TABLE IF NOT EXISTS conflict_subject (
+            conflict_subject_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conflict_id INTEGER NOT NULL, subject_type TEXT NOT NULL CHECK(length(trim(subject_type))>0),
+            subject_id INTEGER NOT NULL, subject_role TEXT NOT NULL CHECK(length(trim(subject_role))>0),
+            FOREIGN KEY(conflict_id) REFERENCES conflict(conflict_id),
+            UNIQUE(conflict_id,subject_type,subject_id,subject_role)
+        );
+        CREATE TABLE IF NOT EXISTS conflict_resolution_attempt (
+            conflict_resolution_attempt_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            conflict_id INTEGER NOT NULL, outcome TEXT NOT NULL CHECK(outcome IN ('failed','succeeded')),
+            comment TEXT NOT NULL CHECK(length(trim(comment))>0), failure_reason TEXT,
+            attempted_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            collaborator_id INTEGER, collaborator_name_snapshot TEXT,
+            access_role TEXT NOT NULL CHECK(access_role IN ('reviewer','master')),
+            FOREIGN KEY(conflict_id) REFERENCES conflict(conflict_id),
+            FOREIGN KEY(collaborator_id) REFERENCES collaborator(collaborator_id),
+            CHECK((outcome='failed' AND failure_reason IS NOT NULL AND length(trim(failure_reason))>0) OR (outcome='succeeded' AND failure_reason IS NULL))
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS one_open_automatic_conflict ON conflict(rule_code,subject_signature) WHERE status='open' AND origin_kind='automatic';
+        CREATE UNIQUE INDEX IF NOT EXISTS one_successful_attempt_per_conflict ON conflict_resolution_attempt(conflict_id) WHERE outcome='succeeded';
+        CREATE INDEX IF NOT EXISTS idx_conflict_status ON conflict(status,severity,origin_kind,created_at);
+        CREATE INDEX IF NOT EXISTS idx_conflict_subject_entity ON conflict_subject(subject_type,subject_id);
+        CREATE INDEX IF NOT EXISTS idx_conflict_attempt_conflict ON conflict_resolution_attempt(conflict_id,attempted_at);
     """)

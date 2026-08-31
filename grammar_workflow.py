@@ -1,6 +1,7 @@
 from grammatical_marks import validate_grammatical_marks
 from occurrence_grammar import create_or_replace_occurrence_grammar
 from activity import record_activity, resolve_collaborator
+from conflicts import detect_conflicts_after_change
 
 
 FIELDS = ("gender", "plural", "agentive", "conjugated_form", "negation")
@@ -92,6 +93,8 @@ def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_
                             entity_type="submission", entity_id=submission_id,
                             collaborator_id=collaborator_id, access_role=access_role,
                             comment=review_note)
+        detect_conflicts_after_change(connection,"occurrence",row["occurrence_id"],
+            actor_context={"collaborator_id":collaborator_id,"access_role":access_role})
         connection.commit()
     except Exception:
         connection.rollback()

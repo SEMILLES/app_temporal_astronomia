@@ -84,6 +84,9 @@ def install_access_context(app):
         reviewer_endpoints = {
             "submissions.revisar_aportes", "submissions.detalle_aporte",
             "submissions.decidir_aporte",
+            "conflicts.conflicts_list", "conflicts.new_conflict",
+            "conflicts.conflict_detail", "conflicts.resolve_conflict",
+            "conflicts.validate_conflicts",
         }
         master_endpoints = {
             "collaborators.collaborators", "collaborators.create_collaborator",
@@ -113,7 +116,8 @@ def install_access_context(app):
         )
         root = request.script_root
         review = (f'<section><strong>REVISIÓN</strong> '
-                  f'<a href="{root}/aportes/pendientes">Aportes pendientes</a></section>') \
+                  f'<a href="{root}/aportes/pendientes">Aportes pendientes</a> '
+                  f'<a href="{root}/conflictos">Conflictos</a></section>') \
                  if ROLE_LEVEL[role] >= ROLE_LEVEL["reviewer"] else ""
         admin = (f'<section><strong>ADMINISTRACIÓN</strong> '
                  f'<a href="{root}/colaboradores">Colaboradores</a></section>') \
