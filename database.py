@@ -35,6 +35,8 @@ REQUIRED_APPLICATION_TABLES = frozenset({
     "alternative_submission",
     "alternative_submission_relation",
     "grammar_submission",
+    "renumber_event",
+    "renumber_change",
 })
 
 
@@ -593,4 +595,37 @@ def crear_esquema(conexion):
             note TEXT,
             FOREIGN KEY (submission_id) REFERENCES submission(submission_id)
         );
+
+        CREATE TABLE IF NOT EXISTS renumber_event (
+            renumber_event_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            concept_id INTEGER NOT NULL,
+            origin TEXT NOT NULL
+                CHECK (origin IN ('automatic_assisted', 'manual')),
+            reason TEXT,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            created_from_submission_id INTEGER,
+            created_by TEXT,
+            FOREIGN KEY (concept_id) REFERENCES concept(concept_id),
+            FOREIGN KEY (created_from_submission_id)
+                REFERENCES submission(submission_id),
+            CHECK (origin != 'manual'
+                OR (reason IS NOT NULL AND length(trim(reason)) > 0))
+        );
+        CREATE INDEX IF NOT EXISTS idx_renumber_event_concept
+            ON renumber_event(concept_id);
+
+        CREATE TABLE IF NOT EXISTS renumber_change (
+            renumber_change_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            renumber_event_id INTEGER NOT NULL,
+            alternative_id INTEGER NOT NULL,
+            old_working_label TEXT,
+            new_working_label TEXT NOT NULL
+                CHECK (length(trim(new_working_label)) > 0),
+            FOREIGN KEY (renumber_event_id)
+                REFERENCES renumber_event(renumber_event_id),
+            FOREIGN KEY (alternative_id) REFERENCES alternative(alternative_id),
+            UNIQUE (renumber_event_id, alternative_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_renumber_change_alternative
+            ON renumber_change(alternative_id);
     """)

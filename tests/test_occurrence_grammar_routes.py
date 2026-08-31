@@ -102,12 +102,14 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
         page=self.client.get("/ocurrencias/1/gramatica").get_data(as_text=True)
         self.assertIn("LEGACY-VALUE (legacy)",page); self.assertIn('value="REDUP." selected',page); self.assertIn('name="gender_uncertain" checked',page)
 
-    def test_review_lists_alternative_read_only_and_does_not_modify_it(self):
+    def test_review_lists_alternative_and_reject_does_not_modify_canonical(self):
         db=self.connect(); cur=db.execute("INSERT INTO submission(occurrence_id,submission_type,status) VALUES(1,'ALTERNATIVE','pending')"); sid=cur.lastrowid
         db.execute("INSERT INTO alternative_submission(submission_id,proposal_kind,reference_concept_id,is_legacy) VALUES(?,'UNSURE',1,1)",(sid,)); db.commit(); before=tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()); db.close()
-        page=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("ALTERNATIVE",page); self.assertIn("en actualización",page)
-        self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"accepted"}).status_code,409)
-        db=self.connect(); self.assertEqual(tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()),before); db.close()
+        page=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("ALTERNATIVE",page); self.assertIn("Decisión canónica",page)
+        db=self.connect(); canonical_before=tuple(db.execute("SELECT count(*) FROM alternative").fetchone())+tuple(db.execute("SELECT count(*) FROM assignment").fetchone()); db.close()
+        self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"rejected"}).status_code,302)
+        db=self.connect(); row=db.execute("SELECT status,resolution FROM submission WHERE submission_id=?",(sid,)).fetchone(); canonical_after=tuple(db.execute("SELECT count(*) FROM alternative").fetchone())+tuple(db.execute("SELECT count(*) FROM assignment").fetchone()); db.close()
+        self.assertEqual(tuple(row),("resolved","rejected")); self.assertEqual(canonical_after,canonical_before)
 
     def test_review_route_accept_and_reject(self):
         db=self.connect(); accepted=create_grammar_submission(db,1,{"gender":"FEM-A"}); db.close()

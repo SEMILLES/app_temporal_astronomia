@@ -125,8 +125,8 @@ def alternativas(concept_id):
 
     relation_rows = conexion.execute("""
         SELECT
-            r.alternative_a_id,
-            r.alternative_b_id,
+            r.alternative_low_id AS alternative_a_id,
+            r.alternative_high_id AS alternative_b_id,
             r.phonological_parameter,
             alternative_a.working_label AS alternative_a_working_label,
             alternative_b.working_label AS alternative_b_working_label,
@@ -134,14 +134,15 @@ def alternativas(concept_id):
             concept_b.preferred_label AS alternative_b_concept_label
         FROM alternative_relation AS r
         JOIN alternative AS alternative_a
-            ON alternative_a.alternative_id = r.alternative_a_id
+            ON alternative_a.alternative_id = r.alternative_low_id
         JOIN alternative AS alternative_b
-            ON alternative_b.alternative_id = r.alternative_b_id
+            ON alternative_b.alternative_id = r.alternative_high_id
         JOIN concept AS concept_a
             ON concept_a.concept_id = alternative_a.concept_id
         JOIN concept AS concept_b
             ON concept_b.concept_id = alternative_b.concept_id
-        WHERE alternative_a.concept_id = ? OR alternative_b.concept_id = ?
+        WHERE r.is_current = 1
+          AND (alternative_a.concept_id = ? OR alternative_b.concept_id = ?)
     """, (concept_id, concept_id)).fetchall()
 
     for relation in relation_rows:

@@ -7,6 +7,8 @@ from concept_labels import alternative_display_label, human_concept_label
 from assignments import create_or_replace_assignment
 from grammar_workflow import GrammarWorkflowError, create_grammar_submission
 from grammatical_marks import GRAMMATICAL_MARK_VOCABULARIES
+from alternative_workflow import AlternativeWorkflowError, create_alternative_submission
+from phonological_parameters import PHONOLOGICAL_PARAMETERS
 
 
 occurrences_bp = Blueprint("occurrences", __name__)
@@ -312,31 +314,57 @@ def clasificar_ocurrencia(occurrence_id):
     conexion = conectar()
     occurrence = conexion.execute("""
         SELECT o.occurrence_id, o.original_gloss, o.hyperlink,
+               o.occurrence_year,o.source_locator,o.provenance_note,
                s.source_name, a.assignment_id, a.alternative_id,
-               al.working_label, c.preferred_label
+               al.working_label, c.preferred_label,
+               r.concept_id AS reference_concept_id,
+               r.concept_proposal_id AS reference_concept_proposal_id,
+               COALESCE(rc.preferred_label,cp.proposed_label) AS reference_label,
+               cp.status AS concept_proposal_status,
+               cp.resolved_concept_id
         FROM occurrence AS o JOIN source AS s ON s.source_id = o.source_id
         LEFT JOIN assignment AS a
             ON a.occurrence_id = o.occurrence_id AND a.is_current = 1
         LEFT JOIN alternative AS al ON al.alternative_id = a.alternative_id
         LEFT JOIN concept AS c ON c.concept_id = al.concept_id
+        LEFT JOIN occurrence_concept_reference r
+          ON r.occurrence_id=o.occurrence_id AND r.is_current=1
+        LEFT JOIN concept rc ON rc.concept_id=r.concept_id
+        LEFT JOIN concept_proposal cp
+          ON cp.concept_proposal_id=r.concept_proposal_id
         WHERE o.occurrence_id = ?
     """, (occurrence_id,)).fetchone()
     if occurrence is None:
         conexion.close()
         return "La ocurrencia no existe.", 404
-    concepts = conexion.execute(
-        "SELECT concept_id, preferred_label FROM concept ORDER BY preferred_label"
-    ).fetchall()
-    alternatives = conexion.execute(
-        "SELECT alternative_id, concept_id, working_label FROM alternative ORDER BY alternative_id"
-    ).fetchall()
-    alternatives_by_concept = [
-        {"concept": concept, "alternatives": [
-            alternative for alternative in alternatives
-            if alternative["concept_id"] == concept["concept_id"]
-        ]}
-        for concept in concepts
-    ]
+    context_concept_id = occurrence["reference_concept_id"] or occurrence["resolved_concept_id"]
+    alternatives = []
+    pending_context = []
+    if context_concept_id is not None:
+        alternatives = [dict(row) for row in conexion.execute("""
+            SELECT alternative_id,working_label FROM alternative
+            WHERE concept_id=? AND retired_at IS NULL ORDER BY working_label
+        """, (context_concept_id,)).fetchall()]
+        for alternative in alternatives:
+            alternative["occurrences"] = conexion.execute("""
+                SELECT o.original_gloss,s.source_name,o.occurrence_year
+                FROM assignment a JOIN occurrence o USING(occurrence_id)
+                JOIN source s USING(source_id)
+                WHERE a.alternative_id=? AND a.is_current=1
+            """, (alternative["alternative_id"],)).fetchall()
+        pending_context = conexion.execute("""
+            SELECT s.submission_id,o.original_gloss,src.source_name
+            FROM submission s JOIN alternative_submission als USING(submission_id)
+            JOIN occurrence o USING(occurrence_id) JOIN source src USING(source_id)
+            WHERE s.status='pending' AND s.submission_type='ALTERNATIVE'
+              AND als.proposal_kind='NEW' AND als.reference_concept_id=?
+              AND s.occurrence_id != ?
+        """, (context_concept_id, occurrence_id)).fetchall()
+    existing_pending = conexion.execute("""
+        SELECT s.submission_id,als.proposal_kind,als.analysis_note
+        FROM submission s JOIN alternative_submission als USING(submission_id)
+        WHERE s.occurrence_id=? AND s.submission_type='ALTERNATIVE' AND s.status='pending'
+    """, (occurrence_id,)).fetchone()
     history = conexion.execute("""
         SELECT a.assignment_id, a.alternative_id, a.is_current,
                a.created_at, a.supersedes_assignment_id,
@@ -349,48 +377,36 @@ def clasificar_ocurrencia(occurrence_id):
     conexion.close()
     return render_template(
         "clasificar_ocurrencia.html", occurrence=occurrence,
-        alternatives_by_concept=alternatives_by_concept, history=history
+        alternatives=alternatives, pending_context=pending_context,
+        existing_pending=existing_pending,
+        phonological_parameters=PHONOLOGICAL_PARAMETERS, history=history
     )
 
 
 @occurrences_bp.route("/ocurrencias/<int:occurrence_id>/clasificar", methods=["POST"])
 def guardar_clasificacion(occurrence_id):
-    alternative_id = request.form.get("alternative_id") or None
-    concept_id = request.form.get("concept_id") or None
-    if alternative_id is None and concept_id is None:
-        return "Debe seleccionar una alternativa o un concepto nuevo.", 400
+    proposal_kind=request.form.get("proposal_kind")
+    alternative_id=request.form.get("proposed_existing_alternative_id") or None
+    target_types=request.form.getlist("relation_target_type")
+    target_ids=request.form.getlist("relation_target_id")
+    parameters=request.form.getlist("relation_parameter")
+    uncertain=set(request.form.getlist("relation_uncertain"))
+    relations=[]
+    for index,(kind,target,parameter) in enumerate(zip(target_types,target_ids,parameters)):
+        if not target and not parameter: continue
+        relation={"phonological_parameter":parameter,"uncertain":str(index) in uncertain}
+        relation["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None
+        relations.append(relation)
     conexion = conectar()
     try:
-        conexion.execute("BEGIN IMMEDIATE")
-        occurrence_exists = conexion.execute(
-            "SELECT 1 FROM occurrence WHERE occurrence_id = ?",
-            (occurrence_id,),
-        ).fetchone()
-        if occurrence_exists is None:
-            conexion.rollback()
-            return "La ocurrencia no existe.", 404
-        if alternative_id is not None:
-            if conexion.execute(
-                "SELECT 1 FROM alternative WHERE alternative_id = ?", (alternative_id,)
-            ).fetchone() is None:
-                conexion.rollback()
-                return "La alternativa no existe.", 400
-        else:
-            if conexion.execute(
-                "SELECT 1 FROM concept WHERE concept_id = ?", (concept_id,)
-            ).fetchone() is None:
-                conexion.rollback()
-                return "El concepto no existe.", 400
-            cursor = conexion.execute(
-                "INSERT INTO alternative (concept_id, working_label) VALUES (?, NULL)",
-                (concept_id,)
-            )
-            alternative_id = cursor.lastrowid
-        create_or_replace_assignment(conexion, occurrence_id, int(alternative_id))
-        conexion.commit()
-    except sqlite3.Error:
-        conexion.rollback()
-        return "No fue posible guardar la clasificación.", 500
+        create_alternative_submission(
+            conexion,occurrence_id,proposal_kind,
+            proposed_existing_alternative_id=alternative_id,
+            phonological_relation_answer=request.form.get("phonological_relation_answer"),
+            relations=relations,analysis_note=request.form.get("analysis_note"),
+        )
+    except (AlternativeWorkflowError,ValueError,sqlite3.IntegrityError) as error:
+        return str(error),400
     finally:
         conexion.close()
     return redirect(url_for("occurrences.clasificar_ocurrencia", occurrence_id=occurrence_id))
