@@ -62,6 +62,7 @@ def create_or_replace_occurrence_grammar(
     created_by=None,
     change_note=None,
     created_from_submission_id=None,
+    force_new=False,
 ):
     text_content = tuple(_empty_string_to_none(value) for value in (
         gender,
@@ -126,7 +127,7 @@ def create_or_replace_occurrence_grammar(
             WHERE occurrence_id = ? AND is_current = 1
         """, (occurrence_id,)).fetchone()
 
-        if current is not None and tuple(current[1:]) == content:
+        if current is not None and tuple(current[1:]) == content and not force_new:
             if owns_transaction:
                 connection.commit()
             else:

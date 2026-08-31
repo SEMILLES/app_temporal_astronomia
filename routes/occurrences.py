@@ -4,12 +4,9 @@ import sqlite3
 
 from database import conectar
 from concept_labels import alternative_display_label, human_concept_label
-from occurrence_grammar import (
-    EmptyGrammarError,
-    OccurrenceNotFoundError,
-    create_or_replace_occurrence_grammar,
-)
-from routes.submissions import crear_o_reemplazar_assignment
+from assignments import create_or_replace_assignment
+from grammar_workflow import GrammarWorkflowError, create_grammar_submission
+from grammatical_marks import GRAMMATICAL_MARK_VOCABULARIES
 
 
 occurrences_bp = Blueprint("occurrences", __name__)
@@ -31,16 +28,23 @@ def ocurrencias():
     conexion = conectar()
     rows = conexion.execute("""
         SELECT o.occurrence_id, s.source_name, o.original_gloss, o.hyperlink,
-               sub.status AS submission_status,
                c.preferred_label, al.working_label,
                EXISTS (
                    SELECT 1 FROM occurrence_grammar AS og
                    WHERE og.occurrence_id = o.occurrence_id
                      AND og.is_current = 1
-               ) AS has_current_grammar
+               ) AS has_current_grammar,
+               EXISTS (
+                   SELECT 1 FROM submission gs
+                   WHERE gs.occurrence_id = o.occurrence_id
+                     AND gs.submission_type = 'GRAMMAR' AND gs.status = 'pending'
+               ) AS has_pending_grammar,
+               EXISTS (
+                   SELECT 1 FROM submission als
+                   WHERE als.occurrence_id = o.occurrence_id
+                     AND als.submission_type = 'ALTERNATIVE' AND als.status = 'pending'
+               ) AS has_pending_alternative
         FROM occurrence AS o
-        LEFT JOIN submission AS sub
-            ON sub.occurrence_id = o.occurrence_id
         JOIN source AS s ON o.source_id = s.source_id
         LEFT JOIN assignment AS a
             ON a.occurrence_id = o.occurrence_id AND a.is_current = 1
@@ -60,13 +64,14 @@ def ocurrencias():
                 row["preferred_label"], row["working_label"]
             )
         occurrence["current_classification"] = current_classification
-        workflow_labels = {
-            None: "Sin aporte",
-            "pending": "Pendiente",
-            "accepted": "Aceptado",
-            "rejected": "Rechazado",
-        }
-        occurrence["workflow_status"] = workflow_labels[row["submission_status"]]
+        occurrence["grammar_status"] = (
+            "Pendiente de revisión" if row["has_pending_grammar"]
+            else "Analizadas" if row["has_current_grammar"] else "Sin analizar"
+        )
+        occurrence["alternative_status"] = (
+            "Clasificada" if row["working_label"] is not None or row["preferred_label"] is not None
+            else "Pendiente" if row["has_pending_alternative"] else "Sin analizar"
+        )
         ocurrencias.append(occurrence)
     conexion.close()
     return render_template("ocurrencias.html", ocurrencias=ocurrencias)
@@ -171,18 +176,30 @@ def actualizar_ocurrencia(occurrence_id):
 
 def _load_grammar_page_data(conexion, occurrence_id):
     occurrence = conexion.execute("""
-        SELECT o.occurrence_id, o.original_gloss, o.hyperlink, s.source_name
+        SELECT o.occurrence_id, o.original_gloss, o.hyperlink, s.source_name,
+               COALESCE(c.preferred_label, cp.proposed_label) AS reference_label,
+               ac.preferred_label AS assignment_concept,
+               al.working_label AS assignment_label
         FROM occurrence AS o
         JOIN source AS s ON s.source_id = o.source_id
+        LEFT JOIN occurrence_concept_reference r
+          ON r.occurrence_id=o.occurrence_id AND r.is_current=1
+        LEFT JOIN concept c ON c.concept_id=r.concept_id
+        LEFT JOIN concept_proposal cp ON cp.concept_proposal_id=r.concept_proposal_id
+        LEFT JOIN assignment a ON a.occurrence_id=o.occurrence_id AND a.is_current=1
+        LEFT JOIN alternative al ON al.alternative_id=a.alternative_id
+        LEFT JOIN concept ac ON ac.concept_id=al.concept_id
         WHERE o.occurrence_id = ?
     """, (occurrence_id,)).fetchone()
     if occurrence is None:
-        return None, None, []
+        return None, None, [], None
     current = conexion.execute("""
         SELECT occurrence_grammar_id, gender, plural, agentive,
                conjugated_form, negation, grammar_note, is_current,
                supersedes_occurrence_grammar_id, created_at, created_by,
-               change_note
+               change_note, gender_uncertain, plural_uncertain,
+               agentive_uncertain, conjugated_form_uncertain,
+               negation_uncertain, created_from_submission_id
         FROM occurrence_grammar
         WHERE occurrence_id = ? AND is_current = 1
     """, (occurrence_id,)).fetchone()
@@ -190,19 +207,26 @@ def _load_grammar_page_data(conexion, occurrence_id):
         SELECT occurrence_grammar_id, gender, plural, agentive,
                conjugated_form, negation, grammar_note, is_current,
                supersedes_occurrence_grammar_id, created_at, created_by,
-               change_note
+               change_note, gender_uncertain, plural_uncertain,
+               agentive_uncertain, conjugated_form_uncertain,
+               negation_uncertain, created_from_submission_id
         FROM occurrence_grammar
         WHERE occurrence_id = ?
         ORDER BY is_current DESC, occurrence_grammar_id DESC
     """, (occurrence_id,)).fetchall()
-    return occurrence, current, history
+    pending = conexion.execute("""
+        SELECT s.submission_id, s.submitted_at, gs.*
+        FROM submission s JOIN grammar_submission gs USING(submission_id)
+        WHERE s.occurrence_id=? AND s.submission_type='GRAMMAR' AND s.status='pending'
+    """, (occurrence_id,)).fetchone()
+    return occurrence, current, history, pending
 
 
 @occurrences_bp.route("/ocurrencias/<int:occurrence_id>/gramatica")
 def mostrar_gramatica(occurrence_id):
     conexion = conectar()
     try:
-        occurrence, current, history = _load_grammar_page_data(
+        occurrence, current, history, pending = _load_grammar_page_data(
             conexion, occurrence_id
         )
     finally:
@@ -210,16 +234,17 @@ def mostrar_gramatica(occurrence_id):
     if occurrence is None:
         return "La ocurrencia no existe.", 404
     result_messages = {
-        "saved": "Análisis gramatical guardado.",
-        "noop": "No hubo cambios en el análisis gramatical.",
+        "submitted": "Propuesta gramatical enviada a revisión.",
     }
     form_values = dict(current) if current is not None else {}
-    form_values["change_note"] = ""
+    form_values["note"] = current["grammar_note"] if current is not None else ""
     return render_template(
         "gramatica_ocurrencia.html",
         occurrence=occurrence,
         current=current,
         history=history,
+        pending=pending,
+        vocabularies=GRAMMATICAL_MARK_VOCABULARIES,
         form_values=form_values,
         message=result_messages.get(request.args.get("result")),
         error=None,
@@ -236,47 +261,49 @@ def guardar_gramatica(occurrence_id):
         "agentive": request.form.get("agentive"),
         "conjugated_form": request.form.get("conjugated_form"),
         "negation": request.form.get("negation"),
-        "grammar_note": request.form.get("grammar_note"),
-        "change_note": request.form.get("change_note"),
+        "note": request.form.get("note"),
     }
+    for field in ("gender", "plural", "agentive", "conjugated_form", "negation"):
+        form_values[field + "_uncertain"] = request.form.get(field + "_uncertain")
     conexion = conectar()
     try:
-        _, created = create_or_replace_occurrence_grammar(
-            conexion,
-            occurrence_id,
-            gender=form_values["gender"],
-            plural=form_values["plural"],
-            agentive=form_values["agentive"],
-            conjugated_form=form_values["conjugated_form"],
-            negation=form_values["negation"],
-            grammar_note=form_values["grammar_note"],
-            created_by=None,
-            change_note=form_values["change_note"],
-        )
-    except OccurrenceNotFoundError:
-        return "La ocurrencia no existe.", 404
-    except EmptyGrammarError:
-        occurrence, current, history = _load_grammar_page_data(
+        create_grammar_submission(conexion, occurrence_id, form_values)
+    except GrammarWorkflowError as error:
+        occurrence, current, history, pending = _load_grammar_page_data(
             conexion, occurrence_id
         )
+        if occurrence is None:
+            return "La ocurrencia no existe.", 404
         return render_template(
             "gramatica_ocurrencia.html",
             occurrence=occurrence,
             current=current,
             history=history,
+            pending=pending,
+            vocabularies=GRAMMATICAL_MARK_VOCABULARIES,
             form_values=form_values,
             message=None,
-            error="El análisis gramatical debe contener al menos un dato.",
+            error=str(error),
+        ), 400
+    except sqlite3.IntegrityError:
+        occurrence, current, history, pending = _load_grammar_page_data(
+            conexion, occurrence_id
+        )
+        return render_template(
+            "gramatica_ocurrencia.html", occurrence=occurrence, current=current,
+            history=history, pending=pending,
+            vocabularies=GRAMMATICAL_MARK_VOCABULARIES,
+            form_values=form_values, message=None,
+            error="Ya existe una propuesta gramatical pendiente.",
         ), 400
     except Exception:
         return "No fue posible guardar el análisis gramatical.", 500
     finally:
         conexion.close()
-    result = "saved" if created else "noop"
     return redirect(url_for(
         "occurrences.mostrar_gramatica",
         occurrence_id=occurrence_id,
-        result=result,
+        result="submitted",
     ))
 
 
@@ -359,7 +386,7 @@ def guardar_clasificacion(occurrence_id):
                 (concept_id,)
             )
             alternative_id = cursor.lastrowid
-        crear_o_reemplazar_assignment(conexion, occurrence_id, int(alternative_id))
+        create_or_replace_assignment(conexion, occurrence_id, int(alternative_id))
         conexion.commit()
     except sqlite3.Error:
         conexion.rollback()
