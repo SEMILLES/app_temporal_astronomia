@@ -46,5 +46,12 @@ class AlternativeRouteTests(unittest.TestCase):
         db=self.connect();self.assertEqual(db.execute("SELECT count(*) FROM alternative").fetchone()[0],2);snapshot=tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone());db.close()
         self.assertEqual(self.client.get(f"/aportes/{sid}").status_code,200);db=self.connect();self.assertEqual(tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()),snapshot);db.close()
 
+    def test_route_captures_and_explicitly_approves_morphology(self):
+        response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","record_morphology":"yes","morphology_component_count":"2","free_permutation":"SIN INFORMACIÓN","morphology_note":"Synthetic morphology","component_position":["1","2"],"component_alternative_id":["1",""],"component_label":["","FREE"],"component_note":["Known",""]});self.assertEqual(response.status_code,302)
+        db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];self.assertEqual(db.execute("SELECT component_count FROM alternative_submission_morphology WHERE submission_id=?",(sid,)).fetchone()[0],2);db.close()
+        review=self.client.get("/aportes/pendientes").get_data(as_text=True);self.assertIn("Morfología propuesta originalmente",review);self.assertIn("Crear alternativa sin aprobar morfología",review);self.assertIn("Aprobar morfología propuesta",review)
+        response=self.client.post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","approve_morphology":"yes","nomenclature_mode":"automatic"});self.assertEqual(response.status_code,302)
+        db=self.connect();row=db.execute("SELECT m.created_from_submission_id,count(c.alternative_component_id) FROM alternative_morphology m LEFT JOIN alternative_component c USING(alternative_morphology_id) WHERE m.is_current=1 GROUP BY m.alternative_morphology_id").fetchone();self.assertEqual(tuple(row),(sid,2));db.close()
+
 
 if __name__=="__main__": unittest.main()

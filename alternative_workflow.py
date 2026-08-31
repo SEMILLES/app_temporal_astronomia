@@ -15,6 +15,7 @@ from alternative_relations import (
 from assignments import create_or_replace_assignment
 from concept_labels import normalize_concept_label
 from phonological_parameters import validate_phonological_parameter
+from alternative_morphology import store_submission_morphology,materialize_submission_morphology
 
 
 class AlternativeWorkflowError(ValueError):
@@ -101,7 +102,7 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
                                   proposed_existing_alternative_id=None,
                                   phonological_relation_answer=None,
                                   relations=(), analysis_note=None,
-                                  submitted_by=None):
+                                  submitted_by=None,morphology=None):
     proposal_kind = (proposal_kind or "").upper()
     if proposal_kind not in ("EXISTING", "NEW", "UNSURE"):
         raise AlternativeWorkflowError("Tipo de propuesta no válido.")
@@ -166,6 +167,8 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
             ) VALUES(?,?,?,?,?,?,?,0)
         """, (submission_id, proposal_kind, concept_id, proposal_id,
               proposed_existing_alternative_id, answer, note))
+        if morphology is not None:
+            store_submission_morphology(connection,submission_id,**morphology)
         for alternative_id, target_id, parameter, uncertain in validated:
             if target_id == submission_id:
                 raise AlternativeWorkflowError("Una submission no puede relacionarse consigo misma.")
@@ -290,7 +293,8 @@ def review_as_existing(connection, submission_id, alternative_id, *,
 
 def review_as_new(connection, submission_id, *, concept_resolution=None,
                   approve_relations=False, nomenclature_mode="automatic",
-                  labels=None, reason=None, reviewed_by=None, review_note=None):
+                  labels=None, reason=None, reviewed_by=None, review_note=None,
+                  approve_morphology=False):
     name="review_alternative_new"; owns=_transaction(connection,name)
     try:
         submission=_submission(connection,submission_id); concept_id=_resolve_concept(connection,submission,concept_resolution)
@@ -314,6 +318,10 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
         apply_nomenclature(connection,concept_id,final,origin=origin,reason=event_reason,submission_id=submission_id,created_by=reviewed_by,required_edges=edges)
         if approve_relations: _materialize_relations(connection,new_id,submission_id)
         create_or_replace_assignment(connection,submission["occurrence_id"],new_id,created_by=reviewed_by,created_from_submission_id=submission_id)
+        if approve_morphology:
+            materialize_submission_morphology(
+                connection, submission_id, new_id, created_by=reviewed_by
+            )
         _resolve_submission(connection,submission_id,new_id,reviewed_by,review_note)
         _finish(connection,name,owns); return new_id
     except Exception: _rollback(connection,name,owns); raise

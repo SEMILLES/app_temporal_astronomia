@@ -81,11 +81,14 @@ def alternativas(concept_id):
         return "El concepto no existe.", 404
 
     alternative_rows = conexion.execute("""
-        SELECT alternative_id, working_label, original_code,
-               created_at, retired_at
-        FROM alternative
-        WHERE concept_id = ?
-        ORDER BY alternative_id
+        SELECT a.alternative_id, a.working_label, a.original_code,
+               a.created_at, a.retired_at,
+               EXISTS(SELECT 1 FROM alternative_morphology m
+                      WHERE m.alternative_id=a.alternative_id AND m.is_current=1)
+                   AS has_current_morphology
+        FROM alternative a
+        WHERE a.concept_id = ?
+        ORDER BY a.alternative_id
     """, (concept_id,)).fetchall()
 
     alternatives = {

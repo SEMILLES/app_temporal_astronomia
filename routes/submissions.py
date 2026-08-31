@@ -10,6 +10,7 @@ from alternative_workflow import (
     review_as_existing, review_as_new,
 )
 from alternative_nomenclature import calculate_nomenclature_preview
+from alternative_morphology import submission_morphology
 
 submissions_bp = Blueprint("submissions", __name__)
 
@@ -197,7 +198,8 @@ def _alternative_review_context(db, rows):
                 db,concept_id,extra_edges=edges,
                 virtual_occurrences={"new":row["occurrence_id"]},
             )
-        result[row["submission_id"]]=dict(alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_preview=preview)
+        morphology=submission_morphology(db,row["submission_id"])
+        result[row["submission_id"]]=dict(alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_preview=preview,proposed_morphology=morphology)
     return result
 
 
@@ -233,7 +235,7 @@ def decidir_aporte(submission_id):
                 review_as_existing(db,submission_id,request.form.get("alternative_id"),concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
             elif decision == "new":
                 labels={key[6:]:value for key,value in request.form.items() if key.startswith("label_")}
-                review_as_new(db,submission_id,concept_resolution=concept_resolution,approve_relations=request.form.get("approve_relations")=="yes",nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+                review_as_new(db,submission_id,concept_resolution=concept_resolution,approve_relations=request.form.get("approve_relations")=="yes",nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=request.form.get("approve_morphology")=="yes")
             else: raise AlternativeWorkflowError("Decisión de review no válida.")
     except (AlternativeWorkflowError,GrammarWorkflowError, sqlite3.IntegrityError, ValueError) as error:
         return str(error), 400

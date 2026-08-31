@@ -146,6 +146,7 @@
                         {% if alternativa["retired_at"] %}
                             <p><strong>Estado: Retirada</strong></p>
                         {% endif %}
+                        <p>Morfología: {{ "Analizada" if alternativa["has_current_morphology"] else "Sin analizar" }}</p>
                     </div>
 
                     <section class="alternative-section">

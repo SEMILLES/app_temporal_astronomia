@@ -37,6 +37,10 @@ REQUIRED_APPLICATION_TABLES = frozenset({
     "grammar_submission",
     "renumber_event",
     "renumber_change",
+    "alternative_submission_morphology",
+    "alternative_submission_component",
+    "alternative_morphology",
+    "alternative_component",
 })
 
 
@@ -628,4 +632,52 @@ def crear_esquema(conexion):
         );
         CREATE INDEX IF NOT EXISTS idx_renumber_change_alternative
             ON renumber_change(alternative_id);
+
+        CREATE TABLE IF NOT EXISTS alternative_submission_morphology (
+            submission_id INTEGER PRIMARY KEY,
+            component_count INTEGER CHECK(component_count IS NULL OR component_count >= 1),
+            component_count_not_applicable INTEGER NOT NULL DEFAULT 0 CHECK(component_count_not_applicable IN (0,1)),
+            free_permutation TEXT, note TEXT,
+            FOREIGN KEY(submission_id) REFERENCES alternative_submission(submission_id),
+            CHECK(component_count_not_applicable=0 OR component_count IS NULL),
+            CHECK((component_count_not_applicable=1 AND free_permutation='N/A') OR (component_count_not_applicable=0 AND ((component_count IS NULL AND free_permutation IS NULL) OR (component_count=1 AND free_permutation='N/A') OR (component_count>=2 AND free_permutation IS NOT NULL))))
+        );
+        CREATE TABLE IF NOT EXISTS alternative_submission_component (
+            component_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            submission_id INTEGER NOT NULL, position INTEGER NOT NULL CHECK(position>=1),
+            component_alternative_id INTEGER, component_label TEXT, note TEXT,
+            FOREIGN KEY(submission_id) REFERENCES alternative_submission_morphology(submission_id),
+            FOREIGN KEY(component_alternative_id) REFERENCES alternative(alternative_id),
+            UNIQUE(submission_id,position),
+            CHECK(component_alternative_id IS NOT NULL OR component_label IS NOT NULL OR note IS NOT NULL)
+        );
+        CREATE INDEX IF NOT EXISTS idx_submission_component_alternative ON alternative_submission_component(component_alternative_id);
+        CREATE TABLE IF NOT EXISTS alternative_morphology (
+            alternative_morphology_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alternative_id INTEGER NOT NULL,
+            component_count INTEGER CHECK(component_count IS NULL OR component_count>=1),
+            component_count_not_applicable INTEGER NOT NULL DEFAULT 0 CHECK(component_count_not_applicable IN(0,1)),
+            free_permutation TEXT, note TEXT,
+            is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN(0,1)),
+            supersedes_alternative_morphology_id INTEGER,
+            created_from_submission_id INTEGER,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, created_by TEXT,
+            FOREIGN KEY(alternative_id) REFERENCES alternative(alternative_id),
+            FOREIGN KEY(supersedes_alternative_morphology_id) REFERENCES alternative_morphology(alternative_morphology_id),
+            FOREIGN KEY(created_from_submission_id) REFERENCES submission(submission_id),
+            CHECK(component_count_not_applicable=0 OR component_count IS NULL),
+            CHECK((component_count_not_applicable=1 AND free_permutation='N/A') OR (component_count_not_applicable=0 AND ((component_count IS NULL AND free_permutation IS NULL) OR (component_count=1 AND free_permutation='N/A') OR (component_count>=2 AND free_permutation IS NOT NULL))))
+        );
+        CREATE UNIQUE INDEX IF NOT EXISTS one_current_morphology_per_alternative ON alternative_morphology(alternative_id) WHERE is_current=1;
+        CREATE INDEX IF NOT EXISTS idx_alternative_morphology_alternative ON alternative_morphology(alternative_id);
+        CREATE TABLE IF NOT EXISTS alternative_component (
+            alternative_component_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            alternative_morphology_id INTEGER NOT NULL, position INTEGER NOT NULL CHECK(position>=1),
+            component_alternative_id INTEGER, component_label TEXT, note TEXT,
+            FOREIGN KEY(alternative_morphology_id) REFERENCES alternative_morphology(alternative_morphology_id),
+            FOREIGN KEY(component_alternative_id) REFERENCES alternative(alternative_id),
+            UNIQUE(alternative_morphology_id,position),
+            CHECK(component_alternative_id IS NOT NULL OR component_label IS NOT NULL OR note IS NOT NULL)
+        );
+        CREATE INDEX IF NOT EXISTS idx_alternative_component_target ON alternative_component(component_alternative_id);
     """)

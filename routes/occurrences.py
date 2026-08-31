@@ -365,6 +365,16 @@ def clasificar_ocurrencia(occurrence_id):
         FROM submission s JOIN alternative_submission als USING(submission_id)
         WHERE s.occurrence_id=? AND s.submission_type='ALTERNATIVE' AND s.status='pending'
     """, (occurrence_id,)).fetchone()
+    component_alternatives=conexion.execute("""
+        SELECT a.alternative_id,a.working_label,c.preferred_label,
+               GROUP_CONCAT(o.original_gloss, ' / ') AS evidence_glosses
+        FROM alternative a JOIN concept c USING(concept_id)
+        LEFT JOIN assignment ass ON ass.alternative_id=a.alternative_id AND ass.is_current=1
+        LEFT JOIN occurrence o ON o.occurrence_id=ass.occurrence_id
+        WHERE a.retired_at IS NULL
+        GROUP BY a.alternative_id,a.working_label,c.preferred_label
+        ORDER BY c.preferred_label,a.working_label
+    """).fetchall()
     history = conexion.execute("""
         SELECT a.assignment_id, a.alternative_id, a.is_current,
                a.created_at, a.supersedes_assignment_id,
@@ -379,7 +389,8 @@ def clasificar_ocurrencia(occurrence_id):
         "clasificar_ocurrencia.html", occurrence=occurrence,
         alternatives=alternatives, pending_context=pending_context,
         existing_pending=existing_pending,
-        phonological_parameters=PHONOLOGICAL_PARAMETERS, history=history
+        phonological_parameters=PHONOLOGICAL_PARAMETERS, history=history,
+        component_alternatives=component_alternatives,
     )
 
 
@@ -397,6 +408,20 @@ def guardar_clasificacion(occurrence_id):
         relation={"phonological_parameter":parameter,"uncertain":str(index) in uncertain}
         relation["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None
         relations.append(relation)
+    morphology=None
+    if request.form.get("record_morphology")=="yes":
+        count_choice=request.form.get("morphology_component_count")
+        not_applicable=count_choice=="N/A"
+        component_count=None if count_choice in (None,"","N/A") else count_choice
+        component_positions=request.form.getlist("component_position")
+        component_alternatives=request.form.getlist("component_alternative_id")
+        component_labels=request.form.getlist("component_label")
+        component_notes=request.form.getlist("component_note")
+        components=[]
+        for position,alternative,label,note in zip(component_positions,component_alternatives,component_labels,component_notes):
+            if not alternative and not label.strip() and not note.strip(): continue
+            components.append({"position":position,"component_alternative_id":alternative or None,"component_label":label,"note":note})
+        morphology={"component_count":component_count,"component_count_not_applicable":not_applicable,"free_permutation":request.form.get("free_permutation"),"note":request.form.get("morphology_note"),"components":components}
     conexion = conectar()
     try:
         create_alternative_submission(
@@ -404,6 +429,7 @@ def guardar_clasificacion(occurrence_id):
             proposed_existing_alternative_id=alternative_id,
             phonological_relation_answer=request.form.get("phonological_relation_answer"),
             relations=relations,analysis_note=request.form.get("analysis_note"),
+            morphology=morphology,
         )
     except (AlternativeWorkflowError,ValueError,sqlite3.IntegrityError) as error:
         return str(error),400
