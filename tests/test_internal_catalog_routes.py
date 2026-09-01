@@ -76,7 +76,7 @@ class InternalCatalogRouteTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             html = response.get_data(as_text=True)
             self.assertIn("COSMOS", html)
-            self.assertIn("Vista en vivo", html)
+            self.assertIn("Versión de trabajo · No publicada", html)
             self.assertEqual(
                 self.client.get(f"/{prefix}/catalogo-interno/conceptos/1").status_code,
                 200,

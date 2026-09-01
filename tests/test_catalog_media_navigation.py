@@ -6,7 +6,8 @@ from flask import Flask
 
 from access_control import install_access_context
 from catalog_diff import build_catalog_diff
-from catalog_presentation import relation_edges, variation_groups
+from catalog_presentation import (relation_edges, variation_groups,
+                                  variation_network_groups)
 from catalog_projection import build_catalog_projection
 from catalog_publication import publish_catalog, verify_publication_hash
 from database import crear_esquema
@@ -58,10 +59,14 @@ class CatalogMediaNavigationTests(unittest.TestCase):
         self.assertEqual([[a["alternative_id"] for a in group] for group in variation_groups(concept)],[[1,2,3],[4]])
         edges=relation_edges(concept); self.assertEqual(len(edges),2); self.assertEqual(edges[0]["parameters"],["CM_1","UB_2"])
         self.assertFalse(any(edge["low_id"]==1 and edge["high_id"]==3 for edge in edges))
+        cards=variation_network_groups(concept); self.assertEqual(len(cards),2)
+        self.assertEqual([card["color_index"] for card in cards],[0,1]); self.assertEqual(len(cards[1]["nodes"]),1); self.assertFalse(cards[1]["edges"])
     def test_video_filter_markup_detail_network_and_standalone(self):
         html=self.client.get("/ana/catalogo-interno/conceptos/1").get_data(as_text=True)
         self.assertIn("Solo video",html); self.assertIn('data-has-video="true"',html); self.assertIn('data-has-video="false"',html)
-        self.assertIn("Grupo de variación 1",html); self.assertIn("Grupo de variación 2",html); self.assertEqual(html.count('class="linea-red"'),2)
+        self.assertGreaterEqual(html.count("Alternativa léxica 1"),2); self.assertGreaterEqual(html.count("Alternativa léxica 2"),2); self.assertEqual(html.count('class="linea-red"'),2)
+        self.assertIn("Red de variación léxica y fonológica",html); self.assertNotIn('bloque-red-variacion" open',html); self.assertNotIn("Mostrar",html); self.assertNotIn("Ocultar",html)
+        self.assertIn("Alternativa léxica 1",html); self.assertIn("Alternativa léxica 2",html); self.assertIn('class="grupo-red grupo-red-0"',html); self.assertIn('class="grupo-red grupo-red-1"',html)
         self.assertIn("CM_1 · UB_2",html); self.assertNotIn("HISTORICA",html); self.assertIn("data-alternative-select",html)
         self.assertIn("<video controls",html); self.assertIn("https://media.test/uno.mp4",html); self.assertNotIn("Video regrabado no disponible",html)
         self.assertNotIn("lesico-internal-context",html); self.assertNotIn("Trabajando como",html)

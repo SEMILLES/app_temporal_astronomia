@@ -35,17 +35,23 @@ def relation_edges(concept):
     return [edges[key] for key in sorted(edges)]
 
 
-def variation_network(concept):
-    groups = variation_groups(concept); nodes = []; positions = {}; width = 640
-    for row, group in enumerate(groups):
-        gap = width / (len(group) + 1)
+def variation_network_groups(concept):
+    """Build stable, separately colored network cards for each component."""
+    cards = []
+    explicit_edges = relation_edges(concept)
+    for index, group in enumerate(variation_groups(concept), 1):
+        identifiers = {alternative["alternative_id"] for alternative in group}
+        width = max(280, 150 * len(group)); height = 150
+        gap = width / (len(group) + 1); nodes = []; positions = {}
         for column, alternative in enumerate(group, 1):
-            node = {"alternative": alternative, "x": round(gap * column), "y": 55 + row * 105}
+            node = {"alternative": alternative, "x": round(gap * column), "y": 75}
             nodes.append(node); positions[alternative["alternative_id"]] = node
-    edges = []
-    for edge in relation_edges(concept):
-        low = positions.get(edge["low_id"]); high = positions.get(edge["high_id"])
-        if low and high:
+        edges = []
+        for edge in explicit_edges:
+            if edge["low_id"] not in identifiers or edge["high_id"] not in identifiers: continue
+            low = positions[edge["low_id"]]; high = positions[edge["high_id"]]
             edges.append({**edge, "x1": low["x"], "y1": low["y"], "x2": high["x"], "y2": high["y"],
-                          "label_x": round((low["x"] + high["x"]) / 2), "label_y": round((low["y"] + high["y"]) / 2) - 8})
-    return {"width": width, "height": max(120, len(groups) * 105), "nodes": nodes, "edges": edges}
+                          "label_x": round((low["x"] + high["x"]) / 2), "label_y": 62})
+        cards.append({"number": index, "color_index": (index - 1) % 6,
+                      "width": width, "height": height, "nodes": nodes, "edges": edges})
+    return cards
