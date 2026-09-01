@@ -72,20 +72,29 @@ def _node_positions(group, edges):
     return width, height, positions
 
 
-def _edge_label_position(low, high, nodes):
-    """Keep the relation capsule near a free portion of its edge."""
+def _edge_labels(low, high, parameters):
+    """Center compact parameter capsules on or directly across an edge."""
     midpoint_x = (low["x"] + high["x"]) / 2
     midpoint_y = (low["y"] + high["y"]) / 2
     dx = high["x"] - low["x"]; dy = high["y"] - low["y"]
     length = math.hypot(dx, dy) or 1
-    candidates = []
-    for offset in (-20, 20, -42, 42):
-        x = midpoint_x - dy / length * offset
-        y = midpoint_y + dx / length * offset
-        clearance = min(math.hypot(x - node["x"], y - node["y"]) for node in nodes)
-        candidates.append((clearance, round(x), round(y)))
-    _, x, y = max(candidates)
-    return x, y
+    unit_x, unit_y = dx / length, dy / length
+    widths = [max(56, min(150, 7 * len(parameter) + 18)) for parameter in parameters]
+    gap = 8; total_width = sum(widths) + gap * (len(widths) - 1)
+    labels = []
+    if total_width <= length - 96:
+        cursor = -total_width / 2
+        for parameter, width in zip(parameters, widths):
+            offset = cursor + width / 2
+            labels.append({"text": parameter, "x": round(midpoint_x + unit_x * offset),
+                           "y": round(midpoint_y + unit_y * offset), "half_width": width / 2})
+            cursor += width + gap
+    else:
+        for index, (parameter, width) in enumerate(zip(parameters, widths)):
+            offset = (index - (len(widths) - 1) / 2) * 28
+            labels.append({"text": parameter, "x": round(midpoint_x - unit_y * offset),
+                           "y": round(midpoint_y + unit_x * offset), "half_width": width / 2})
+    return labels
 
 
 def variation_network_groups(concept):
@@ -104,11 +113,8 @@ def variation_network_groups(concept):
         edges = []
         for edge in group_edges:
             low = positions[edge["low_id"]]; high = positions[edge["high_id"]]
-            label_x, label_y = _edge_label_position(low, high, nodes)
-            label = " · ".join(edge["parameters"])
             edges.append({**edge, "x1": low["x"], "y1": low["y"], "x2": high["x"], "y2": high["y"],
-                          "label_x": label_x, "label_y": label_y,
-                          "label_half_width": max(34, min(86, 7 * len(label) / 2 + 10))})
+                          "labels": _edge_labels(low, high, edge["parameters"])})
         cards.append({"number": index, "color_index": (index - 1) % 6,
                       "width": width, "height": height, "nodes": nodes, "edges": edges})
     return cards

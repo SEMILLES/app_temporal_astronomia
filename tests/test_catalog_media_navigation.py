@@ -64,7 +64,10 @@ class CatalogMediaNavigationTests(unittest.TestCase):
         connected=cards[0]; distances=[math.hypot(a["x"]-b["x"],a["y"]-b["y"]) for index,a in enumerate(connected["nodes"]) for b in connected["nodes"][index+1:]]
         self.assertGreaterEqual(min(distances),135); self.assertGreater(connected["height"],150)
         for edge in connected["edges"]:
-            self.assertGreater(min(math.hypot(edge["label_x"]-node["x"],edge["label_y"]-node["y"]) for node in connected["nodes"]),60)
+            self.assertEqual(len(edge["labels"]),len(edge["parameters"]))
+            for label in edge["labels"]:
+                cross=(label["x"]-edge["x1"])*(edge["y2"]-edge["y1"])-(label["y"]-edge["y1"])*(edge["x2"]-edge["x1"])
+                self.assertAlmostEqual(cross,0,delta=max(abs(edge["x2"]-edge["x1"]),abs(edge["y2"]-edge["y1"])))
         two_node=copy.deepcopy(concept); two_node["alternatives"]=two_node["alternatives"][:2]; two_node["relations"]=two_node["relations"][:2]
         two_card=variation_network_groups(two_node)[0]; self.assertEqual((two_card["width"],two_card["height"]),(440,170)); self.assertEqual(abs(two_card["nodes"][0]["x"]-two_card["nodes"][1]["x"]),240)
         renamed=copy.deepcopy(two_node); renamed["alternatives"][0]["working_label"]="ZZZ"; renamed["alternatives"][1]["working_label"]="AAA"
@@ -76,7 +79,8 @@ class CatalogMediaNavigationTests(unittest.TestCase):
         self.assertGreaterEqual(html.count("Alternativa léxica 1"),2); self.assertGreaterEqual(html.count("Alternativa léxica 2"),2); self.assertEqual(html.count('class="linea-red"'),2)
         self.assertIn("Red de variación léxica y fonológica",html); self.assertNotIn('bloque-red-variacion" open',html); self.assertNotIn("Mostrar",html); self.assertNotIn("Ocultar",html)
         self.assertIn("Alternativa léxica 1",html); self.assertIn("Alternativa léxica 2",html); self.assertIn('class="grupo-red grupo-red-0"',html); self.assertIn('class="grupo-red grupo-red-1"',html)
-        self.assertIn("CM_1 · UB_2",html); self.assertNotIn("HISTORICA",html); self.assertIn("data-alternative-select",html)
+        self.assertIn(">CM_1</text>",html); self.assertIn(">UB_2</text>",html); self.assertNotIn("HISTORICA",html); self.assertIn("data-alternative-select",html)
+        self.assertLess(html.index('class="linea-red"'),html.index('class="etiqueta-arista"'))
         self.assertIn("<video controls",html); self.assertIn("https://media.test/uno.mp4",html); self.assertNotIn("Video regrabado no disponible",html)
         self.assertNotIn("lesico-internal-context",html); self.assertNotIn("Trabajando como",html)
         self.assertEqual(self.client.get("/catalogo-interno").status_code,404)
