@@ -94,6 +94,25 @@ def project_morphology(connection, alternative_id, names):
     }
 
 
+def project_alternative_media(connection, alternative_id):
+    """Project canonical alternative media; occurrence analysis media is excluded."""
+    rows = connection.execute("""
+        SELECT m.media_asset_id,m.storage_backend,m.storage_key,
+               m.original_filename,m.mime_type,m.file_size,m.checksum,
+               m.origin_kind,m.origin_label,m.origin_locator,m.provenance_note,
+               am.role
+        FROM alternative_media AS am
+        JOIN media_asset AS m USING(media_asset_id)
+        WHERE am.alternative_id=?
+        ORDER BY m.media_asset_id,m.storage_key
+    """, (alternative_id,))
+    fields = ("media_asset_id", "storage_backend", "storage_key",
+              "original_filename", "mime_type", "file_size", "checksum",
+              "origin_kind", "origin_label", "origin_locator",
+              "provenance_note", "role")
+    return [{field: row[field] for field in fields} for row in rows]
+
+
 def build_catalog_projection(connection):
     """Return only current canonical lexical state, using JSON-safe values."""
     all_alternatives = [dict(row) for row in connection.execute("""
@@ -129,6 +148,7 @@ def build_catalog_projection(connection):
             "alternative_id": row["alternative_id"],
             "working_label": row["working_label"],
             "name": names[row["alternative_id"]],
+            "media": project_alternative_media(connection, row["alternative_id"]),
             "occurrences": occurrences,
             "morphology": project_morphology(connection, row["alternative_id"], names),
             "relation_ids": [],

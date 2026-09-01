@@ -1,5 +1,5 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><title>Gramática</title><body>
-<h1>Análisis gramatical</h1><p><strong>{{ occurrence['original_gloss'] }}</strong> · {{ occurrence['source_name'] }}</p>
+<h1>Análisis gramatical</h1><p><strong>Ocurrencia #{{ occurrence['occurrence_id'] }}</strong> — {{ occurrence['original_gloss'] }} · {{ occurrence['source_name'] }}</p>
 <p>Concepto contextual: {{ occurrence['reference_label'] or 'No disponible (legacy)' }}</p><p>Asignación vigente: {% if occurrence['assignment_concept'] %}{{ occurrence['assignment_concept'] }}{% if occurrence['assignment_label'] %}-{{ occurrence['assignment_label'] }}{% endif %}{% else %}Sin analizar{% endif %}</p>
 {% if message %}<p>{{ message }}</p>{% endif %}{% if error %}<p role="alert">{{ error }}</p>{% endif %}
 {% if pending %}<section><h2>Propuesta pendiente de revisión #{{ pending['submission_id'] }}</h2><p>No puede enviarse otra propuesta hasta resolver esta.</p>{% for field, label in [('gender','Género'),('plural','Plural'),('agentive','Agentivo'),('conjugated_form','Forma conjugada'),('negation','Negación')] %}<p>{{ label }}: {{ pending[field] or 'Sin analizar' }}{% if pending[field ~ '_uncertain'] %} (analizado con duda){% endif %}</p>{% endfor %}<p>Nota: {{ pending['note'] or '—' }}</p></section>

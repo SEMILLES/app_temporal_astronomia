@@ -29,15 +29,15 @@ añadió un remote y el repositorio no es submódulo de esta aplicación.
 - El `fetch("catalogo.json")`, metadatos de generación y transformación del
   modelo antiguo en JavaScript: la autoridad ahora es la proyección SQLite o el
   snapshot publicado.
-- Filtros de campo semántico, tipo de variación y presencia de video: los dos
-  primeros no tienen un campo canónico equivalente; el tercero no es honesto
-  mientras la proyección no exponga media dedicada.
+- Filtros de campo semántico y tipo de variación: no tienen un campo canónico
+  equivalente. “Solo video” sí se recuperó al incorporar la media canónica de
+  `alternative_media` en la proyección.
 - Pestañas sociolingüísticas y “otros datos”: frecuencia, geografía, registro,
   etimología e iconicidad no existen en la proyección nueva.
-- El grafo SVG inferido desde la nomenclatura legacy: las relaciones nuevas se
-  muestran como lista explícita, sin inferir transitividad.
-- Placeholders de video: no se muestra un reproductor cuando el snapshot no
-  contiene media. Los enlaces canónicos de ocurrencias sí se presentan.
+- Se descartó la inferencia del grafo desde nomenclatura. La red SVG se conserva,
+  pero se construye solo con relaciones fonológicas current explícitas.
+- Placeholders de video: no se muestra un reproductor cuando la alternativa no
+  tiene un `media_asset` de tipo `video/*`.
 
 ## Mapeo de modelos
 
@@ -50,7 +50,7 @@ añadió un remote y el repositorio no es submódulo de esta aplicación.
 | fuente plana | `occurrence.source` |
 | composición | `alternative.morphology` y `components` |
 | diferencia fonológica | `concept.relations`, únicamente relaciones current explícitas |
-| video legacy | sin equivalente en la proyección actual; no se inventa |
+| video legacy | `alternative_media → media_asset`; nunca `occurrence_media` |
 
 El catálogo interno renderiza `build_catalog_projection(connection)`. El
 externo renderiza exclusivamente `json.loads(publication.snapshot_json)`. Los

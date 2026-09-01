@@ -7,6 +7,12 @@ from database import conectar
 
 
 ROLES = ("analyst", "reviewer", "master")
+CATALOG_ENDPOINTS = frozenset({
+    "catalog.internal_catalog", "catalog.internal_concept", "catalog.internal_alternative",
+    "catalog.external_catalog", "catalog.external_version", "catalog.external_concept",
+    "catalog.external_version_concept", "catalog.external_alternative",
+    "catalog.external_version_alternative",
+})
 ROLE_LEVEL = {role: index for index, role in enumerate(ROLES, 1)}
 ENV_BY_ROLE = {
     "analyst": "LESICO_ANALYST_ROUTE",
@@ -113,6 +119,7 @@ def install_access_context(app):
             return response
         role = getattr(g, "current_access_role", None)
         if role is None: return response
+        if request.endpoint in CATALOG_ENDPOINTS: return response
         db = conectar()
         try:
             collaborators = db.execute(
@@ -135,7 +142,7 @@ def install_access_context(app):
                 if role == "master" else ""
         toolbar = f'''<aside id="lesico-internal-context" data-access-role="{role}">
 <label>Trabajando como: <select id="lesico-collaborator"><option value="">Sin identificar</option>{options}</select></label>
-<nav><section><strong>ANÁLISIS</strong> <a href="{root}/trabajo">Inicio</a> <a href="{root}/ocurrencias">Ocurrencias</a> <a href="{root}/borradores">Borradores</a> <a href="{root}/conceptos">Conceptos / Alternativas</a> <a href="{root}/aportes">Aportes</a></section><section><strong>CATÁLOGO</strong> <a href="{root}/catalogo-interno">Catálogo interno</a></section>{review}{admin}</nav></aside>
+<nav><section><strong>ANÁLISIS</strong> <a href="{root}/trabajo">Inicio</a> <a href="{root}/ocurrencias">Ocurrencias</a> <a href="{root}/borradores">Borradores</a> <a href="{root}/conceptos">Conceptos / Alternativas</a> <a href="{root}/aportes">Aportes</a></section><section><strong>CATÁLOGO</strong> <a href="{root}/catalogo-interno" target="_blank" rel="noopener">Catálogo interno</a></section>{review}{admin}</nav></aside>
 <script>document.addEventListener('DOMContentLoaded',function(){{const key='lesico-collaborator-id';const s=document.getElementById('lesico-collaborator');const saved=localStorage.getItem(key)||'';if([...s.options].some(o=>o.value===saved))s.value=saved;else localStorage.removeItem(key);s.addEventListener('change',()=>localStorage.setItem(key,s.value));document.querySelectorAll('form[method="post"],form[method="POST"]').forEach(f=>{{let i=f.querySelector('input[name="collaborator_id"]');if(!i){{i=document.createElement('input');i.type='hidden';i.name='collaborator_id';f.appendChild(i)}}f.addEventListener('submit',()=>i.value=s.value);i.value=s.value}})}});</script>'''
         body = response.get_data(as_text=True)
         body_start = body.find("<body")

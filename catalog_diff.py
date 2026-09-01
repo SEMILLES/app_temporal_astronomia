@@ -50,7 +50,9 @@ def build_catalog_diff(previous, current):
         summary["alternatives_removed"].append(_label(old_alt[identifier][1], "alternative_id", "name"))
     for identifier in sorted(old_alt.keys() & new_alt.keys()):
         old_parent, old = old_alt[identifier]; new_parent, new = new_alt[identifier]
-        if (old_parent, old.get("working_label"), old.get("name")) != (new_parent, new.get("working_label"), new.get("name")):
+        if ((old_parent, old.get("working_label"), old.get("name")) !=
+                (new_parent, new.get("working_label"), new.get("name")) or
+                old.get("media", []) != new.get("media", [])):
             summary["alternatives_changed"].append({"alternative_id": identifier, "name": new.get("name")})
         if old.get("morphology") != new.get("morphology"):
             summary["morphology_changed"].append({"alternative_id": identifier, "name": new.get("name")})

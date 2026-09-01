@@ -4,6 +4,7 @@ from flask import Blueprint, abort, g, redirect, render_template, request, url_f
 
 from access_control import requires_master
 from catalog_diff import summary_totals
+from catalog_presentation import relation_edges, variation_groups, variation_network
 from catalog_publication import (IdenticalPublication, PublicationBlocked,
                                  PublicationError, publication_preview,
                                  publish_catalog)
@@ -12,6 +13,12 @@ from database import conectar
 from conflict_presentation import local_timestamp
 
 catalog_bp = Blueprint("catalog", __name__)
+
+
+def _presentation(concept):
+    return {"variation_groups": variation_groups(concept) if concept else [],
+            "relation_edges": relation_edges(concept) if concept else [],
+            "variation_network": variation_network(concept) if concept else None}
 
 
 def _matches(concept, query):
@@ -68,6 +75,7 @@ def internal_catalog():
         concepts=concepts,
         query=raw_query,
         selected_concept=None, selected_alternative=None, selected_relations=[],
+        **_presentation(None),
         **_banner_context(blocking, non_blocking),
     )
 
@@ -81,10 +89,12 @@ def internal_concept(concept_id):
     )
     if concept is None:
         abort(404)
+    alternative = concept["alternatives"][0] if concept["alternatives"] else None
     return render_template(
         "catalogo_lesico.html", catalog_kind="internal",
         concepts=projection["concepts"], query="", selected_concept=concept,
-        selected_alternative=None, selected_relations=[],
+        selected_alternative=alternative, selected_relations=[],
+        **_presentation(concept),
         **_banner_context(blocking, non_blocking),
     )
 
@@ -112,6 +122,7 @@ def internal_alternative(alternative_id):
         "catalogo_lesico.html", catalog_kind="internal",
         concepts=projection["concepts"], query="", selected_concept=concept,
         selected_alternative=alternative, selected_relations=relations,
+        **_presentation(concept),
         **_banner_context(blocking, non_blocking),
     )
 
@@ -163,9 +174,11 @@ def _external_concept(version_number, concept_id):
     publication, latest, projection = _external_context(version_number)
     concept = next((c for c in projection["concepts"] if c["concept_id"] == concept_id), None)
     if concept is None: abort(404)
+    alternative = concept["alternatives"][0] if concept["alternatives"] else None
     return render_template("catalogo_lesico.html", catalog_kind="external",
         publication=publication, latest=latest, concepts=projection["concepts"], query="",
-        selected_concept=concept, selected_alternative=None, selected_relations=[],
+        selected_concept=concept, selected_alternative=alternative, selected_relations=[],
+        **_presentation(concept),
         historical=publication["version_number"] != latest)
 
 
@@ -186,6 +199,7 @@ def _external_alternative(version_number, alternative_id):
     return render_template("catalogo_lesico.html", catalog_kind="external",
         publication=publication, latest=latest, concepts=projection["concepts"], query="",
         selected_concept=concept, selected_alternative=alternative, selected_relations=relations,
+        **_presentation(concept),
         historical=publication["version_number"] != latest)
 
 
