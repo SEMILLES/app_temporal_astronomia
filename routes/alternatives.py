@@ -5,6 +5,11 @@ import re
 
 from database import conectar
 from activity import record_activity
+from access_control import requires_reviewer
+from alternative_video_service import (AlternativeVideoError, add_video,
+                                       get_current_video, get_video_history,
+                                       replace_video, retire_video)
+from youtube_media import InvalidYouTubeURL
 
 
 alternatives_bp = Blueprint("alternatives", __name__)
@@ -176,6 +181,9 @@ def alternativas(concept_id):
 
     alternative_groups = list(alternatives.values())
     for group in alternative_groups:
+        group["current_video"] = get_current_video(
+            conexion, group["alternative"]["alternative_id"]
+        )
         group["relations"].sort(
             key=lambda relation: relation["alternative_id"]
         )
@@ -185,8 +193,39 @@ def alternativas(concept_id):
     return render_template(
         "alternativas.html",
         concepto=concepto,
-        alternative_groups=alternative_groups
+        alternative_groups=alternative_groups,
+        access_role=getattr(g,"current_access_role",None)
     )
+
+
+@alternatives_bp.route("/alternativas/<int:alternative_id>/video")
+@requires_reviewer
+def gestionar_video(alternative_id):
+    conexion=conectar()
+    alternative=conexion.execute("""SELECT a.alternative_id,a.concept_id,a.working_label,c.preferred_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.alternative_id=?""",(alternative_id,)).fetchone()
+    if alternative is None: conexion.close(); abort(404)
+    current=get_current_video(conexion,alternative_id); history=get_video_history(conexion,alternative_id); conexion.close()
+    return render_template("gestionar_video_alternativa.html",alternative=alternative,current_video=current,video_history=history,error=request.args.get("error"))
+
+
+@alternatives_bp.route("/alternativas/<int:alternative_id>/video",methods=["POST"])
+@requires_reviewer
+def actualizar_video(alternative_id):
+    action=request.form.get("action",""); actor={"access_role":g.current_access_role,"collaborator_id":request.form.get("collaborator_id")}
+    conexion=conectar()
+    try:
+        if action=="add": add_video(conexion,alternative_id,request.form.get("youtube_url"),actor)
+        elif action=="replace":
+            if request.form.get("confirm")!="yes": raise AlternativeVideoError("Confirme el reemplazo del video vigente.")
+            replace_video(conexion,alternative_id,request.form.get("youtube_url"),actor)
+        elif action=="retire":
+            if request.form.get("confirm")!="yes": raise AlternativeVideoError("Confirme el retiro del video vigente.")
+            retire_video(conexion,alternative_id,actor,request.form.get("comment"))
+        else: raise AlternativeVideoError("Acción de video no válida.")
+    except (AlternativeVideoError,InvalidYouTubeURL,sqlite3.IntegrityError) as error:
+        return str(error),400
+    finally: conexion.close()
+    return redirect(url_for("alternatives.gestionar_video",alternative_id=alternative_id))
 
 
 @alternatives_bp.route(

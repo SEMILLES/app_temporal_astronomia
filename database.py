@@ -385,16 +385,29 @@ def crear_esquema(conexion):
             ON occurrence_media(media_asset_id);
 
         CREATE TABLE IF NOT EXISTS alternative_media (
+            alternative_media_id INTEGER PRIMARY KEY AUTOINCREMENT,
             alternative_id INTEGER NOT NULL,
             media_asset_id INTEGER NOT NULL,
             role TEXT NOT NULL DEFAULT 'internal_reference'
-                CHECK (role = 'internal_reference'),
+                CHECK (role IN ('internal_reference','catalog_video')),
+            is_current INTEGER NOT NULL DEFAULT 1 CHECK(is_current IN (0,1)),
+            supersedes_alternative_media_id INTEGER,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             created_by TEXT,
-            PRIMARY KEY (alternative_id, media_asset_id),
+            retired_at TEXT,
+            created_by_collaborator_id INTEGER,
+            created_by_name_snapshot TEXT,
+            created_access_role TEXT CHECK(created_access_role IN ('reviewer','master')),
             FOREIGN KEY (alternative_id) REFERENCES alternative(alternative_id),
-            FOREIGN KEY (media_asset_id) REFERENCES media_asset(media_asset_id)
+            FOREIGN KEY (media_asset_id) REFERENCES media_asset(media_asset_id),
+            FOREIGN KEY (supersedes_alternative_media_id) REFERENCES alternative_media(alternative_media_id),
+            FOREIGN KEY (created_by_collaborator_id) REFERENCES collaborator(collaborator_id),
+            CHECK((is_current=1 AND retired_at IS NULL) OR (is_current=0 AND retired_at IS NOT NULL)),
+            CHECK(role!='catalog_video' OR created_access_role IN ('reviewer','master'))
         );
+        CREATE UNIQUE INDEX IF NOT EXISTS one_current_catalog_video_per_alternative
+            ON alternative_media(alternative_id) WHERE role='catalog_video' AND is_current=1;
+        CREATE INDEX IF NOT EXISTS idx_alternative_media_asset ON alternative_media(media_asset_id);
 
         CREATE TABLE IF NOT EXISTS concept_proposal (
             concept_proposal_id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -234,6 +234,8 @@
                         {% endif %}
                     </section>
 
+                    <section class="alternative-section"><h3>Video canónico</h3>{% if group.current_video %}<p><a href="{{ group.current_video.watch_url }}" target="_blank" rel="noopener noreferrer">{{ group.current_video.watch_url }}</a></p>{% else %}<p>Sin video canónico vigente.</p>{% endif %}{% if access_role in ('reviewer','master') %}<p class="alternative-actions"><a href="{{ url_for('alternatives.gestionar_video',alternative_id=alternativa['alternative_id']) }}">Gestionar video canónico</a></p>{% endif %}</section>
+
                 </article>
             {% endfor %}
         {% else %}

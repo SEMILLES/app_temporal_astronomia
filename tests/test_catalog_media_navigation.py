@@ -10,6 +10,7 @@ from catalog_presentation import (relation_edges, variation_groups,
                                   variation_network_groups)
 from catalog_projection import build_catalog_projection
 from catalog_publication import publish_catalog, verify_publication_hash
+from alternative_video_service import replace_video
 from database import crear_esquema
 from routes.catalog import catalog_bp
 
@@ -25,8 +26,8 @@ class CatalogMediaNavigationTests(unittest.TestCase):
         db.execute("INSERT INTO occurrence(source_id,original_gloss,hyperlink) VALUES(1,'GLOSA','https://example.test/no-es-video')")
         db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,2)")
         db.executemany("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter,is_current) VALUES(?,?,?,?)",((1,2,"CM_1",1),(1,2,"UB_2",1),(2,3,"MOV_1",1),(1,3,"HISTORICA",0)))
-        db.executemany("INSERT INTO media_asset(storage_backend,storage_key,mime_type,origin_kind) VALUES(?,?,?,?)",(("external","https://media.test/uno.mp4","video/mp4","external_reference"),("external","https://media.test/captura.mp4","video/mp4","external_reference"),("external","https://media.test/foto.jpg","image/jpeg","external_reference")))
-        db.execute("INSERT INTO alternative_media(alternative_id,media_asset_id) VALUES(1,1)")
+        db.executemany("INSERT INTO media_asset(storage_backend,storage_key,mime_type,origin_kind) VALUES(?,?,?,?)",(("external","https://www.youtube.com/watch?v=abcdefghijk","video/youtube","external_reference"),("external","https://media.test/captura.mp4","video/mp4","external_reference"),("external","https://media.test/foto.jpg","image/jpeg","external_reference")))
+        db.execute("INSERT INTO alternative_media(alternative_id,media_asset_id,role,created_access_role) VALUES(1,1,'catalog_video','reviewer')")
         db.execute("INSERT INTO occurrence_media(occurrence_id,media_asset_id) VALUES(1,2)")
         db.execute("INSERT INTO alternative_media(alternative_id,media_asset_id) VALUES(2,3)")
         db.commit(); db.close()
@@ -43,12 +44,12 @@ class CatalogMediaNavigationTests(unittest.TestCase):
     def test_projection_uses_only_alternative_media_deterministically(self):
         db=self.connect(); one=build_catalog_projection(db); two=build_catalog_projection(db); db.close()
         self.assertEqual(one,two); alternatives=next(c for c in one["concepts"] if c["preferred_label"]=="UNO")["alternatives"]
-        self.assertEqual([m["storage_key"] for m in alternatives[0]["media"]],["https://media.test/uno.mp4"])
-        self.assertEqual(alternatives[1]["media"][0]["mime_type"],"image/jpeg")
+        self.assertEqual([m["storage_key"] for m in alternatives[0]["media"]],["https://www.youtube.com/watch?v=abcdefghijk"])
+        self.assertFalse(alternatives[1]["media"])
         self.assertNotIn("captura.mp4",json.dumps(one)); self.assertNotIn("occurrence_media",json.dumps(one))
     def test_snapshot_freezes_media_and_new_publication_detects_change(self):
         db=self.connect(); first=publish_catalog(db,publication_comment="v1",actor_context={"access_role":"master"}); frozen=first["snapshot_json"]
-        db.execute("INSERT INTO media_asset(storage_backend,storage_key,mime_type) VALUES('external','https://media.test/nuevo.mp4','video/mp4')"); db.execute("INSERT INTO alternative_media(alternative_id,media_asset_id) VALUES(1,4)"); db.commit()
+        replace_video(db,1,"https://youtu.be/lmnopqrstuv",{"access_role":"reviewer"})
         current=build_catalog_projection(db); self.assertNotEqual(json.loads(frozen),current)
         second=publish_catalog(db,publication_comment="v2 media",actor_context={"access_role":"master"}); db.close()
         self.assertEqual(first["version_number"],1); self.assertEqual(second["version_number"],2); self.assertTrue(verify_publication_hash(first)); self.assertEqual(first["snapshot_json"],frozen)
@@ -81,7 +82,7 @@ class CatalogMediaNavigationTests(unittest.TestCase):
         self.assertIn("Alternativa léxica 1",html); self.assertIn("Alternativa léxica 2",html); self.assertIn('class="grupo-red grupo-red-0"',html); self.assertIn('class="grupo-red grupo-red-1"',html)
         self.assertIn(">CM_1</text>",html); self.assertIn(">UB_2</text>",html); self.assertNotIn("HISTORICA",html); self.assertIn("data-alternative-select",html)
         self.assertLess(html.index('class="linea-red"'),html.index('class="etiqueta-arista"'))
-        self.assertIn("<video controls",html); self.assertIn("https://media.test/uno.mp4",html); self.assertNotIn("Video regrabado no disponible",html)
+        self.assertIn("<iframe",html); self.assertIn("https://www.youtube.com/embed/abcdefghijk",html); self.assertNotIn("Video regrabado no disponible",html)
         self.assertNotIn("lesico-internal-context",html); self.assertNotIn("Trabajando como",html)
         self.assertEqual(self.client.get("/catalogo-interno").status_code,404)
         work=self.client.get("/ana/trabajo").get_data(as_text=True); self.assertIn('target="_blank"',work); self.assertIn('rel="noopener"',work)

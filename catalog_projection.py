@@ -1,5 +1,8 @@
 """Deterministic, read-only projection of the current canonical catalog."""
 
+from youtube_media import (InvalidYouTubeURL, parse_youtube_url,
+                           youtube_embed_url, youtube_watch_url)
+
 GRAMMAR_FIELDS = ("gender", "plural", "agentive", "conjugated_form", "negation")
 
 
@@ -95,7 +98,7 @@ def project_morphology(connection, alternative_id, names):
 
 
 def project_alternative_media(connection, alternative_id):
-    """Project canonical alternative media; occurrence analysis media is excluded."""
+    """Project only the current, explicitly canonical YouTube video."""
     rows = connection.execute("""
         SELECT m.media_asset_id,m.storage_backend,m.storage_key,
                m.original_filename,m.mime_type,m.file_size,m.checksum,
@@ -103,14 +106,21 @@ def project_alternative_media(connection, alternative_id):
                am.role
         FROM alternative_media AS am
         JOIN media_asset AS m USING(media_asset_id)
-        WHERE am.alternative_id=?
+        WHERE am.alternative_id=? AND am.role='catalog_video' AND am.is_current=1
         ORDER BY m.media_asset_id,m.storage_key
     """, (alternative_id,))
     fields = ("media_asset_id", "storage_backend", "storage_key",
               "original_filename", "mime_type", "file_size", "checksum",
               "origin_kind", "origin_label", "origin_locator",
               "provenance_note", "role")
-    return [{field: row[field] for field in fields} for row in rows]
+    result=[]
+    for row in rows:
+        try: video_id=parse_youtube_url(row["storage_key"])
+        except InvalidYouTubeURL: continue
+        item={field:row[field] for field in fields}
+        item.update(video_id=video_id,watch_url=youtube_watch_url(video_id),embed_url=youtube_embed_url(video_id))
+        result.append(item)
+    return result
 
 
 def build_catalog_projection(connection):
