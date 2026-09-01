@@ -1,4 +1,4 @@
-import json, sqlite3, tempfile, unittest
+import copy, json, math, sqlite3, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
 
@@ -61,6 +61,15 @@ class CatalogMediaNavigationTests(unittest.TestCase):
         self.assertFalse(any(edge["low_id"]==1 and edge["high_id"]==3 for edge in edges))
         cards=variation_network_groups(concept); self.assertEqual(len(cards),2)
         self.assertEqual([card["color_index"] for card in cards],[0,1]); self.assertEqual(len(cards[1]["nodes"]),1); self.assertFalse(cards[1]["edges"])
+        connected=cards[0]; distances=[math.hypot(a["x"]-b["x"],a["y"]-b["y"]) for index,a in enumerate(connected["nodes"]) for b in connected["nodes"][index+1:]]
+        self.assertGreaterEqual(min(distances),135); self.assertGreater(connected["height"],150)
+        for edge in connected["edges"]:
+            self.assertGreater(min(math.hypot(edge["label_x"]-node["x"],edge["label_y"]-node["y"]) for node in connected["nodes"]),60)
+        two_node=copy.deepcopy(concept); two_node["alternatives"]=two_node["alternatives"][:2]; two_node["relations"]=two_node["relations"][:2]
+        two_card=variation_network_groups(two_node)[0]; self.assertEqual((two_card["width"],two_card["height"]),(440,170)); self.assertEqual(abs(two_card["nodes"][0]["x"]-two_card["nodes"][1]["x"]),240)
+        renamed=copy.deepcopy(two_node); renamed["alternatives"][0]["working_label"]="ZZZ"; renamed["alternatives"][1]["working_label"]="AAA"
+        coordinates=lambda card:{node["alternative"]["alternative_id"]:(node["x"],node["y"]) for node in card["nodes"]}
+        self.assertEqual(coordinates(two_card),coordinates(variation_network_groups(renamed)[0]))
     def test_video_filter_markup_detail_network_and_standalone(self):
         html=self.client.get("/ana/catalogo-interno/conceptos/1").get_data(as_text=True)
         self.assertIn("Solo video",html); self.assertIn('data-has-video="true"',html); self.assertIn('data-has-video="false"',html)
