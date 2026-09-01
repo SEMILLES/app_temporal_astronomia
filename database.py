@@ -46,6 +46,8 @@ REQUIRED_APPLICATION_TABLES = frozenset({
     "conflict",
     "conflict_subject",
     "conflict_resolution_attempt",
+    "catalog_publication",
+    "publication_open_conflict",
 })
 
 
@@ -746,4 +748,28 @@ def crear_esquema(conexion):
         CREATE INDEX IF NOT EXISTS idx_conflict_status ON conflict(status,severity,origin_kind,created_at);
         CREATE INDEX IF NOT EXISTS idx_conflict_subject_entity ON conflict_subject(subject_type,subject_id);
         CREATE INDEX IF NOT EXISTS idx_conflict_attempt_conflict ON conflict_resolution_attempt(conflict_id,attempted_at);
+        CREATE TABLE IF NOT EXISTS catalog_publication (
+            publication_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version_number INTEGER NOT NULL UNIQUE CHECK(version_number>=1),
+            snapshot_json TEXT NOT NULL, snapshot_sha256 TEXT NOT NULL UNIQUE CHECK(length(snapshot_sha256)=64),
+            change_summary_json TEXT NOT NULL, publication_comment TEXT NOT NULL CHECK(length(trim(publication_comment))>0),
+            published_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            published_by_collaborator_id INTEGER, published_by_name_snapshot TEXT,
+            published_access_role TEXT NOT NULL CHECK(published_access_role='master'),
+            concept_count INTEGER NOT NULL CHECK(concept_count>=0), alternative_count INTEGER NOT NULL CHECK(alternative_count>=0),
+            occurrence_count INTEGER NOT NULL CHECK(occurrence_count>=0), relation_count INTEGER NOT NULL CHECK(relation_count>=0),
+            FOREIGN KEY(published_by_collaborator_id) REFERENCES collaborator(collaborator_id)
+        );
+        CREATE TABLE IF NOT EXISTS publication_open_conflict (
+            publication_open_conflict_id INTEGER PRIMARY KEY AUTOINCREMENT, publication_id INTEGER NOT NULL, conflict_id INTEGER,
+            conflict_type_snapshot TEXT, description_snapshot TEXT NOT NULL,
+            severity_snapshot TEXT NOT NULL CHECK(severity_snapshot='non_blocking'), subject_signature_snapshot TEXT,
+            FOREIGN KEY(publication_id) REFERENCES catalog_publication(publication_id), FOREIGN KEY(conflict_id) REFERENCES conflict(conflict_id),
+            UNIQUE(publication_id,conflict_id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_publication_open_conflict_publication ON publication_open_conflict(publication_id);
+        CREATE TRIGGER IF NOT EXISTS immutable_catalog_publication_update BEFORE UPDATE ON catalog_publication BEGIN SELECT RAISE(ABORT,'catalog publications are immutable'); END;
+        CREATE TRIGGER IF NOT EXISTS immutable_catalog_publication_delete BEFORE DELETE ON catalog_publication BEGIN SELECT RAISE(ABORT,'catalog publications are immutable'); END;
+        CREATE TRIGGER IF NOT EXISTS immutable_publication_conflict_update BEFORE UPDATE ON publication_open_conflict BEGIN SELECT RAISE(ABORT,'publication conflict snapshots are immutable'); END;
+        CREATE TRIGGER IF NOT EXISTS immutable_publication_conflict_delete BEFORE DELETE ON publication_open_conflict BEGIN SELECT RAISE(ABORT,'publication conflict snapshots are immutable'); END;
     """)

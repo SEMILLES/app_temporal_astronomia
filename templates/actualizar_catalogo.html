@@ -1,0 +1,6 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><title>Actualizar catálogo</title><body><h1>Actualizar catálogo</h1>
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}<h2>Previsualización de v{{ preview.next_version }}</h2>
+{% if preview.blocking %}<p><strong>No se puede actualizar el catálogo mientras existan conflictos que bloquean publicación.</strong></p><ul>{% for conflict in preview.blocking %}<li>{{ conflict.description }}</li>{% endfor %}</ul><p><a href="{{ url_for('conflicts.conflicts_list') }}">Ver conflictos</a></p>
+{% else %}<p>Esta versión se publicará con {{ preview.non_blocking|length }} conflictos no bloqueantes abiertos.</p>{% if preview.identical %}<p>El catálogo interno no contiene cambios respecto de la última versión publicada.</p>{% endif %}
+<h2>Resumen de cambios</h2>{% if totals %}<ul>{% for key,count in totals.items() %}<li>{{ key|replace('_',' ') }}: {{ count }}</li>{% endfor %}</ul>{% else %}<p>Sin cambios léxicos.</p>{% endif %}
+{% if not preview.identical %}<form method="post"><label>Comentario de publicación <textarea name="publication_comment" required></textarea></label><button type="submit">Publicar v{{ preview.next_version }}</button></form>{% endif %}{% endif %}</body></html>

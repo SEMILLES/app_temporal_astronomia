@@ -15,6 +15,7 @@ from routes.conflicts import conflicts_bp
 from routes.catalog import catalog_bp
 from access_control import install_access_context
 from source_period import format_source_period
+from conflict_presentation import local_timestamp
 
 
 app = Flask(__name__)
@@ -23,6 +24,7 @@ app.config["SECRET_KEY"] = os.environ.get("LESICO_SECRET_KEY")
 app.jinja_env.filters["human_concept_label"] = human_concept_label
 app.jinja_env.filters["alternative_display_label"] = alternative_display_label
 app.jinja_env.filters["source_period"] = format_source_period
+app.jinja_env.filters["local_timestamp"] = local_timestamp
 
 
 # Registrar grupos de rutas

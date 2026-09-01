@@ -1,5 +1,12 @@
-from flask import Blueprint, abort, g, render_template, request
+import json
 
+from flask import Blueprint, abort, g, redirect, render_template, request, url_for
+
+from access_control import requires_master
+from catalog_diff import summary_totals
+from catalog_publication import (IdenticalPublication, PublicationBlocked,
+                                 PublicationError, publication_preview,
+                                 publish_catalog)
 from catalog_projection import build_catalog_projection
 from database import conectar
 
@@ -105,3 +112,110 @@ def internal_alternative(alternative_id):
         relations=relations,
         **_banner_context(blocking, non_blocking),
     )
+
+
+def _publication(version_number=None):
+    db = conectar()
+    try:
+        if version_number is None:
+            row = db.execute("SELECT * FROM catalog_publication ORDER BY version_number DESC LIMIT 1").fetchone()
+        else:
+            row = db.execute("SELECT * FROM catalog_publication WHERE version_number=?", (version_number,)).fetchone()
+        latest = db.execute("SELECT max(version_number) FROM catalog_publication").fetchone()[0]
+        return (dict(row) if row else None), latest
+    finally: db.close()
+
+
+def _external_context(version_number=None):
+    publication, latest = _publication(version_number)
+    if version_number is not None and publication is None: abort(404)
+    projection = json.loads(publication["snapshot_json"]) if publication else {"concepts": []}
+    return publication, latest, projection
+
+
+@catalog_bp.get("/catalogo")
+def external_catalog():
+    publication, latest, projection = _external_context()
+    query = (request.args.get("q") or "").strip()
+    concepts = [c for c in projection["concepts"] if _matches(c, query.casefold())]
+    return render_template("catalogo_externo.html", publication=publication, latest=latest,
+                           concepts=concepts, query=query, historical=False)
+
+
+@catalog_bp.get("/catalogo/v<int:version_number>")
+def external_version(version_number):
+    publication, latest, projection = _external_context(version_number)
+    query = (request.args.get("q") or "").strip()
+    return render_template("catalogo_externo.html", publication=publication, latest=latest,
+        concepts=[c for c in projection["concepts"] if _matches(c, query.casefold())], query=query,
+        historical=version_number != latest)
+
+
+def _external_concept(version_number, concept_id):
+    publication, latest, projection = _external_context(version_number)
+    concept = next((c for c in projection["concepts"] if c["concept_id"] == concept_id), None)
+    if concept is None: abort(404)
+    return render_template("catalogo_externo_concepto.html", publication=publication, latest=latest,
+                           concept=concept, historical=publication["version_number"] != latest)
+
+
+@catalog_bp.get("/catalogo/conceptos/<int:concept_id>")
+def external_concept(concept_id): return _external_concept(None, concept_id)
+@catalog_bp.get("/catalogo/v<int:version_number>/conceptos/<int:concept_id>")
+def external_version_concept(version_number, concept_id): return _external_concept(version_number, concept_id)
+
+
+def _external_alternative(version_number, alternative_id):
+    publication, latest, projection = _external_context(version_number)
+    concept = alternative = None
+    for candidate in projection["concepts"]:
+        alternative = next((a for a in candidate["alternatives"] if a["alternative_id"] == alternative_id), None)
+        if alternative: concept = candidate; break
+    if alternative is None: abort(404)
+    relations = [r for r in concept["relations"] if r["alternative_relation_id"] in alternative["relation_ids"]]
+    return render_template("catalogo_externo_alternativa.html", publication=publication, latest=latest,
+        concept=concept, alternative=alternative, relations=relations, historical=publication["version_number"] != latest)
+
+
+@catalog_bp.get("/catalogo/alternativas/<int:alternative_id>")
+def external_alternative(alternative_id): return _external_alternative(None, alternative_id)
+@catalog_bp.get("/catalogo/v<int:version_number>/alternativas/<int:alternative_id>")
+def external_version_alternative(version_number, alternative_id): return _external_alternative(version_number, alternative_id)
+
+
+@catalog_bp.get("/actualizar-catalogo")
+@requires_master
+def publication_update():
+    db = conectar()
+    try: preview = publication_preview(db, {"access_role": g.current_access_role})
+    finally: db.close()
+    return render_template("actualizar_catalogo.html", preview=preview, totals=summary_totals(preview["summary"]), error=None)
+
+
+@catalog_bp.post("/actualizar-catalogo")
+@requires_master
+def publish_catalog_route():
+    db = conectar()
+    try:
+        try:
+            publication = publish_catalog(db, publication_comment=request.form.get("publication_comment"),
+                actor_context={"access_role": g.current_access_role, "collaborator_id": request.form.get("collaborator_id")})
+            return redirect(url_for("catalog.publications", published=publication["version_number"]))
+        except (PublicationError, PublicationBlocked, IdenticalPublication) as error:
+            preview = publication_preview(db, {"access_role": g.current_access_role})
+            return render_template("actualizar_catalogo.html", preview=preview,
+                totals=summary_totals(preview["summary"]), error=str(error)), 400
+    finally: db.close()
+
+
+@catalog_bp.get("/publicaciones")
+@requires_master
+def publications():
+    db = conectar()
+    try:
+        rows = [dict(r) for r in db.execute("""SELECT p.*,(SELECT count(*) FROM publication_open_conflict pc WHERE pc.publication_id=p.publication_id) conflict_count FROM catalog_publication p ORDER BY version_number DESC""")]
+        for row in rows:
+            row["summary"] = summary_totals(json.loads(row["change_summary_json"]))
+            row["conflicts"] = [dict(c) for c in db.execute("SELECT * FROM publication_open_conflict WHERE publication_id=? ORDER BY publication_open_conflict_id", (row["publication_id"],))]
+    finally: db.close()
+    return render_template("publicaciones.html", publications=rows)

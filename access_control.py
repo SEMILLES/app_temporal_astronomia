@@ -79,6 +79,12 @@ def install_access_context(app):
     def load_access_role():
         role = request.environ.get("LESICO_ACCESS_ROLE") or None
         g.current_access_role = role
+        if request.endpoint in {
+            "catalog.external_catalog", "catalog.external_version",
+            "catalog.external_concept", "catalog.external_version_concept",
+            "catalog.external_alternative", "catalog.external_version_alternative",
+        }:
+            return
         if role is None:
             abort(404)
         reviewer_endpoints = {
@@ -91,6 +97,8 @@ def install_access_context(app):
         master_endpoints = {
             "collaborators.collaborators", "collaborators.create_collaborator",
             "collaborators.rename_collaborator",
+            "catalog.publication_update", "catalog.publish_catalog_route",
+            "catalog.publications",
         }
         required = "master" if request.endpoint in master_endpoints else (
             "reviewer" if request.endpoint in reviewer_endpoints else "analyst"
@@ -120,7 +128,9 @@ def install_access_context(app):
                   f'<a href="{root}/conflictos">Conflictos</a></section>') \
                  if ROLE_LEVEL[role] >= ROLE_LEVEL["reviewer"] else ""
         admin = (f'<section><strong>ADMINISTRACIÓN</strong> '
-                 f'<a href="{root}/colaboradores">Colaboradores</a></section>') \
+                 f'<a href="{root}/colaboradores">Colaboradores</a> '
+                 f'<a href="{root}/actualizar-catalogo">Actualizar catálogo</a> '
+                 f'<a href="{root}/publicaciones">Publicaciones</a></section>') \
                 if role == "master" else ""
         toolbar = f'''<aside id="lesico-internal-context" data-access-role="{role}">
 <label>Trabajando como: <select id="lesico-collaborator"><option value="">Sin identificar</option>{options}</select></label>

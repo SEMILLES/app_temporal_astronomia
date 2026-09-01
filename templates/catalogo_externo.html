@@ -1,0 +1,5 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><title>Catálogo público</title><body><h1>Catálogo público</h1>
+{% if not publication %}<p>Aún no hay una versión publicada del catálogo.</p>{% else %}{% include '_external_version.html' %}
+<form method="get"><label>Buscar <input name="q" value="{{ query }}" placeholder="Concepto, alternativa o glosa"></label><button>Buscar</button></form><ul>
+{% for concept in concepts %}<li><a href="{{ url_for('catalog.external_version_concept',version_number=publication.version_number,concept_id=concept.concept_id) if historical else url_for('catalog.external_concept',concept_id=concept.concept_id) }}">{{ concept.preferred_label }}</a> — {{ concept.alternative_count }} alternativas · {{ concept.occurrence_count }} ocurrencias</li>{% else %}<li>No hay resultados.</li>{% endfor %}</ul>
+<details><summary>Información de publicación</summary><p>{{ publication.publication_comment }}</p><p>SHA-256: <code>{{ publication.snapshot_sha256 }}</code></p></details>{% endif %}</body></html>
