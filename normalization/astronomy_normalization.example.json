@@ -1,0 +1,12 @@
+{
+  "legacy_grammar_placeholders": {
+    "agentive": ["LEGACY_UNANALYZED"],
+    "conjugated_form": ["LEGACY_UNANALYZED"]
+  },
+  "sources": [
+    {
+      "match": {"legacy_source_code": "EXACT_PRIVATE_CODE"},
+      "year": 2000
+    }
+  ]
+}
