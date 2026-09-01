@@ -9,6 +9,7 @@ from catalog_publication import (IdenticalPublication, PublicationBlocked,
                                  publish_catalog)
 from catalog_projection import build_catalog_projection
 from database import conectar
+from conflict_presentation import local_timestamp
 
 catalog_bp = Blueprint("catalog", __name__)
 
@@ -63,9 +64,10 @@ def internal_catalog():
         if _matches(concept, raw_query.casefold())
     ]
     return render_template(
-        "catalogo_interno.html",
+        "catalogo_lesico.html", catalog_kind="internal",
         concepts=concepts,
         query=raw_query,
+        selected_concept=None, selected_alternative=None, selected_relations=[],
         **_banner_context(blocking, non_blocking),
     )
 
@@ -80,8 +82,9 @@ def internal_concept(concept_id):
     if concept is None:
         abort(404)
     return render_template(
-        "catalogo_concepto.html",
-        concept=concept,
+        "catalogo_lesico.html", catalog_kind="internal",
+        concepts=projection["concepts"], query="", selected_concept=concept,
+        selected_alternative=None, selected_relations=[],
         **_banner_context(blocking, non_blocking),
     )
 
@@ -106,10 +109,9 @@ def internal_alternative(alternative_id):
         if relation["alternative_relation_id"] in alternative["relation_ids"]
     ]
     return render_template(
-        "catalogo_alternativa.html",
-        concept=concept,
-        alternative=alternative,
-        relations=relations,
+        "catalogo_lesico.html", catalog_kind="internal",
+        concepts=projection["concepts"], query="", selected_concept=concept,
+        selected_alternative=alternative, selected_relations=relations,
         **_banner_context(blocking, non_blocking),
     )
 
@@ -122,7 +124,10 @@ def _publication(version_number=None):
         else:
             row = db.execute("SELECT * FROM catalog_publication WHERE version_number=?", (version_number,)).fetchone()
         latest = db.execute("SELECT max(version_number) FROM catalog_publication").fetchone()[0]
-        return (dict(row) if row else None), latest
+        publication = dict(row) if row else None
+        if publication:
+            publication["published_at_display"] = local_timestamp(publication["published_at"])
+        return publication, latest
     finally: db.close()
 
 
@@ -138,25 +143,30 @@ def external_catalog():
     publication, latest, projection = _external_context()
     query = (request.args.get("q") or "").strip()
     concepts = [c for c in projection["concepts"] if _matches(c, query.casefold())]
-    return render_template("catalogo_externo.html", publication=publication, latest=latest,
-                           concepts=concepts, query=query, historical=False)
+    return render_template("catalogo_lesico.html", catalog_kind="external",
+        publication=publication, latest=latest, concepts=concepts, query=query,
+        historical=False, selected_concept=None, selected_alternative=None, selected_relations=[])
 
 
 @catalog_bp.get("/catalogo/v<int:version_number>")
 def external_version(version_number):
     publication, latest, projection = _external_context(version_number)
     query = (request.args.get("q") or "").strip()
-    return render_template("catalogo_externo.html", publication=publication, latest=latest,
+    return render_template("catalogo_lesico.html", catalog_kind="external",
+        publication=publication, latest=latest,
         concepts=[c for c in projection["concepts"] if _matches(c, query.casefold())], query=query,
-        historical=version_number != latest)
+        historical=version_number != latest, selected_concept=None,
+        selected_alternative=None, selected_relations=[])
 
 
 def _external_concept(version_number, concept_id):
     publication, latest, projection = _external_context(version_number)
     concept = next((c for c in projection["concepts"] if c["concept_id"] == concept_id), None)
     if concept is None: abort(404)
-    return render_template("catalogo_externo_concepto.html", publication=publication, latest=latest,
-                           concept=concept, historical=publication["version_number"] != latest)
+    return render_template("catalogo_lesico.html", catalog_kind="external",
+        publication=publication, latest=latest, concepts=projection["concepts"], query="",
+        selected_concept=concept, selected_alternative=None, selected_relations=[],
+        historical=publication["version_number"] != latest)
 
 
 @catalog_bp.get("/catalogo/conceptos/<int:concept_id>")
@@ -173,8 +183,10 @@ def _external_alternative(version_number, alternative_id):
         if alternative: concept = candidate; break
     if alternative is None: abort(404)
     relations = [r for r in concept["relations"] if r["alternative_relation_id"] in alternative["relation_ids"]]
-    return render_template("catalogo_externo_alternativa.html", publication=publication, latest=latest,
-        concept=concept, alternative=alternative, relations=relations, historical=publication["version_number"] != latest)
+    return render_template("catalogo_lesico.html", catalog_kind="external",
+        publication=publication, latest=latest, concepts=projection["concepts"], query="",
+        selected_concept=concept, selected_alternative=alternative, selected_relations=relations,
+        historical=publication["version_number"] != latest)
 
 
 @catalog_bp.get("/catalogo/alternativas/<int:alternative_id>")

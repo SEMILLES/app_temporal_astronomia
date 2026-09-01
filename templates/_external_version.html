@@ -1,2 +1,0 @@
-{% if publication %}<p><strong>Catálogo público v{{ publication.version_number }}</strong> · Publicado {{ publication.published_at|local_timestamp }}</p>{% endif %}
-{% if historical %}<aside><strong>Está consultando una versión histórica: v{{ publication.version_number }}.</strong> <a href="{{ url_for('catalog.external_catalog') }}">Ver versión más reciente (v{{ latest }})</a></aside>{% endif %}
