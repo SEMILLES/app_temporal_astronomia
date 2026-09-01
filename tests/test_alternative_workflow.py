@@ -24,8 +24,8 @@ class AlternativeWorkflowTests(unittest.TestCase):
         for gloss,source,year,concept in (("A",1,2001,1),("B",1,2002,1),("C",2,None,1),("OTHER",1,2003,2),("NEW",1,1999,1)):
             oid=self.db.execute("INSERT INTO occurrence(source_id,original_gloss,occurrence_year) VALUES(?,?,?)",(source,gloss,year)).lastrowid
             self.db.execute("INSERT INTO occurrence_concept_reference(occurrence_id,concept_id) VALUES(?,?)",(oid,concept))
-        self.db.executemany("INSERT INTO alternative(concept_id,working_label) VALUES(1,?)",[("1",),("2",),("3",)])
-        self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(2,'1')")
+        self.db.executemany("INSERT INTO alternative(concept_id,working_label) VALUES(1,?)",[("1a",),("2a",),("3a",)])
+        self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(2,'1a')")
         for oid,aid in ((1,1),(2,2),(3,3),(4,4)): self.db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(?,?)",(oid,aid))
         self.db.commit()
 
@@ -115,7 +115,7 @@ class AlternativeWorkflowTests(unittest.TestCase):
     def test_review_new_approved_relation_and_rollback(self):
         sid=self.create(phonological_relation_answer="YES",relations=[{"target_alternative_id":1,"phonological_parameter":"CM_1"}]); new=review_as_new(self.db,sid,approve_relations=True,nomenclature_mode="automatic"); self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE alternative_low_id=? OR alternative_high_id=?",(new,new)).fetchone()[0],1)
         sid=self.create(phonological_relation_answer="NO"); before=self.db.execute("SELECT count(*) FROM alternative").fetchone()[0]; self.db.execute("CREATE TRIGGER fail_resolve BEFORE UPDATE ON submission WHEN NEW.status='resolved' BEGIN SELECT RAISE(ABORT,'synthetic'); END"); self.db.commit()
-        labels=dict(self.db.execute("SELECT alternative_id,working_label FROM alternative WHERE concept_id=1 AND retired_at IS NULL")); labels[new+1]="9"
+        labels=dict(self.db.execute("SELECT alternative_id,working_label FROM alternative WHERE concept_id=1 AND retired_at IS NULL")); labels[new+1]="9a"
         with self.assertRaises(sqlite3.IntegrityError): review_as_new(self.db,sid,nomenclature_mode="manual",labels=labels,reason="Manual")
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative").fetchone()[0],before); self.assertEqual(self.db.execute("SELECT status FROM submission WHERE submission_id=?",(sid,)).fetchone()[0],"pending")
 
@@ -151,24 +151,47 @@ class NomenclatureTests(unittest.TestCase):
         self.assertEqual(temporal_reference(2005,2000,2000,"known"),(2005,"occurrence_year")); self.assertEqual(temporal_reference(None,2000,2000,"known"),(2000,"source_single_year")); self.assertEqual(temporal_reference(None,1990,1995,"range"),(1990,"source_range_start"))
     def test_connected_components_and_no_transitive_insert(self):
         a,_=self.add(2000);b,_=self.add(2001);c,_=self.add(2002); self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(?,?,?)",(a,b,"CM_1"));self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(?,?,?)",(b,c,"CM_1"));self.db.commit(); p=calculate_nomenclature_preview(self.db,1);self.assertEqual(set(p["suggestions"].values()),{"1a","1b","1c"});self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation").fetchone()[0],2)
-    def test_tie_missing_and_ids_do_not_break_ties(self):
-        self.add(2000);self.add(2000);p=calculate_nomenclature_preview(self.db,1);self.assertFalse(p["conclusive"]);self.assertIn("Empate", " ".join(p["problems"]))
-        self.db.execute("DELETE FROM assignment");self.db.execute("DELETE FROM alternative");self.db.commit();self.add(None,source=3);self.assertFalse(calculate_nomenclature_preview(self.db,1)["conclusive"])
+    def test_tie_and_missing_use_stable_registration_order(self):
+        a,_=self.add(2000);b,_=self.add(2000);p=calculate_nomenclature_preview(self.db,1);self.assertTrue(p["conclusive"]);self.assertEqual(p["suggestions"],{a:"1a",b:"2a"})
+        self.db.execute("DELETE FROM assignment");self.db.execute("DELETE FROM alternative");self.db.commit();a,_=self.add(None,source=3);b,_=self.add(None,source=3);self.assertEqual(calculate_nomenclature_preview(self.db,1)["suggestions"],{a:"1a",b:"2a"})
     def test_extra_edge_joins_groups_and_affects_whole_concept(self):
-        a,_=self.add(2000,label="1");b,_=self.add(2001,label="2");c,_=self.add(2002,label="3");p=calculate_nomenclature_preview(self.db,1,extra_edges=[(a,c)]);self.assertEqual(p["suggestions"],{a:"1a",c:"1b",b:"2"})
+        a,_=self.add(2000,label="1a");b,_=self.add(2001,label="2a");c,_=self.add(2002,label="3a");p=calculate_nomenclature_preview(self.db,1,extra_edges=[(a,c)]);self.assertEqual(p["suggestions"],{a:"1a",c:"1b",b:"2a"})
 
     def test_virtual_new_alternative_preview_does_not_write(self):
-        a,_=self.add(2000,label="1"); oid=self.db.execute("INSERT INTO occurrence(source_id,occurrence_year) VALUES(1,2001)").lastrowid; self.db.commit(); before=self.db.execute("SELECT count(*) FROM alternative").fetchone()[0]
+        a,_=self.add(2000,label="1a"); oid=self.db.execute("INSERT INTO occurrence(source_id,occurrence_year) VALUES(1,2001)").lastrowid; self.db.commit(); before=self.db.execute("SELECT count(*) FROM alternative").fetchone()[0]
         preview=calculate_nomenclature_preview(self.db,1,extra_edges=[("new",a)],virtual_occurrences={"new":oid})
         self.assertEqual(preview["suggestions"],{a:"1a","new":"1b"}); self.assertEqual(self.db.execute("SELECT count(*) FROM alternative").fetchone()[0],before)
+
+    def test_singleton_groups_always_keep_letters(self):
+        a,_=self.add(2000,label="1a");b,_=self.add(2001,label="2a")
+        preview=calculate_nomenclature_preview(self.db,1)
+        self.assertEqual(preview["suggestions"],{a:"1a",b:"2a"})
+        self.assertEqual(preview,calculate_nomenclature_preview(self.db,1))
+        self.assertIsNone(apply_nomenclature(self.db,1,preview["suggestions"],origin="automatic_assisted"))
+
+    def test_created_at_then_id_break_ties_between_groups(self):
+        a,_=self.add(2000);b,_=self.add(2000)
+        self.db.execute("UPDATE alternative SET created_at='2025-01-02 00:00:00' WHERE alternative_id=?",(a,))
+        self.db.execute("UPDATE alternative SET created_at='2025-01-01 00:00:00' WHERE alternative_id=?",(b,));self.db.commit()
+        self.assertEqual(calculate_nomenclature_preview(self.db,1)["suggestions"],{b:"1a",a:"2a"})
+        self.db.execute("UPDATE alternative SET created_at='2025-01-01 00:00:00'");self.db.commit()
+        self.assertEqual(calculate_nomenclature_preview(self.db,1)["suggestions"],{a:"1a",b:"2a"})
+        self.db.execute("UPDATE alternative SET created_at=CASE alternative_id WHEN ? THEN 'invalid-z' ELSE 'invalid-a' END",(a,));self.db.commit()
+        self.assertEqual(calculate_nomenclature_preview(self.db,1)["suggestions"],{a:"1a",b:"2a"})
+
+    def test_registration_order_breaks_tie_inside_group(self):
+        a,_=self.add(2000);b,_=self.add(2000)
+        self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(?,?,?)",(a,b,"CM_1"));self.db.commit()
+        self.assertEqual(calculate_nomenclature_preview(self.db,1)["suggestions"],{a:"1a",b:"1b"})
     def test_manual_reason_duplicate_event_and_source_year_not_written(self):
-        a,oid=self.add(None,source=1,label="9");b,_=self.add(2001,label="8")
-        with self.assertRaises(InvalidNomenclatureError): apply_nomenclature(self.db,1,{a:"1",b:"2"},origin="manual")
-        with self.assertRaises(InvalidNomenclatureError): apply_nomenclature(self.db,1,{a:"1",b:"1"},origin="manual",reason="x")
-        event=apply_nomenclature(self.db,1,{a:"1",b:"2"},origin="manual",reason="Cronología");self.assertEqual(self.db.execute("SELECT count(*) FROM renumber_event").fetchone()[0],1);self.assertEqual(self.db.execute("SELECT count(*) FROM renumber_change WHERE renumber_event_id=?",(event,)).fetchone()[0],2);self.assertIsNone(self.db.execute("SELECT occurrence_year FROM occurrence WHERE occurrence_id=?",(oid,)).fetchone()[0])
+        a,oid=self.add(None,source=1,label="9a");b,_=self.add(2001,label="8a")
+        with self.assertRaises(InvalidNomenclatureError): apply_nomenclature(self.db,1,{a:"1a",b:"2a"},origin="manual")
+        with self.assertRaises(InvalidNomenclatureError): apply_nomenclature(self.db,1,{a:"1a",b:"1a"},origin="manual",reason="x")
+        with self.assertRaises(InvalidNomenclatureError): apply_nomenclature(self.db,1,{a:"1",b:"2a"},origin="manual",reason="Sin letra")
+        event=apply_nomenclature(self.db,1,{a:"1a",b:"2a"},origin="manual",reason="Cronología");self.assertEqual(self.db.execute("SELECT count(*) FROM renumber_event").fetchone()[0],1);self.assertEqual(self.db.execute("SELECT count(*) FROM renumber_change WHERE renumber_event_id=?",(event,)).fetchone()[0],2);self.assertIsNone(self.db.execute("SELECT occurrence_year FROM occurrence WHERE occurrence_id=?",(oid,)).fetchone()[0])
 
     def test_manual_labels_must_preserve_connected_group(self):
-        a,_=self.add(2000,label="1");b,_=self.add(2001,label="2")
+        a,_=self.add(2000,label="1a");b,_=self.add(2001,label="2a")
         with self.assertRaises(InvalidNomenclatureError):
             apply_nomenclature(self.db,1,{a:"1",b:"2"},origin="manual",reason="No agrupa",required_edges=[(a,b)])
         apply_nomenclature(self.db,1,{a:"1a",b:"1b"},origin="manual",reason="Agrupación explícita",required_edges=[(a,b)])

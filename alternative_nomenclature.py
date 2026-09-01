@@ -1,7 +1,10 @@
 import re
 
 
-LABEL_PATTERN = re.compile(r"(?:[1-9][0-9]*[a-z]?|0MISC)")
+LABEL_PATTERN = re.compile(r"[1-9][0-9]*[a-z]")
+CREATED_AT_PATTERN = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
+)
 
 
 class InconclusiveNomenclatureError(ValueError):
@@ -26,7 +29,7 @@ def _alternative_rows(connection, concept_id, occurrence_overrides=None,
                       virtual_occurrences=None):
     overrides = occurrence_overrides or {}
     alternatives = connection.execute(
-        "SELECT alternative_id, working_label FROM alternative "
+        "SELECT alternative_id, working_label, created_at FROM alternative "
         "WHERE concept_id=? AND retired_at IS NULL", (concept_id,)
     ).fetchall()
     result = []
@@ -51,6 +54,7 @@ def _alternative_rows(connection, concept_id, occurrence_overrides=None,
         result.append({
             "alternative_id": alternative[0], "current_label": alternative[1],
             "reference_year": reference[0], "reference_basis": reference[1],
+            "created_at": alternative[2],
         })
     for alternative_id, occurrence_id in (virtual_occurrences or {}).items():
         evidence = connection.execute("""
@@ -63,8 +67,22 @@ def _alternative_rows(connection, concept_id, occurrence_overrides=None,
         reference = min(usable, default=(None, None), key=lambda item: item[0])
         result.append({"alternative_id": alternative_id, "current_label": None,
                        "reference_year": reference[0],
-                       "reference_basis": reference[1]})
+                       "reference_basis": reference[1], "created_at": None})
     return result
+
+
+def _registration_key(row):
+    """Stable technical order; it does not assert historical precedence."""
+    created_at = row.get("created_at")
+    identifier = row["alternative_id"]
+    identifier_key = (0, identifier) if isinstance(identifier, int) else (1, str(identifier))
+    reliable = str(created_at) if created_at and CREATED_AT_PATTERN.fullmatch(str(created_at)) else None
+    return (0, reliable, identifier_key) if reliable else (1, "", identifier_key)
+
+
+def _temporal_key(row):
+    year = row["reference_year"]
+    return (year is None, year if year is not None else 0, _registration_key(row))
 
 
 def connected_components(node_ids, edges):
@@ -102,31 +120,20 @@ def calculate_nomenclature_preview(connection, concept_id, *, extra_edges=(),
     """, (concept_id, concept_id)).fetchall()]
     components = connected_components(ids, [*relation_edges, *extra_edges])
     by_id = {row["alternative_id"]: row for row in rows}
-    problems = []
     component_rows = []
     for component in components:
         members = [by_id[node] for node in component]
-        missing = [row["alternative_id"] for row in members if row["reference_year"] is None]
-        if missing:
-            problems.append("Sin referencia temporal: " + ", ".join(map(str, missing)))
         known = [row["reference_year"] for row in members if row["reference_year"] is not None]
-        if len(known) != len(set(known)):
-            problems.append("Empate temporal dentro de un grupo.")
-        component_rows.append((min(known) if known else None, members))
-    group_years = [year for year, _ in component_rows if year is not None]
-    if len(group_years) != len(set(group_years)):
-        problems.append("Empate temporal entre grupos.")
-    if problems:
-        return {"conclusive": False, "problems": problems, "rows": rows, "suggestions": {}}
-    component_rows.sort(key=lambda item: item[0])
+        first_registered = min(_registration_key(row) for row in members)
+        component_rows.append((min(known) if known else None, first_registered, members))
+    component_rows.sort(key=lambda item: (
+        item[0] is None, item[0] if item[0] is not None else 0, item[1]
+    ))
     suggestions = {}
-    for group_number, (_, members) in enumerate(component_rows, 1):
-        members.sort(key=lambda row: row["reference_year"])
-        if len(members) == 1:
-            suggestions[members[0]["alternative_id"]] = str(group_number)
-        else:
-            for index, row in enumerate(members):
-                suggestions[row["alternative_id"]] = f"{group_number}{chr(97+index)}"
+    for group_number, (_, _, members) in enumerate(component_rows, 1):
+        members.sort(key=_temporal_key)
+        for index, row in enumerate(members):
+            suggestions[row["alternative_id"]] = f"{group_number}{chr(97+index)}"
     for row in rows:
         row["proposed_label"] = suggestions.get(row["alternative_id"])
     return {"conclusive": True, "problems": [], "rows": rows, "suggestions": suggestions}
