@@ -10,9 +10,112 @@ from alternative_video_service import (AlternativeVideoError, add_video,
                                        get_current_video, get_video_history,
                                        replace_video, retire_video)
 from youtube_media import InvalidYouTubeURL
+from alternative_morphology import MorphologyValidationError
+from alternative_relations import (DuplicateCurrentRelationError,
+                                   RelationNotFoundError, SelfRelationError)
+from alternative_nomenclature import (InvalidNomenclatureError,
+                                      calculate_nomenclature_preview)
+from alternative_admin import (AlternativeAdminError, apply_direct_nomenclature,
+                               apply_relation_change, relation_preview,
+                               update_morphology)
+from phonological_parameters import PHONOLOGICAL_PARAMETERS
 
 
 alternatives_bp = Blueprint("alternatives", __name__)
+
+
+def _actor():
+    return {"access_role": g.current_access_role,
+            "collaborator_id": request.form.get("collaborator_id")}
+
+
+def _components_from_form(form):
+    result = []
+    positions = sorted({int(match.group(1)) for key in form for match in
+                        [re.fullmatch(r"component_(\d+)_position", key)] if match})
+    for index in positions:
+        prefix = f"component_{index}_"
+        alternative_id = form.get(prefix + "alternative_id", "").strip()
+        label = form.get(prefix + "label", "").strip()
+        note = form.get(prefix + "note", "").strip()
+        position = form.get(prefix + "position", "").strip()
+        if alternative_id or label or note:
+            result.append({"position": position,
+                           "component_alternative_id": alternative_id or None,
+                           "component_label": label or None, "note": note or None})
+    return result
+
+
+def _labels_from_form(form):
+    return {int(key.split("_", 1)[1]): value for key, value in form.items()
+            if key.startswith("label_")}
+
+
+def _management_context(connection, alternative_id, *, message=None, error=None,
+                        relation_result=None):
+    alternative = connection.execute("""
+        SELECT a.*,c.preferred_label FROM alternative a JOIN concept c USING(concept_id)
+        WHERE a.alternative_id=?
+    """, (alternative_id,)).fetchone()
+    if alternative is None:
+        abort(404)
+    if alternative["retired_at"] is not None:
+        abort(404)
+    morphology = connection.execute(
+        "SELECT * FROM alternative_morphology WHERE alternative_id=? AND is_current=1",
+        (alternative_id,),).fetchone()
+    morphology_history = connection.execute(
+        "SELECT * FROM alternative_morphology WHERE alternative_id=? ORDER BY is_current DESC,created_at DESC,alternative_morphology_id DESC",
+        (alternative_id,),).fetchall()
+    morphology_components = {}
+    for row in morphology_history:
+        morphology_components[row["alternative_morphology_id"]] = connection.execute(
+            "SELECT * FROM alternative_component WHERE alternative_morphology_id=? ORDER BY position",
+            (row["alternative_morphology_id"],),).fetchall()
+    relations = connection.execute("""
+        SELECT r.*,lo.working_label low_label,hi.working_label high_label,
+          (SELECT ae.collaborator_name_snapshot FROM activity_event ae
+           WHERE ae.entity_type='alternative_relation' AND ae.entity_id=r.alternative_relation_id
+           ORDER BY ae.activity_event_id DESC LIMIT 1) administrative_actor,
+          (SELECT ae.access_role FROM activity_event ae
+           WHERE ae.entity_type='alternative_relation' AND ae.entity_id=r.alternative_relation_id
+           ORDER BY ae.activity_event_id DESC LIMIT 1) administrative_role
+        FROM alternative_relation r JOIN alternative lo ON lo.alternative_id=r.alternative_low_id
+        JOIN alternative hi ON hi.alternative_id=r.alternative_high_id
+        WHERE r.is_current=1 AND (r.alternative_low_id=? OR r.alternative_high_id=?)
+        ORDER BY r.phonological_parameter,r.alternative_relation_id
+    """, (alternative_id, alternative_id)).fetchall()
+    relation_history = connection.execute("""
+        SELECT r.*,lo.working_label low_label,hi.working_label high_label,
+          (SELECT ae.collaborator_name_snapshot FROM activity_event ae
+           WHERE ae.entity_type='alternative_relation' AND ae.entity_id=r.alternative_relation_id
+           ORDER BY ae.activity_event_id DESC LIMIT 1) administrative_actor,
+          (SELECT ae.access_role FROM activity_event ae
+           WHERE ae.entity_type='alternative_relation' AND ae.entity_id=r.alternative_relation_id
+           ORDER BY ae.activity_event_id DESC LIMIT 1) administrative_role
+        FROM alternative_relation r JOIN alternative lo ON lo.alternative_id=r.alternative_low_id
+        JOIN alternative hi ON hi.alternative_id=r.alternative_high_id
+        WHERE r.alternative_low_id=? OR r.alternative_high_id=?
+        ORDER BY r.is_current DESC,r.created_at DESC,r.alternative_relation_id DESC
+    """, (alternative_id, alternative_id)).fetchall()
+    concept_alternatives = connection.execute(
+        "SELECT alternative_id,working_label,created_at FROM alternative WHERE concept_id=? AND retired_at IS NULL ORDER BY alternative_id",
+        (alternative["concept_id"],),).fetchall()
+    nomenclature = calculate_nomenclature_preview(connection, alternative["concept_id"])
+    renumber_history = connection.execute(
+        "SELECT * FROM renumber_event WHERE concept_id=? ORDER BY created_at DESC,renumber_event_id DESC",
+        (alternative["concept_id"],),).fetchall()
+    renumber_changes = {event["renumber_event_id"]: connection.execute(
+        "SELECT rc.*,a.working_label current_label FROM renumber_change rc JOIN alternative a USING(alternative_id) WHERE renumber_event_id=? ORDER BY alternative_id",
+        (event["renumber_event_id"],),).fetchall() for event in renumber_history}
+    return dict(alternative=alternative, morphology=morphology,
+                morphology_history=morphology_history,
+                morphology_components=morphology_components, relations=relations,
+                relation_history=relation_history, concept_alternatives=concept_alternatives,
+                nomenclature=nomenclature, renumber_history=renumber_history,
+                renumber_changes=renumber_changes, parameters=PHONOLOGICAL_PARAMETERS,
+                current_video=get_current_video(connection, alternative_id),
+                message=message, error=error, relation_result=relation_result)
 
 
 def structured_working_label(form, fallback=None):
@@ -196,6 +299,84 @@ def alternativas(concept_id):
         alternative_groups=alternative_groups,
         access_role=getattr(g,"current_access_role",None)
     )
+
+
+@alternatives_bp.route("/alternativas/<int:alternative_id>/gestionar")
+@requires_reviewer
+def gestionar_alternativa(alternative_id):
+    conexion = conectar()
+    try:
+        context = _management_context(conexion, alternative_id,
+                                      message=request.args.get("message"))
+        return render_template("gestionar_alternativa.html", **context)
+    finally:
+        conexion.close()
+
+
+@alternatives_bp.route("/alternativas/<int:alternative_id>/gestionar", methods=["POST"])
+@requires_reviewer
+def actualizar_gestion_alternativa(alternative_id):
+    action = request.form.get("action", "")
+    conexion = conectar()
+    relation_result = None
+    try:
+        if action == "morphology":
+            if request.form.get("confirm") != "yes":
+                raise AlternativeAdminError("Confirme la actualización de morfología.")
+            count_raw = request.form.get("component_count", "").strip()
+            _, changed = update_morphology(conexion, alternative_id, {
+                "component_count": count_raw if count_raw.upper() != "N/A" else None,
+                "component_count_not_applicable": count_raw.upper() == "N/A",
+                "free_permutation": request.form.get("free_permutation"),
+                "note": request.form.get("morphology_note"),
+                "components": _components_from_form(request.form),
+            }, _actor())
+            message = "Morfología actualizada." if changed else "No hay cambios."
+        elif action in ("preview_add_relation", "preview_retire_relation"):
+            relation_result = relation_preview(
+                conexion, alternative_id,
+                action="add" if action == "preview_add_relation" else "retire",
+                target_id=request.form.get("target_id"), parameter=request.form.get("parameter"),
+                relation_id=request.form.get("relation_id"))
+            message = "Revise el efecto sobre la nomenclatura y confirme."
+        elif action == "confirm_relation":
+            if request.form.get("confirm") != "yes":
+                raise AlternativeAdminError("Confirme el cambio de relación.")
+            _, event_id = apply_relation_change(
+                conexion, alternative_id, action=request.form.get("relation_action"),
+                target_id=request.form.get("target_id"), parameter=request.form.get("parameter"),
+                relation_id=request.form.get("relation_id") or None,
+                labels=_labels_from_form(request.form), mode=request.form.get("mode", "automatic"),
+                reason=request.form.get("reason"), actor=_actor())
+            message = "Relación actualizada." + (" La nomenclatura no cambia." if event_id is None else " Nomenclatura actualizada.")
+        elif action == "apply_nomenclature":
+            if request.form.get("confirm") != "yes":
+                raise AlternativeAdminError("Confirme la actualización de nomenclatura.")
+            concept_row = conexion.execute(
+                "SELECT concept_id FROM alternative WHERE alternative_id=? AND retired_at IS NULL",
+                (alternative_id,),).fetchone()
+            if concept_row is None:
+                abort(404)
+            event_id = apply_direct_nomenclature(
+                conexion, concept_row["concept_id"], _labels_from_form(request.form),
+                mode=request.form.get("mode", "automatic"), reason=request.form.get("reason"), actor=_actor())
+            message = "La nomenclatura ya está actualizada." if event_id is None else "Nomenclatura actualizada."
+        else:
+            raise AlternativeAdminError("Acción administrativa no válida.")
+        context = _management_context(conexion, alternative_id, message=message,
+                                      relation_result=relation_result)
+        return render_template("gestionar_alternativa.html", **context)
+    except (AlternativeAdminError, MorphologyValidationError,
+            DuplicateCurrentRelationError, RelationNotFoundError,
+            SelfRelationError, InvalidNomenclatureError, ValueError,
+            sqlite3.IntegrityError) as error:
+        if conexion.in_transaction:
+            conexion.rollback()
+        context = _management_context(conexion, alternative_id, error=str(error),
+                                      relation_result=relation_result)
+        return render_template("gestionar_alternativa.html", **context), 400
+    finally:
+        conexion.close()
 
 
 @alternatives_bp.route("/alternativas/<int:alternative_id>/video")

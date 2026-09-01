@@ -37,37 +37,42 @@ def _alternative_rows(connection, concept_id, occurrence_overrides=None,
         occurrence_id = overrides.get(alternative[0])
         if occurrence_id is None:
             evidence = connection.execute("""
-                SELECT o.occurrence_year,s.start_year,s.end_year,s.end_year_status
+                SELECT o.occurrence_year,s.start_year,s.end_year,s.end_year_status,
+                       s.source_name,s.source_reference
                 FROM assignment a JOIN occurrence o USING(occurrence_id)
                 JOIN source s USING(source_id)
                 WHERE a.alternative_id=? AND a.is_current=1
             """, (alternative[0],)).fetchall()
         else:
             evidence = connection.execute("""
-                SELECT o.occurrence_year,s.start_year,s.end_year,s.end_year_status
+                SELECT o.occurrence_year,s.start_year,s.end_year,s.end_year_status,
+                       s.source_name,s.source_reference
                 FROM occurrence o JOIN source s USING(source_id)
                 WHERE o.occurrence_id=?
             """, (occurrence_id,)).fetchall()
-        references = [temporal_reference(*row) for row in evidence]
+        references = [(*temporal_reference(*row[:4]), row[5] or row[4]) for row in evidence]
         usable = [item for item in references if item[0] is not None]
-        reference = min(usable, default=(None, None), key=lambda item: item[0])
+        reference = min(usable, default=(None, None, None), key=lambda item: item[0])
         result.append({
             "alternative_id": alternative[0], "current_label": alternative[1],
             "reference_year": reference[0], "reference_basis": reference[1],
+            "reference_source": reference[2],
             "created_at": alternative[2],
         })
     for alternative_id, occurrence_id in (virtual_occurrences or {}).items():
         evidence = connection.execute("""
-            SELECT o.occurrence_year,s.start_year,s.end_year,s.end_year_status
+            SELECT o.occurrence_year,s.start_year,s.end_year,s.end_year_status,
+                   s.source_name,s.source_reference
             FROM occurrence o JOIN source s USING(source_id)
             WHERE o.occurrence_id=?
         """, (occurrence_id,)).fetchall()
-        references = [temporal_reference(*row) for row in evidence]
+        references = [(*temporal_reference(*row[:4]), row[5] or row[4]) for row in evidence]
         usable = [item for item in references if item[0] is not None]
-        reference = min(usable, default=(None, None), key=lambda item: item[0])
+        reference = min(usable, default=(None, None, None), key=lambda item: item[0])
         result.append({"alternative_id": alternative_id, "current_label": None,
                        "reference_year": reference[0],
-                       "reference_basis": reference[1], "created_at": None})
+                       "reference_basis": reference[1],
+                       "reference_source": reference[2], "created_at": None})
     return result
 
 
