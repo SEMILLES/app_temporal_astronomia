@@ -27,10 +27,10 @@ def create_or_replace_assignment(
         ).fetchone() is None:
             raise OccurrenceNotFoundError("La ocurrencia no existe.")
         if connection.execute(
-            "SELECT 1 FROM alternative WHERE alternative_id = ?",
+            "SELECT 1 FROM alternative WHERE alternative_id = ? AND retired_at IS NULL",
             (alternative_id,),
         ).fetchone() is None:
-            raise AlternativeNotFoundError("La alternativa no existe.")
+            raise AlternativeNotFoundError("La alternativa no existe o estÃ¡ retirada.")
 
         current = connection.execute("""
             SELECT assignment_id, alternative_id

@@ -160,6 +160,7 @@ class AlternativeAdminRouteTests(unittest.TestCase):
         self.role = "analyst"
         self.assertEqual(self.client.get("/alternativas/1/gestionar").status_code, 404)
         self.assertEqual(self.client.post("/alternativas/1/gestionar", data={"action": "morphology"}).status_code, 404)
+        self.assertEqual(self.client.post("/alternativas/1/gestionar", data={"action": "confirm_move", "destination_concept_id": 2, "confirm": "yes", "reason": "crafted"}).status_code, 404)
 
     def test_route_morphology_noop_and_update_without_submission(self):
         no_op = self.client.post("/alternativas/1/gestionar", data={

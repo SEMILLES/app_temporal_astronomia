@@ -18,6 +18,9 @@ from alternative_nomenclature import (InvalidNomenclatureError,
 from alternative_admin import (AlternativeAdminError, apply_direct_nomenclature,
                                apply_relation_change, relation_preview,
                                update_morphology)
+from alternative_structural import (StructuralAlternativeError, retire_preview,
+    apply_retire, merge_preview, apply_merge, split_preview, apply_split,
+    move_preview, apply_move)
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
 
 
@@ -52,14 +55,12 @@ def _labels_from_form(form):
 
 
 def _management_context(connection, alternative_id, *, message=None, error=None,
-                        relation_result=None):
+                        relation_result=None, structural_result=None):
     alternative = connection.execute("""
         SELECT a.*,c.preferred_label FROM alternative a JOIN concept c USING(concept_id)
         WHERE a.alternative_id=?
     """, (alternative_id,)).fetchone()
     if alternative is None:
-        abort(404)
-    if alternative["retired_at"] is not None:
         abort(404)
     morphology = connection.execute(
         "SELECT * FROM alternative_morphology WHERE alternative_id=? AND is_current=1",
@@ -108,6 +109,9 @@ def _management_context(connection, alternative_id, *, message=None, error=None,
     renumber_changes = {event["renumber_event_id"]: connection.execute(
         "SELECT rc.*,a.working_label current_label FROM renumber_change rc JOIN alternative a USING(alternative_id) WHERE renumber_event_id=? ORDER BY alternative_id",
         (event["renumber_event_id"],),).fetchall() for event in renumber_history}
+    concepts = connection.execute("SELECT concept_id,preferred_label FROM concept WHERE concept_id<>? ORDER BY preferred_label,concept_id", (alternative["concept_id"],)).fetchall()
+    structural_history = connection.execute("SELECT * FROM activity_event WHERE entity_type='alternative' AND entity_id=? AND event_type IN ('alternative_retired','alternative_merged','alternative_split','alternative_moved') ORDER BY occurred_at DESC,activity_event_id DESC", (alternative_id,)).fetchall()
+    current_occurrences = connection.execute("SELECT o.occurrence_id,o.original_gloss,s.source_name FROM assignment x JOIN occurrence o USING(occurrence_id) JOIN source s USING(source_id) WHERE x.alternative_id=? AND x.is_current=1 ORDER BY o.occurrence_id", (alternative_id,)).fetchall()
     return dict(alternative=alternative, morphology=morphology,
                 morphology_history=morphology_history,
                 morphology_components=morphology_components, relations=relations,
@@ -115,7 +119,15 @@ def _management_context(connection, alternative_id, *, message=None, error=None,
                 nomenclature=nomenclature, renumber_history=renumber_history,
                 renumber_changes=renumber_changes, parameters=PHONOLOGICAL_PARAMETERS,
                 current_video=get_current_video(connection, alternative_id),
-                message=message, error=error, relation_result=relation_result)
+                concepts=concepts, structural_history=structural_history,
+                current_occurrences=current_occurrences,
+                message=message, error=error, relation_result=relation_result,
+                structural_result=structural_result)
+
+
+def _occurrence_mapping(form, prefix):
+    return {int(key[len(prefix):]): value for key, value in form.items()
+            if key.startswith(prefix) and key[len(prefix):].isdigit()}
 
 
 def structured_working_label(form, fallback=None):
@@ -319,6 +331,7 @@ def actualizar_gestion_alternativa(alternative_id):
     action = request.form.get("action", "")
     conexion = conectar()
     relation_result = None
+    structural_result = None
     try:
         if action == "morphology":
             if request.form.get("confirm") != "yes":
@@ -361,10 +374,30 @@ def actualizar_gestion_alternativa(alternative_id):
                 conexion, concept_row["concept_id"], _labels_from_form(request.form),
                 mode=request.form.get("mode", "automatic"), reason=request.form.get("reason"), actor=_actor())
             message = "La nomenclatura ya está actualizada." if event_id is None else "Nomenclatura actualizada."
+        elif action == "preview_retire":
+            structural_result = retire_preview(conexion, alternative_id, _occurrence_mapping(request.form, "occurrence_")); message = "Revise el retiro estructural antes de confirmarlo."
+        elif action == "confirm_retire":
+            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
+            apply_retire(conexion,alternative_id,_occurrence_mapping(request.form,"occurrence_"),reason=request.form.get("reason"),actor=_actor()); return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa retirada."))
+        elif action == "preview_merge":
+            structural_result=merge_preview(conexion,alternative_id,int(request.form.get("target_id",0)),request.form.get("relation_mode")); message="Revise la fusiÃ³n antes de confirmarla."
+        elif action == "confirm_merge":
+            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
+            target_id=int(request.form.get("target_id"));apply_merge(conexion,alternative_id,target_id,request.form.get("relation_mode"),reason=request.form.get("reason"),actor=_actor());return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message=f"Alternativa fusionada en {target_id}."))
+        elif action == "preview_split":
+            structural_result=split_preview(conexion,alternative_id,_occurrence_mapping(request.form,"split_occurrence_"),request.form.get("new_count"));message="Revise la divisiÃ³n antes de confirmarla."
+        elif action == "confirm_split":
+            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
+            apply_split(conexion,alternative_id,_occurrence_mapping(request.form,"split_occurrence_"),request.form.get("new_count"),reason=request.form.get("reason"),actor=_actor());return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa dividida."))
+        elif action == "preview_move":
+            structural_result=move_preview(conexion,alternative_id,int(request.form.get("destination_concept_id",0)));message="Revise el movimiento antes de confirmarlo."
+        elif action == "confirm_move":
+            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
+            apply_move(conexion,alternative_id,int(request.form.get("destination_concept_id")),reason=request.form.get("reason"),actor=_actor());return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa movida."))
         else:
             raise AlternativeAdminError("Acción administrativa no válida.")
         context = _management_context(conexion, alternative_id, message=message,
-                                      relation_result=relation_result)
+                                      relation_result=relation_result, structural_result=structural_result)
         return render_template("gestionar_alternativa.html", **context)
     except (AlternativeAdminError, MorphologyValidationError,
             DuplicateCurrentRelationError, RelationNotFoundError,
@@ -373,7 +406,7 @@ def actualizar_gestion_alternativa(alternative_id):
         if conexion.in_transaction:
             conexion.rollback()
         context = _management_context(conexion, alternative_id, error=str(error),
-                                      relation_result=relation_result)
+                                      relation_result=relation_result, structural_result=structural_result)
         return render_template("gestionar_alternativa.html", **context), 400
     finally:
         conexion.close()
