@@ -1,4 +1,5 @@
 """Deterministic, read-only projection of the current canonical catalog."""
+from source_details import catalog_source_reference
 
 from youtube_media import (InvalidYouTubeURL, parse_youtube_url,
                            youtube_embed_url, youtube_watch_url)
@@ -55,12 +56,14 @@ def project_occurrence(connection, occurrence_id):
         "SELECT * FROM occurrence_grammar "
         "WHERE occurrence_id = ? AND is_current = 1", (occurrence_id,)
     ).fetchone()
-    return {
+    result = {
         "occurrence_id": row["occurrence_id"],
         "legacy_occurrence_id": row["legacy_occurrence_id"],
         "original_gloss": row["original_gloss"],
         "source_detail_1": row["source_detail_1"],
         "source_detail_2": row["source_detail_2"],
+        "source_detail_1_status": row["source_detail_1_status"],
+        "source_detail_2_status": row["source_detail_2_status"],
         "usage_examples_present": bool(row["usage_examples_present"]),
         "grammatical_info_present": bool(row["grammatical_info_present"]),
         "grammatical_note": row["grammatical_note"],
@@ -71,6 +74,8 @@ def project_occurrence(connection, occurrence_id):
         "source": project_source(row),
         "grammar": project_grammar(grammar),
     }
+    result["source_reference_display"] = catalog_source_reference(result)
+    return result
 
 
 def project_morphology(connection, alternative_id, names):

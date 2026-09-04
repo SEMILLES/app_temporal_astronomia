@@ -205,6 +205,7 @@ class SourceRouteTests(unittest.TestCase):
                 "Original characterization", 100,
             ),
         )
+        connection.execute("INSERT INTO occurrence(source_id,original_gloss,source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status) VALUES(1,'G','Material','01:02','VALUE','VALUE')")
         connection.commit()
         connection.close()
         app = Flask(__name__, template_folder=str(ROOT / "templates"))
@@ -221,6 +222,8 @@ class SourceRouteTests(unittest.TestCase):
             "/fuentes/1/actualizar",
             data={
                 "source_name": "Updated",
+                "source_type": "OTRO",
+                "source_reference": "legacy reference",
                 "legacy_source_code": "CODIGO-COMPARTIDO-FICTICIO",
                 "source_scope": "PERSONAL",
                 "format_original": "PAPER",
@@ -241,10 +244,11 @@ class SourceRouteTests(unittest.TestCase):
         try:
             source = connection.execute("SELECT * FROM source").fetchone()
             revision = connection.execute("SELECT * FROM source_revision").fetchone()
+            occurrence = connection.execute("SELECT source_detail_1,source_detail_2 FROM occurrence").fetchone()
         finally:
             connection.close()
 
-        self.assertEqual(source["source_type"], "legacy type")
+        self.assertEqual(source["source_type"], "OTRO")
         self.assertEqual(source["source_reference"], "legacy reference")
         self.assertEqual(source["source_scope"], "PERSONAL")
         self.assertEqual(source["reported_entry_count"], 125)
@@ -258,12 +262,14 @@ class SourceRouteTests(unittest.TestCase):
         self.assertEqual(revision["region_description"], "Bogotá")
         self.assertEqual(revision["characterization"], "Original characterization")
         self.assertEqual(revision["reported_entry_count"], 100)
+        self.assertEqual(tuple(occurrence),("Material","01:02"))
 
     def test_create_source_with_new_metadata(self):
         response = self.client.post(
             "/fuentes/nueva",
             data={
                 "source_name": "New source",
+                "source_type": "VIDEO_POR_SENA",
                 "legacy_source_code": "CODIGO-COMPARTIDO-FICTICIO",
                 "source_scope": "PERSONAL",
                 "format_original": "VIDEO",
@@ -291,7 +297,7 @@ class SourceRouteTests(unittest.TestCase):
             created,
             (
                 "CODIGO-COMPARTIDO-FICTICIO", "PERSONAL", "VIDEO", "seña + definición", 2024,
-                "ongoing", "Colombia", "Test source", 0, None, None,
+                "ongoing", "Colombia", "Test source", 0, "VIDEO_POR_SENA", None,
             ),
         )
 

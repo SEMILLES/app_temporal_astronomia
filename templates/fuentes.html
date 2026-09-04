@@ -10,7 +10,7 @@
 
     <h1>Fuentes</h1>
 
-    <h2>Registrar nueva fuente</h2>
+    {% if can_create %}<h2>Registrar nueva fuente</h2>
 
     <form
         method="post"
@@ -24,8 +24,13 @@
         <input
             type="text"
             name="source_name"
+            list="existing-source-names"
             required
         >
+        <datalist id="existing-source-names">{% for fuente in fuentes %}<option value="{{ fuente['source_name'] }}">{% endfor %}</datalist>
+        <small>Revise las coincidencias sugeridas antes de crear una fuente nueva.</small>
+        <label>Tipo de fuente:</label><select name="source_type" required><option value="">Seleccione</option>{% for value,label in source_types.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
+        <label>Referencia (opcional):</label><input type="text" name="source_reference">
 
         <label>Código legacy (opcional):</label>
         <input type="text" name="legacy_source_code">
@@ -61,7 +66,7 @@
             Guardar fuente
         </button>
 
-    </form>
+    </form>{% endif %}
 
 
     <h2>Fuentes registradas</h2>
@@ -74,6 +79,7 @@
         <tr>
             <th>ID</th>
             <th>Nombre</th>
+            <th>Tipo</th>
             <th>Código legacy</th>
             <th>Alcance</th>
             <th>Formato</th>
@@ -93,6 +99,7 @@
                 <td>
                     {{ fuente["source_name"] }}
                 </td>
+                <td>{{ source_types.get(fuente['source_type'], fuente['source_type'] or '') }}</td>
 
                 <td>{{ fuente["legacy_source_code"] or "" }}</td>
                 <td>{% if fuente["source_scope"] == "INSTITUTIONAL" %}Institucional{% elif fuente["source_scope"] == "PERSONAL" %}Personal{% endif %}</td>
@@ -106,14 +113,14 @@
 
                 <td>
 
-                    <a href="{{
+                    {% if g.current_access_role in ('reviewer','master') %}<a href="{{
                         url_for(
                             'sources.editar_fuente',
                             source_id=fuente['source_id']
                         )
                     }}">
                         Editar
-                    </a>
+                    </a>{% endif %}
 
                 </td>
 

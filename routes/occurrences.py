@@ -11,6 +11,7 @@ from alternative_workflow import AlternativeWorkflowError, create_alternative_su
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
 from source_period import validate_occurrence_year
 from access_control import requires_reviewer
+from source_details import normalize_occurrence_details
 from immediate_acceptance import (ImmediateAcceptanceError,ImmediateBlockingError,
     alternative_operation,confirm_operation,grammar_operation,preview_operation)
 
@@ -151,7 +152,7 @@ def editar_ocurrencia(occurrence_id):
     conexion = conectar()
     ocurrencia = conexion.execute("""
         SELECT occurrence_id, source_id, original_gloss, source_detail_1,
-               source_detail_2, occurrence_year, usage_examples_present,
+               source_detail_2, source_detail_1_status, source_detail_2_status, occurrence_year, usage_examples_present,
                grammatical_info_present, grammatical_note, provenance_note
         FROM occurrence WHERE occurrence_id = ?
     """, (occurrence_id,)).fetchone()
@@ -159,7 +160,7 @@ def editar_ocurrencia(occurrence_id):
         conexion.close()
         return "La ocurrencia no existe.", 404
     fuentes = conexion.execute("""
-        SELECT source_id, source_name, start_year, end_year, end_year_status
+        SELECT source_id, source_name, source_type, start_year, end_year, end_year_status
         FROM source ORDER BY source_name
     """).fetchall()
     conexion.close()
@@ -174,6 +175,8 @@ def actualizar_ocurrencia(occurrence_id):
     original_gloss = request.form.get("original_gloss", "").strip()
     source_detail_1 = request.form.get("source_detail_1", "").strip() or None
     source_detail_2 = request.form.get("source_detail_2", "").strip() or None
+    source_detail_1_status = request.form.get("source_detail_1_status") or ("VALUE" if source_detail_1 else "UNKNOWN")
+    source_detail_2_status = request.form.get("source_detail_2_status") or ("VALUE" if source_detail_2 else "UNKNOWN")
     usage_examples_present = 1 if request.form.get("usage_examples_present") == "1" else 0
     grammatical_info_present = 1 if request.form.get("grammatical_info_present") == "1" else 0
     grammatical_note = request.form.get("grammatical_note", "").strip() or None
@@ -192,24 +195,27 @@ def actualizar_ocurrencia(occurrence_id):
             SELECT legacy_occurrence_id, source_id, original_gloss, hyperlink,
                    legacy_source_detail_1, legacy_source_detail_2,
                    source_locator, provenance_note, occurrence_year,
-                   source_detail_1,source_detail_2,usage_examples_present,
+                   source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status,usage_examples_present,
                    grammatical_info_present,grammatical_note
             FROM occurrence WHERE occurrence_id = ?
         """, (occurrence_id,)).fetchone()
         if actual is None:
             conexion.rollback()
             return "La ocurrencia no existe.", 404
+        source=conexion.execute("SELECT source_type FROM source WHERE source_id=?",(source_id,)).fetchone()
+        if source is None:return "La fuente no existe.",400
+        source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2=normalize_occurrence_details(source[0],source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2)
         occurrence_year = validate_occurrence_year(
             conexion, source_id, occurrence_year_value
         )
         new_state = (
-            int(source_id), original_gloss, source_detail_1, source_detail_2,
+            int(source_id), original_gloss, source_detail_1, source_detail_2, source_detail_1_status, source_detail_2_status,
             occurrence_year, usage_examples_present, grammatical_info_present,
             grammatical_note, provenance_note
         )
         previous_editable_state = (
             actual["source_id"], actual["original_gloss"],
-            actual["source_detail_1"], actual["source_detail_2"],
+            actual["source_detail_1"], actual["source_detail_2"], actual["source_detail_1_status"], actual["source_detail_2_status"],
             actual["occurrence_year"], actual["usage_examples_present"],
             actual["grammatical_info_present"], actual["grammatical_note"],
             actual["provenance_note"]
@@ -220,23 +226,23 @@ def actualizar_ocurrencia(occurrence_id):
                     occurrence_id, legacy_occurrence_id, source_id,
                     original_gloss, hyperlink, legacy_source_detail_1,
                     legacy_source_detail_2, source_locator, provenance_note,
-                    occurrence_year, source_detail_1,source_detail_2,
+                    occurrence_year, source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status,
                     usage_examples_present,grammatical_info_present,
                     grammatical_note,change_note
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 occurrence_id, actual["legacy_occurrence_id"],
                 actual["source_id"], actual["original_gloss"],
                 actual["hyperlink"], actual["legacy_source_detail_1"],
                 actual["legacy_source_detail_2"], actual["source_locator"],
                 actual["provenance_note"], actual["occurrence_year"],
-                actual["source_detail_1"],actual["source_detail_2"],
+                actual["source_detail_1"],actual["source_detail_2"],actual["source_detail_1_status"],actual["source_detail_2_status"],
                 actual["usage_examples_present"],actual["grammatical_info_present"],
                 actual["grammatical_note"],change_note
             ))
         cursor = conexion.execute("""
             UPDATE occurrence SET
-                source_id=?,original_gloss=?,source_detail_1=?,source_detail_2=?,
+                source_id=?,original_gloss=?,source_detail_1=?,source_detail_2=?,source_detail_1_status=?,source_detail_2_status=?,
                 occurrence_year=?,usage_examples_present=?,
                 grammatical_info_present=?,grammatical_note=?,provenance_note=?,
                 updated_at = CURRENT_TIMESTAMP

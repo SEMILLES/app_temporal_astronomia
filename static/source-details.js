@@ -1,0 +1,8 @@
+(function(){
+const source=document.querySelector('[name=source_id]'),gloss=document.querySelector('[name=original_gloss]'),fieldset=document.getElementById('source-details');
+if(!source)return;
+const config={MATERIAL_IMPRESO:['Submaterial / sección','Página',true],VIDEO_POR_SENA:['Título / identificador del video','',false],UN_VIDEO_VARIAS_SENAS:['Título del video','Tiempo',true],VARIOS_VIDEOS_VARIAS_SENAS:['Título del video','Tiempo',true],OTRO:['Detalle Fuente 1','Detalle Fuente 2',true]};
+function status(number){const input=document.querySelector(`[name=source_detail_${number}]`),select=document.querySelector(`[name=source_detail_${number}_status]`);input.disabled=select.value!=='VALUE';input.required=select.value==='VALUE';if(input.disabled)input.value=''}
+function refresh(){const option=source.options[source.selectedIndex],type=option&&option.dataset.sourceType,c=config[type]||config.OTRO;document.querySelector('[data-detail="1"] .detail-label').textContent=c[0];const second=document.querySelector('[data-detail="2"]');second.hidden=!c[2];second.querySelector('.detail-label').textContent=c[1];if(!c[2])second.querySelector('select').value='NA';if(type==='VIDEO_POR_SENA'&&fieldset.dataset.prefillVideoId==='true'){const input=document.querySelector('[name=source_detail_1]'),select=document.querySelector('[name=source_detail_1_status]');if(!input.value&&gloss&&gloss.value){input.value=gloss.value;select.value='VALUE'}}status(1);status(2)}
+document.querySelectorAll('#source-details select').forEach(s=>s.addEventListener('change',()=>status(s.name.includes('_1_')?1:2)));source.addEventListener('change',refresh);if(gloss)gloss.addEventListener('change',refresh);refresh();
+})();

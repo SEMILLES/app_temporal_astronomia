@@ -138,5 +138,17 @@ class RoleAccessTests(unittest.TestCase):
         self.assertIn("Ir a revisión",reviewer)
         self.assertEqual(self.client.post("/test-analyst/aportes/1/decidir",data={"decision":"rejected"}).status_code,404)
 
+    def test_source_creation_toggle_roles_persistence_and_activity(self):
+        payload={"source_name":"Fuente analista","source_type":"OTRO"}
+        self.assertEqual(self.client.post("/test-analyst/fuentes/nueva",data={"source_name":"Sin tipo"}).status_code,400)
+        self.assertEqual(self.client.post("/test-analyst/fuentes/nueva",data=payload).status_code,302)
+        self.assertEqual(self.client.post("/test-master/configuracion/creacion-fuentes",data={"collaborator_id":"1"}).status_code,302)
+        self.assertNotIn("Registrar fuente",self.client.get("/test-analyst/trabajo").get_data(as_text=True))
+        self.assertEqual(self.client.post("/test-analyst/fuentes/nueva",data={"source_name":"Bloqueada","source_type":"OTRO"}).status_code,404)
+        self.assertEqual(self.client.post("/test-reviewer/fuentes/nueva",data={"source_name":"Reviewer","source_type":"OTRO"}).status_code,302)
+        self.assertEqual(self.client.post("/test-master/fuentes/nueva",data={"source_name":"Master","source_type":"OTRO"}).status_code,302)
+        self.assertEqual(self.client.get("/test-analyst/fuentes/1/editar").status_code,404)
+        db=sqlite3.connect(self.path);self.assertEqual(db.execute("SELECT setting_value FROM application_setting WHERE setting_key='analyst_source_creation'").fetchone()[0],"0");self.assertEqual(db.execute("SELECT count(*) FROM activity_event WHERE event_type='analyst_source_creation_setting_changed'").fetchone()[0],1);db.close()
+
 
 if __name__ == "__main__": unittest.main()

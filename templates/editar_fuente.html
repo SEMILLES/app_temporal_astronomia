@@ -44,6 +44,9 @@
             <label>Código legacy (opcional):</label>
             <input type="text" name="legacy_source_code" value="{{ fuente['legacy_source_code'] or '' }}">
         </p>
+        <p><label>Tipo de fuente: <select name="source_type" required>{% for value,label in source_types.items() %}<option value="{{ value }}"{% if fuente['source_type']==value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label></p>
+        {% if occurrence_count %}<p role="note"><strong>Advertencia:</strong> esta Source tiene {{ occurrence_count }} occurrences. Cambiar el tipo no reinterpretará ni borrará sus detalles guardados.</p>{% endif %}
+        <p><label>Referencia (opcional): <input name="source_reference" value="{{ fuente['source_reference'] or '' }}"></label></p>
         <p>
             <label>Alcance (opcional):</label>
             <select name="source_scope">

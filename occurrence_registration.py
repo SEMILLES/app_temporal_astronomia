@@ -3,6 +3,7 @@ import sqlite3
 from concept_labels import InvalidConceptLabel, normalize_concept_label
 from activity import record_activity
 from source_period import validate_occurrence_year
+from source_details import normalize_occurrence_details
 
 
 class RegistrationError(ValueError):
@@ -85,7 +86,7 @@ def resolve_concept_reference(connection, concept_id=None,
 def save_draft(connection, draft_id=None, *, collaborator_id=None, access_role=None, **values):
     fields = (
         "source_id", "original_gloss", "occurrence_year", "source_detail_1",
-        "source_detail_2", "usage_examples_present", "grammatical_info_present",
+        "source_detail_2", "source_detail_1_status", "source_detail_2_status", "usage_examples_present", "grammatical_info_present",
         "grammatical_note", "source_locator", "provenance_note", "reference_concept_id",
         "reference_concept_proposal_id",
     )
@@ -95,6 +96,8 @@ def save_draft(connection, draft_id=None, *, collaborator_id=None, access_role=N
         "occurrence_year": _year(values.get("occurrence_year")),
         "source_detail_1": _text(values.get("source_detail_1")),
         "source_detail_2": _text(values.get("source_detail_2")),
+        "source_detail_1_status": values.get("source_detail_1_status") or ("VALUE" if _text(values.get("source_detail_1")) else "UNKNOWN"),
+        "source_detail_2_status": values.get("source_detail_2_status") or ("VALUE" if _text(values.get("source_detail_2")) else "UNKNOWN"),
         "usage_examples_present": _flag(values.get("usage_examples_present")),
         "grammatical_info_present": _flag(values.get("grammatical_info_present")),
         "grammatical_note": _text(values.get("grammatical_note")) if _flag(values.get("grammatical_info_present")) else None,
@@ -143,6 +146,7 @@ def save_draft(connection, draft_id=None, *, collaborator_id=None, access_role=N
 def complete_registration(connection, *, draft_id=None, source_id=None,
                           original_gloss=None, occurrence_year=None,
                           source_detail_1=None, source_detail_2=None,
+                          source_detail_1_status=None, source_detail_2_status=None,
                           usage_examples_present=False,
                           grammatical_info_present=False, grammatical_note=None,
                           source_locator=None, provenance_note=None,
@@ -164,6 +168,8 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
             occurrence_year = occurrence_year or draft["occurrence_year"]
             source_detail_1 = source_detail_1 or draft["source_detail_1"]
             source_detail_2 = source_detail_2 or draft["source_detail_2"]
+            source_detail_1_status = source_detail_1_status or draft["source_detail_1_status"]
+            source_detail_2_status = source_detail_2_status or draft["source_detail_2_status"]
             usage_examples_present = usage_examples_present or draft["usage_examples_present"]
             grammatical_info_present = grammatical_info_present or draft["grammatical_info_present"]
             grammatical_note = grammatical_note or draft["grammatical_note"]
@@ -176,10 +182,14 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
         gloss = _text(original_gloss)
         if not source_id or gloss is None:
             raise RegistrationError("La fuente y la glosa original son obligatorias.")
-        if connection.execute(
-            "SELECT 1 FROM source WHERE source_id = ?", (source_id,)
-        ).fetchone() is None:
+        source = connection.execute("SELECT source_type FROM source WHERE source_id = ?", (source_id,)).fetchone()
+        if source is None:
             raise RegistrationError("La fuente no existe.")
+        source_detail_1_status = source_detail_1_status or ("VALUE" if _text(source_detail_1) else "UNKNOWN")
+        source_detail_2_status = source_detail_2_status or ("VALUE" if _text(source_detail_2) else "UNKNOWN")
+        try:
+            source_detail_1_status, source_detail_1, source_detail_2_status, source_detail_2 = normalize_occurrence_details(source[0], source_detail_1_status, source_detail_1, source_detail_2_status, source_detail_2)
+        except ValueError as error: raise RegistrationError(str(error)) from error
         reference_concept_id, reference_proposal_id = resolve_concept_reference(
             connection, concept_id, concept_proposal_id, proposed_label,
             force_new_proposal=force_new_proposal
@@ -190,12 +200,12 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
                             collaborator_id=collaborator_id, access_role=access_role)
         cursor = connection.execute(
             "INSERT INTO occurrence (source_id, original_gloss, hyperlink, occurrence_year, "
-            "source_detail_1, source_detail_2, usage_examples_present, "
+            "source_detail_1, source_detail_2, source_detail_1_status, source_detail_2_status, usage_examples_present, "
             "grammatical_info_present, grammatical_note, source_locator, provenance_note) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (int(source_id), gloss, _text(hyperlink),
              validate_occurrence_year(connection, source_id, occurrence_year),
-             _text(source_detail_1), _text(source_detail_2),
+             _text(source_detail_1), _text(source_detail_2), source_detail_1_status, source_detail_2_status,
              _flag(usage_examples_present), _flag(grammatical_info_present),
              _text(grammatical_note) if _flag(grammatical_info_present) else None,
              _text(source_locator), _text(provenance_note)),

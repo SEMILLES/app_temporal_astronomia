@@ -1,10 +1,9 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><title>Editar ocurrencia - LeSiCo</title><body>
 <h1>Editar ocurrencia</h1><p><strong>ID:</strong> {{ ocurrencia['occurrence_id'] }}</p>
 <form method="post" action="{{ url_for('occurrences.actualizar_ocurrencia',occurrence_id=ocurrencia['occurrence_id']) }}">
-<p><label>Fuente: <select name="source_id" required>{% for fuente in fuentes %}<option value="{{ fuente['source_id'] }}" data-min-year="{{ fuente['start_year'] or '' }}" data-max-year="{{ fuente['end_year'] or '' }}"{% if fuente['source_id']==ocurrencia['source_id'] %} selected{% endif %}>{{ fuente['source_name'] }}</option>{% endfor %}</select></label></p>
+<p><label>Fuente: <select name="source_id" required>{% for fuente in fuentes %}<option value="{{ fuente['source_id'] }}" data-source-type="{{ fuente['source_type'] }}" data-min-year="{{ fuente['start_year'] or '' }}" data-max-year="{{ fuente['end_year'] or '' }}"{% if fuente['source_id']==ocurrencia['source_id'] %} selected{% endif %}>{{ fuente['source_name'] }}</option>{% endfor %}</select></label></p>
 <p><label>Glosa original: <input name="original_gloss" value="{{ ocurrencia['original_gloss'] or '' }}"></label></p>
-<p><label>Detalle Fuente 1: <input name="source_detail_1" value="{{ ocurrencia['source_detail_1'] or '' }}"></label></p>
-<p><label>Detalle Fuente 2: <input name="source_detail_2" value="{{ ocurrencia['source_detail_2'] or '' }}"></label></p>
+{% set draft=ocurrencia %}{% include '_source_details_form.html' %}
 <p><label>Año de la ocurrencia: <input type="number" name="occurrence_year" value="{{ ocurrencia['occurrence_year'] or '' }}" min="1" max="9999"></label></p>
 <fieldset><legend>Información documentada en la fuente</legend>
 <p><label>Ejemplos de uso <select name="usage_examples_present"><option value="0"{% if not ocurrencia['usage_examples_present'] %} selected{% endif %}>No</option><option value="1"{% if ocurrencia['usage_examples_present'] %} selected{% endif %}>Sí</option></select></label></p>

@@ -48,6 +48,7 @@ REQUIRED_APPLICATION_TABLES = frozenset({
     "conflict_resolution_attempt",
     "catalog_publication",
     "publication_open_conflict",
+    "application_setting",
 })
 
 
@@ -160,6 +161,10 @@ def crear_esquema(conexion):
             legacy_source_detail_2 TEXT,
             source_detail_1 TEXT,
             source_detail_2 TEXT,
+            source_detail_1_status TEXT NOT NULL DEFAULT 'UNKNOWN'
+                CHECK (source_detail_1_status IN ('VALUE','NA','UNKNOWN')),
+            source_detail_2_status TEXT NOT NULL DEFAULT 'UNKNOWN'
+                CHECK (source_detail_2_status IN ('VALUE','NA','UNKNOWN')),
             usage_examples_present INTEGER NOT NULL DEFAULT 0
                 CHECK (usage_examples_present IN (0, 1)),
             grammatical_info_present INTEGER NOT NULL DEFAULT 0
@@ -232,6 +237,10 @@ def crear_esquema(conexion):
             legacy_source_detail_2 TEXT,
             source_detail_1 TEXT,
             source_detail_2 TEXT,
+            source_detail_1_status TEXT NOT NULL DEFAULT 'UNKNOWN'
+                CHECK (source_detail_1_status IN ('VALUE','NA','UNKNOWN')),
+            source_detail_2_status TEXT NOT NULL DEFAULT 'UNKNOWN'
+                CHECK (source_detail_2_status IN ('VALUE','NA','UNKNOWN')),
             usage_examples_present INTEGER NOT NULL DEFAULT 0
                 CHECK (usage_examples_present IN (0, 1)),
             grammatical_info_present INTEGER NOT NULL DEFAULT 0
@@ -451,6 +460,10 @@ def crear_esquema(conexion):
             occurrence_year INTEGER,
             source_detail_1 TEXT,
             source_detail_2 TEXT,
+            source_detail_1_status TEXT NOT NULL DEFAULT 'UNKNOWN'
+                CHECK (source_detail_1_status IN ('VALUE','NA','UNKNOWN')),
+            source_detail_2_status TEXT NOT NULL DEFAULT 'UNKNOWN'
+                CHECK (source_detail_2_status IN ('VALUE','NA','UNKNOWN')),
             usage_examples_present INTEGER NOT NULL DEFAULT 0
                 CHECK (usage_examples_present IN (0, 1)),
             grammatical_info_present INTEGER NOT NULL DEFAULT 0
@@ -743,6 +756,15 @@ def crear_esquema(conexion):
         );
         CREATE INDEX IF NOT EXISTS idx_activity_event_collaborator ON activity_event(collaborator_id,occurred_at);
         CREATE INDEX IF NOT EXISTS idx_activity_event_entity ON activity_event(entity_type,entity_id,occurred_at);
+        CREATE TABLE IF NOT EXISTS application_setting (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT NOT NULL,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_by_collaborator_id INTEGER,
+            FOREIGN KEY(updated_by_collaborator_id) REFERENCES collaborator(collaborator_id)
+        );
+        INSERT OR IGNORE INTO application_setting(setting_key,setting_value)
+            VALUES('analyst_source_creation','1');
         CREATE TABLE IF NOT EXISTS conflict (
             conflict_id INTEGER PRIMARY KEY AUTOINCREMENT,
             origin_kind TEXT NOT NULL CHECK(origin_kind IN ('automatic','manual')),
