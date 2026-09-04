@@ -21,12 +21,15 @@ def normalize_morphology(component_count=None,component_count_not_applicable=Fal
     if not_applicable and count is not None: raise MorphologyValidationError("N/A no puede combinarse con una cantidad.")
     permutation=_text(free_permutation)
     if not_applicable or count==1:
-        if permutation not in (None,"N/A"): raise MorphologyValidationError("La permutación debe ser N/A.")
         permutation="N/A"
     elif count is None:
         if permutation is not None: raise MorphologyValidationError("Sin cantidad analizada, la permutación debe quedar vacía.")
     else:
         if permutation not in FREE_PERMUTATION_VALUES: raise MorphologyValidationError("Seleccione SÍ, NO o SIN INFORMACIÓN para permutación libre.")
+    # A one-component analysis is the sign itself. Ignore stale hidden rows
+    # submitted after browser back/forward navigation or a count change.
+    if count == 1:
+        components = ()
     normalized=[];positions=set()
     for index,item in enumerate(components,1):
         position=item.get("position",index)

@@ -55,9 +55,11 @@ class MorphologyValidationTests(unittest.TestCase):
         self.assertEqual(normalize_morphology()["free_permutation"],None)
         self.assertEqual(normalize_morphology(component_count_not_applicable=True)["free_permutation"],"N/A")
         self.assertEqual(normalize_morphology(component_count=1)["free_permutation"],"N/A")
+        self.assertEqual(normalize_morphology(component_count=1,free_permutation="SIN INFORMACIÓN")["free_permutation"],"N/A")
+        self.assertEqual(normalize_morphology(component_count_not_applicable=True,free_permutation="SÍ")["free_permutation"],"N/A")
         for value in ("SIN INFORMACIÓN","SÍ","NO"):
             self.assertEqual(normalize_morphology(component_count=2,free_permutation=value)["free_permutation"],value)
-        for kwargs in ({"component_count":0},{"component_count":2},{"component_count_not_applicable":True,"component_count":1},{"component_count":1,"free_permutation":"SÍ"}):
+        for kwargs in ({"component_count":0},{"component_count":2},{"component_count_not_applicable":True,"component_count":1}):
             with self.subTest(kwargs=kwargs),self.assertRaises(MorphologyValidationError):normalize_morphology(**kwargs)
 
     def test_components_need_unique_positive_positions_but_not_count_equality(self):
@@ -65,6 +67,9 @@ class MorphologyValidationTests(unittest.TestCase):
         self.assertEqual(len(normalize_morphology(component_count=2,free_permutation="SÍ",components=[])["components"]),0)
         for components in ([{"position":0,"note":"x"}],[{"position":1,"note":"x"},{"position":1,"note":"y"}],[{"position":1}]):
             with self.assertRaises(MorphologyValidationError):normalize_morphology(component_count=2,free_permutation="NO",components=components)
+        stale=[{"position":1,"component_label":"REDUNDANTE"}]
+        self.assertEqual(normalize_morphology(component_count=1,free_permutation="NO",components=stale)["components"],[])
+        self.assertEqual(len(normalize_morphology(component_count_not_applicable=True,free_permutation="NO",components=stale)["components"]),1)
 
 
 class CanonicalMorphologyTests(unittest.TestCase):
@@ -78,7 +83,7 @@ class CanonicalMorphologyTests(unittest.TestCase):
         row=self.db.execute("SELECT * FROM alternative_morphology WHERE alternative_morphology_id=?",(mid,)).fetchone();self.assertEqual(row["is_current"],1);components=self.db.execute("SELECT component_alternative_id,component_label,note FROM alternative_component ORDER BY position").fetchall();self.assertEqual([tuple(r) for r in components],[(2,None,None),(None,"libre","nota")])
 
     def test_replace_versions_entire_component_block(self):
-        old,_=create_or_replace_alternative_morphology(self.db,1,component_count=2,free_permutation="NO",components=[{"position":1,"component_label":"OLD"}]);new,_=create_or_replace_alternative_morphology(self.db,1,component_count=1,components=[{"position":1,"component_label":"NEW"}]);rows=self.db.execute("SELECT * FROM alternative_morphology ORDER BY alternative_morphology_id").fetchall();self.assertEqual([r["is_current"] for r in rows],[0,1]);self.assertEqual(rows[1]["supersedes_alternative_morphology_id"],old);self.assertEqual(self.db.execute("SELECT component_label FROM alternative_component WHERE alternative_morphology_id=?",(old,)).fetchone()[0],"OLD");self.assertEqual(self.db.execute("SELECT component_label FROM alternative_component WHERE alternative_morphology_id=?",(new,)).fetchone()[0],"NEW")
+        old,_=create_or_replace_alternative_morphology(self.db,1,component_count=2,free_permutation="NO",components=[{"position":1,"component_label":"OLD"}]);new,_=create_or_replace_alternative_morphology(self.db,1,component_count=1,components=[{"position":1,"component_label":"NEW"}]);rows=self.db.execute("SELECT * FROM alternative_morphology ORDER BY alternative_morphology_id").fetchall();self.assertEqual([r["is_current"] for r in rows],[0,1]);self.assertEqual(rows[1]["supersedes_alternative_morphology_id"],old);self.assertEqual(self.db.execute("SELECT component_label FROM alternative_component WHERE alternative_morphology_id=?",(old,)).fetchone()[0],"OLD");self.assertIsNone(self.db.execute("SELECT component_label FROM alternative_component WHERE alternative_morphology_id=?",(new,)).fetchone())
 
     def test_identical_is_noop_and_one_current(self):
         first,_=create_or_replace_alternative_morphology(self.db,1,component_count=1);second,created=create_or_replace_alternative_morphology(self.db,1,component_count=1);self.assertEqual(first,second);self.assertFalse(created);self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology WHERE is_current=1").fetchone()[0],1)

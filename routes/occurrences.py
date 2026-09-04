@@ -40,9 +40,10 @@ def _alternative_payload(form):
     morphology=None
     if proposal_kind=="NEW":
         choice=form.get("morphology_component_count");components=[]
-        for position,alternative,label,note in zip(form.getlist("component_position"),form.getlist("component_alternative_id"),form.getlist("component_label"),form.getlist("component_note")):
-            if not alternative and not label.strip() and not note.strip():continue
-            components.append({"position":position,"component_alternative_id":alternative or None,"component_label":label,"note":note})
+        if form.get("record_components") == "yes":
+            for position,alternative,label,note in zip(form.getlist("component_position"),form.getlist("component_alternative_id"),form.getlist("component_label"),form.getlist("component_note")):
+                if not alternative and not label.strip() and not note.strip():continue
+                components.append({"position":position,"component_alternative_id":alternative or None,"component_label":label,"note":note})
         morphology={"component_count":None if choice in (None,"","N/A") else choice,"component_count_not_applicable":choice=="N/A","free_permutation":form.get("free_permutation"),"note":form.get("morphology_note"),"components":components}
     return {"proposal_kind":proposal_kind,"proposed_existing_alternative_id":form.get("proposed_existing_alternative_id") or None,"phonological_relation_answer":form.get("phonological_relation_answer"),"relations":relations,"analysis_note":form.get("analysis_note"),"morphology":morphology}
 
@@ -130,8 +131,9 @@ def nueva_ocurrencia():
 def editar_ocurrencia(occurrence_id):
     conexion = conectar()
     ocurrencia = conexion.execute("""
-        SELECT occurrence_id, source_id, original_gloss, hyperlink,
-               source_locator, provenance_note, occurrence_year
+        SELECT occurrence_id, source_id, original_gloss, source_detail_1,
+               source_detail_2, occurrence_year, usage_examples_present,
+               grammatical_info_present, grammatical_note, provenance_note
         FROM occurrence WHERE occurrence_id = ?
     """, (occurrence_id,)).fetchone()
     if ocurrencia is None:
@@ -151,8 +153,13 @@ def editar_ocurrencia(occurrence_id):
 def actualizar_ocurrencia(occurrence_id):
     source_id = request.form.get("source_id", "")
     original_gloss = request.form.get("original_gloss", "").strip()
-    hyperlink = request.form.get("hyperlink", "").strip()
-    source_locator = request.form.get("source_locator", "").strip()
+    source_detail_1 = request.form.get("source_detail_1", "").strip() or None
+    source_detail_2 = request.form.get("source_detail_2", "").strip() or None
+    usage_examples_present = 1 if request.form.get("usage_examples_present") == "1" else 0
+    grammatical_info_present = 1 if request.form.get("grammatical_info_present") == "1" else 0
+    grammatical_note = request.form.get("grammatical_note", "").strip() or None
+    if not grammatical_info_present:
+        grammatical_note = None
     provenance_note = request.form.get("provenance_note", "").strip()
     occurrence_year_value = request.form.get("occurrence_year", "").strip()
     change_note = request.form.get("change_note", "").strip() or None
@@ -165,7 +172,9 @@ def actualizar_ocurrencia(occurrence_id):
         actual = conexion.execute("""
             SELECT legacy_occurrence_id, source_id, original_gloss, hyperlink,
                    legacy_source_detail_1, legacy_source_detail_2,
-                   source_locator, provenance_note, occurrence_year
+                   source_locator, provenance_note, occurrence_year,
+                   source_detail_1,source_detail_2,usage_examples_present,
+                   grammatical_info_present,grammatical_note
             FROM occurrence WHERE occurrence_id = ?
         """, (occurrence_id,)).fetchone()
         if actual is None:
@@ -175,13 +184,16 @@ def actualizar_ocurrencia(occurrence_id):
             conexion, source_id, occurrence_year_value
         )
         new_state = (
-            int(source_id), original_gloss, hyperlink, source_locator,
-            provenance_note, occurrence_year
+            int(source_id), original_gloss, source_detail_1, source_detail_2,
+            occurrence_year, usage_examples_present, grammatical_info_present,
+            grammatical_note, provenance_note
         )
         previous_editable_state = (
-            actual["source_id"], actual["original_gloss"], actual["hyperlink"],
-            actual["source_locator"], actual["provenance_note"],
-            actual["occurrence_year"]
+            actual["source_id"], actual["original_gloss"],
+            actual["source_detail_1"], actual["source_detail_2"],
+            actual["occurrence_year"], actual["usage_examples_present"],
+            actual["grammatical_info_present"], actual["grammatical_note"],
+            actual["provenance_note"]
         )
         if new_state != previous_editable_state:
             conexion.execute("""
@@ -189,20 +201,25 @@ def actualizar_ocurrencia(occurrence_id):
                     occurrence_id, legacy_occurrence_id, source_id,
                     original_gloss, hyperlink, legacy_source_detail_1,
                     legacy_source_detail_2, source_locator, provenance_note,
-                    occurrence_year, change_note
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    occurrence_year, source_detail_1,source_detail_2,
+                    usage_examples_present,grammatical_info_present,
+                    grammatical_note,change_note
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 occurrence_id, actual["legacy_occurrence_id"],
                 actual["source_id"], actual["original_gloss"],
                 actual["hyperlink"], actual["legacy_source_detail_1"],
                 actual["legacy_source_detail_2"], actual["source_locator"],
                 actual["provenance_note"], actual["occurrence_year"],
-                change_note
+                actual["source_detail_1"],actual["source_detail_2"],
+                actual["usage_examples_present"],actual["grammatical_info_present"],
+                actual["grammatical_note"],change_note
             ))
         cursor = conexion.execute("""
             UPDATE occurrence SET
-                source_id = ?, original_gloss = ?, hyperlink = ?,
-                source_locator = ?, provenance_note = ?, occurrence_year = ?,
+                source_id=?,original_gloss=?,source_detail_1=?,source_detail_2=?,
+                occurrence_year=?,usage_examples_present=?,
+                grammatical_info_present=?,grammatical_note=?,provenance_note=?,
                 updated_at = CURRENT_TIMESTAMP
             WHERE occurrence_id = ?
         """, (*new_state, occurrence_id))
@@ -489,9 +506,10 @@ def guardar_clasificacion(occurrence_id):
         component_labels=request.form.getlist("component_label")
         component_notes=request.form.getlist("component_note")
         components=[]
-        for position,alternative,label,note in zip(component_positions,component_alternatives,component_labels,component_notes):
-            if not alternative and not label.strip() and not note.strip(): continue
-            components.append({"position":position,"component_alternative_id":alternative or None,"component_label":label,"note":note})
+        if request.form.get("record_components") == "yes":
+            for position,alternative,label,note in zip(component_positions,component_alternatives,component_labels,component_notes):
+                if not alternative and not label.strip() and not note.strip(): continue
+                components.append({"position":position,"component_alternative_id":alternative or None,"component_label":label,"note":note})
         morphology={"component_count":component_count,"component_count_not_applicable":not_applicable,"free_permutation":request.form.get("free_permutation"),"note":request.form.get("morphology_note"),"components":components}
     conexion = conectar()
     try:

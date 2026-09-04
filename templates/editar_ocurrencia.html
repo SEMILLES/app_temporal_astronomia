@@ -1,142 +1,21 @@
-<!DOCTYPE html>
-<html lang="es">
-
-<head>
-    <meta charset="UTF-8">
-    <title>Editar ocurrencia - LeSiCo</title>
-</head>
-
-<body>
-
-    <h1>Editar ocurrencia</h1>
-
-    <p>
-        <strong>ID:</strong>
-        {{ ocurrencia["occurrence_id"] }}
-    </p>
-
-    <form
-        method="post"
-        action="{{
-            url_for(
-                'occurrences.actualizar_ocurrencia',
-                occurrence_id=ocurrencia['occurrence_id']
-            )
-        }}"
-    >
-
-        <p>
-
-            <label>
-                Fuente:
-            </label>
-
-            <select
-                name="source_id"
-                required
-            >
-
-                {% for fuente in fuentes %}
-
-                    <option
-                        value="{{ fuente['source_id'] }}"
-                        data-min-year="{{ fuente['start_year'] or '' }}"
-                        data-max-year="{{ fuente['end_year'] or '' }}"
-
-                        {% if fuente["source_id"] == ocurrencia["source_id"] %}
-                            selected
-                        {% endif %}
-                    >
-                        {{ fuente["source_name"] }}
-                    </option>
-
-                {% endfor %}
-
-            </select>
-
-        </p>
-
-
-        <p>
-
-            <label>
-                Glosa original:
-            </label>
-
-            <input
-                type="text"
-                name="original_gloss"
-                value="{{ ocurrencia['original_gloss'] or '' }}"
-            >
-
-        </p>
-
-
-        <p>
-
-            <label>
-                Enlace:
-            </label>
-
-            <input
-                type="url"
-                name="hyperlink"
-                value="{{ ocurrencia['hyperlink'] or '' }}"
-            >
-
-        </p>
-
-        <p>
-            <label>Localización en la fuente:</label>
-            <input
-                type="text"
-                name="source_locator"
-                value="{{ ocurrencia['source_locator'] or '' }}"
-            >
-        </p>
-
-        <p>
-            <label>Año de la ocurrencia (opcional):</label>
-            <input
-                type="number"
-                name="occurrence_year"
-                value="{{ ocurrencia['occurrence_year'] or '' }}"
-                min="1"
-                max="9999"
-            >
-        </p>
-
-        <p>
-            <label>Nota de procedencia:</label>
-            <textarea name="provenance_note">{{ ocurrencia['provenance_note'] or '' }}</textarea>
-        </p>
-
-        <p>
-            <label>Nota del cambio:</label>
-            <textarea name="change_note"></textarea>
-        </p>
-
-
-        <button type="submit">
-            Guardar cambios
-        </button>
-
-    </form>
-
-
-    <p>
-        <a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=ocurrencia['occurrence_id']) }}">
-            Clasificar ocurrencia
-        </a>
-    </p>
-
-    <p>
-        <a href="{{ url_for('occurrences.ocurrencias') }}">
-            Cancelar
-        </a>
-    </p>
-
-<script>(function(){const source=document.querySelector('[name=source_id]'),year=document.querySelector('[name=occurrence_year]');function limits(){const option=source.options[source.selectedIndex];year.min=option&&option.dataset.minYear||'1';year.max=option&&option.dataset.maxYear||'9999'}source.addEventListener('change',limits);limits()})();</script>
-</body>
-
-</html>
+<!doctype html><html lang="es"><meta charset="utf-8"><title>Editar ocurrencia - LeSiCo</title><body>
+<h1>Editar ocurrencia</h1><p><strong>ID:</strong> {{ ocurrencia['occurrence_id'] }}</p>
+<form method="post" action="{{ url_for('occurrences.actualizar_ocurrencia',occurrence_id=ocurrencia['occurrence_id']) }}">
+<p><label>Fuente: <select name="source_id" required>{% for fuente in fuentes %}<option value="{{ fuente['source_id'] }}" data-min-year="{{ fuente['start_year'] or '' }}" data-max-year="{{ fuente['end_year'] or '' }}"{% if fuente['source_id']==ocurrencia['source_id'] %} selected{% endif %}>{{ fuente['source_name'] }}</option>{% endfor %}</select></label></p>
+<p><label>Glosa original: <input name="original_gloss" value="{{ ocurrencia['original_gloss'] or '' }}"></label></p>
+<p><label>Detalle Fuente 1: <input name="source_detail_1" value="{{ ocurrencia['source_detail_1'] or '' }}"></label></p>
+<p><label>Detalle Fuente 2: <input name="source_detail_2" value="{{ ocurrencia['source_detail_2'] or '' }}"></label></p>
+<p><label>Año de la ocurrencia: <input type="number" name="occurrence_year" value="{{ ocurrencia['occurrence_year'] or '' }}" min="1" max="9999"></label></p>
+<fieldset><legend>Información documentada en la fuente</legend>
+<p><label>Ejemplos de uso <select name="usage_examples_present"><option value="0"{% if not ocurrencia['usage_examples_present'] %} selected{% endif %}>No</option><option value="1"{% if ocurrencia['usage_examples_present'] %} selected{% endif %}>Sí</option></select></label></p>
+<p><label>Información gramatical en la fuente <select name="grammatical_info_present"><option value="0"{% if not ocurrencia['grammatical_info_present'] %} selected{% endif %}>No</option><option value="1"{% if ocurrencia['grammatical_info_present'] %} selected{% endif %}>Sí</option></select></label></p>
+<p id="grammatical-note-field"{% if not ocurrencia['grammatical_info_present'] %} hidden{% endif %}><label>Apunte gramatical <textarea name="grammatical_note">{{ ocurrencia['grammatical_note'] or '' }}</textarea></label></p>
+</fieldset>
+<p><label>Nota de procedencia: <textarea name="provenance_note">{{ ocurrencia['provenance_note'] or '' }}</textarea></label></p>
+<p><label>Nota del cambio: <textarea name="change_note"></textarea></label></p>
+<p><button type="submit">Guardar cambios</button></p>
+</form>
+<p><a href="{{ url_for('occurrences.clasificar_ocurrencia',occurrence_id=ocurrencia['occurrence_id']) }}"><strong>Clasificar ocurrencia</strong></a></p>
+<p><small><a href="{{ url_for('occurrences.ocurrencias') }}">Cancelar</a></small></p>
+<script>(function(){const source=document.querySelector('[name=source_id]'),year=document.querySelector('[name=occurrence_year]'),grammar=document.querySelector('[name=grammatical_info_present]'),note=document.getElementById('grammatical-note-field');function limits(){const option=source.options[source.selectedIndex];year.min=option&&option.dataset.minYear||'1';year.max=option&&option.dataset.maxYear||'9999'}function grammarNote(){note.hidden=grammar.value!=='1';if(note.hidden)note.querySelector('textarea').value=''}source.addEventListener('change',limits);grammar.addEventListener('change',grammarNote);limits();grammarNote()})();</script>
+</body></html>

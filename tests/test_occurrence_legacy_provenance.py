@@ -223,6 +223,23 @@ class OccurrenceRouteTests(unittest.TestCase):
         database.BASE_DATOS = self.previous_database_path
         self.temporary_directory.cleanup()
 
+    def test_edit_uses_current_documentary_fields_and_hides_legacy_inputs(self):
+        connection=sqlite3.connect(self.database_path)
+        connection.execute("UPDATE occurrence SET source_detail_1='VIDEO',source_detail_2='00:20',usage_examples_present=1,grammatical_info_present=1,grammatical_note='Nota fuente'")
+        connection.commit();connection.close()
+        html=self.client.get("/ocurrencias/1/editar").get_data(as_text=True)
+        for text in ("Detalle Fuente 1","Detalle Fuente 2","Ejemplos de uso","Información gramatical en la fuente","Apunte gramatical","Nota de procedencia","Nota del cambio"):
+            self.assertIn(text,html)
+        self.assertNotIn('name="hyperlink"',html);self.assertNotIn('name="source_locator"',html)
+        self.assertNotIn('id="grammatical-note-field" hidden',html)
+        self.assertIn("note.hidden=grammar.value!=='1'",html)
+
+    def test_edit_updates_documentary_metadata_and_preserves_legacy_fields(self):
+        response=self.client.post("/ocurrencias/1/actualizar",data={"source_id":"1","original_gloss":"GLOSA","source_detail_1":"TÍTULO","source_detail_2":"01:02","occurrence_year":"2020","usage_examples_present":"1","grammatical_info_present":"1","grammatical_note":"Apunte","provenance_note":"Nueva","change_note":"Metadata"})
+        self.assertEqual(response.status_code,302)
+        connection=sqlite3.connect(self.database_path);row=connection.execute("SELECT source_detail_1,source_detail_2,usage_examples_present,grammatical_info_present,grammatical_note,hyperlink,source_locator FROM occurrence").fetchone();connection.close()
+        self.assertEqual(row,("TÍTULO","01:02",1,1,"Apunte","https://old.example","locator curado"))
+
     def test_edit_preserves_and_snapshots_legacy_provenance(self):
         response = self.client.post(
             "/ocurrencias/1/actualizar",
