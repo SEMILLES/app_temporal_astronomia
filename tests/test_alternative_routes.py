@@ -72,6 +72,11 @@ class AlternativeRouteTests(unittest.TestCase):
         self.assertIn('name="approve_morphology" value="yes" checked',page)
         self.assertIn("Las etiquetas de las alternativas existentes no cambian. La nueva alternativa se creará como TEST-2a.",page)
         self.assertIn("TEST-1a — 1 ocurrencia",page);self.assertNotIn("1 ocurrencias",page)
+        for text in ("Estado","= Sin cambio","+ Nueva","0 alternativas existentes cambian. Se creará 1 alternativa nueva."):
+            self.assertIn(text,page)
+        self.assertIn("Los cambios de nomenclatura se aplicarán al confirmar la decisión del revisor.",page)
+        self.assertIn('class="nomenclature-label" name="label_1" value="1a" readonly',page)
+        self.assertIn("input.readOnly=!editable",page)
 
     def test_existing_reviewer_decisions_and_changed_nomenclature_warning(self):
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"EXISTING","proposed_existing_alternative_id":"1"})
@@ -80,6 +85,7 @@ class AlternativeRouteTests(unittest.TestCase):
         for text in ("Aceptar la alternativa propuesta por el analista","Asignar a otra alternativa existente","Crear una nueva alternativa","Rechazar el aporte"):
             self.assertIn(text,page)
         self.assertIn("Esta operación modificará la nomenclatura de 1 alternativa existente.",page)
+        self.assertIn("↺ Cambia",page);self.assertIn("1 alternativa existente cambia. Se creará 1 alternativa nueva.",page)
         self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"existing_proposed"}).status_code,302)
         db=self.connect();self.assertEqual(db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0],1);db.close()
 

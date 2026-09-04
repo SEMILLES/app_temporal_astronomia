@@ -1,0 +1,12 @@
+.tarjeta-filtros{padding:1rem;border:1px solid #d9e0e6;border-radius:.65rem;background:#f8fbfb}
+.etiqueta-filtro{display:block;margin:.9rem 0 .35rem;font-weight:700}
+.tarjeta-filtros select{width:100%;padding:.6rem;border:1px solid #9baab4;border-radius:.45rem;background:#fff}
+.chips-area{display:flex;flex-wrap:wrap;gap:.4rem;margin:.35rem 0}
+.chips-area span{padding:.25rem .55rem;border-radius:999px;background:#dcefed;color:#175756;font-size:.82rem;font-weight:700}
+.cabecera-alternativa{padding-top:.25rem}
+.fuente-ocurrencia,.tecnica-occurrence{margin-top:.65rem}
+.historial-nomenclatura,.tecnica-alternative,.tecnica-concept{font-size:.92rem}
+.preview-sin-cambio{opacity:.72}
+.preview-cambia{font-weight:600}
+.preview-nueva{background:#e8f3f1}
+.resumen-preview{padding:.65rem;background:#f2f7f6;border-left:4px solid #176b6b}

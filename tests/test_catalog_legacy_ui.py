@@ -16,11 +16,11 @@ class LegacyCatalogUITests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory(); self.path = Path(self.temp.name) / "ui.db"
         db = self.connect(); crear_esquema(db)
-        db.execute("INSERT INTO source(source_name,start_year,end_year) VALUES('Fuente humana',2007,2009)")
-        db.execute("INSERT INTO concept(preferred_label) VALUES(?)", ('ASTRO<script>alert("x")</script>',))
+        db.execute("INSERT INTO source(source_name,start_year,end_year,region_description,characterization,format_original,format_detail,legacy_source_code) VALUES('Fuente humana',2007,2009,'Andina','Fuente caracterizada','Video','MP4','SRC-1')")
+        db.execute("INSERT INTO concept(preferred_label,knowledge_area_1) VALUES(?,?)", ('ASTRO<script>alert("x")</script>','Astronomía'))
         db.executemany("INSERT INTO alternative(concept_id,working_label) VALUES(1,?)", (("1a",),("1b",)))
         db.execute("INSERT INTO alternative(concept_id,working_label,retired_at) VALUES(1,'SECRETO-RETIRADO',CURRENT_TIMESTAMP)")
-        db.execute("INSERT INTO occurrence(source_id,original_gloss,source_locator,provenance_note,hyperlink) VALUES(1,'LUNA','p. 4','Nota <b>no HTML</b>','https://example.test/recurso')")
+        db.execute("INSERT INTO occurrence(source_id,original_gloss,source_detail_1,source_detail_2,source_locator,provenance_note,hyperlink) VALUES(1,'LUNA','VIDEO LUNA','00:20','p. 4','Nota <b>no HTML</b>','https://example.test/recurso')")
         db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,1)")
         db.execute("INSERT INTO occurrence_grammar(occurrence_id,gender,plural,plural_uncertain,grammar_note) VALUES(1,'femenino',NULL,0,'Gramática <script>privada</script>')")
         db.execute("INSERT INTO alternative_morphology(alternative_id,component_count,free_permutation,note) VALUES(1,1,'N/A','Morfología visible')")
@@ -62,6 +62,18 @@ class LegacyCatalogUITests(unittest.TestCase):
         external=self.client.get("/catalogo/alternativas/1").get_data(as_text=True)
         self.assertIn(f"VERSIÓN v{publication['version_number']}",external); self.assertIn("LUNA",external); self.assertNotIn("CAMBIO VIVO",external)
         self.assertIn("LUNA",self.client.get("/catalogo/v1/alternativas/1").get_data(as_text=True))
+
+    def test_catalog_hierarchy_keeps_metadata_with_its_entity(self):
+        html=self.client.get("/ana/catalogo-interno/alternativas/1").get_data(as_text=True)
+        concept=html.index('class="cabecera-concepto"');occurrence=html.index('class="ocurrencia"');source=html.index("Acerca de esta fuente");alt_technical=html.index("Información técnica de la Alternative");concept_technical=html.index("Información técnica del Concept")
+        self.assertLess(concept,occurrence);self.assertLess(occurrence,source);self.assertLess(source,alt_technical);self.assertLess(alt_technical,concept_technical)
+        for text in ("Astronomía","VIDEO LUNA","00:20","Andina","Fuente caracterizada","Formato original","SRC-1"):
+            self.assertIn(text,html)
+        self.assertEqual(html.count("Acerca de esta fuente"),1)
+        self.assertIn('tecnica-occurrence',html);self.assertIn('class="bloque tecnica-alternative"',html);self.assertIn('class="bloque tecnica-concept"',html)
+        self.assertGreater(html.index("Historial de nomenclatura"),html.index("Morfología"))
+        self.assertLess(html.index('class="identificador-alternativa"'),html.index('class="media-alternativa"') if 'class="media-alternativa"' in html else html.index("Ocurrencias y fuentes"))
+        self.assertNotIn("Campo semántico",html)
     def test_provenance_document_records_exact_source(self):
         text=(ROOT/"docs/legacy_catalog_ui.md").read_text(encoding="utf-8")
         self.assertIn("ab5a06d5f3a9cf2e2da82dc664571f7a46996bcd",text)

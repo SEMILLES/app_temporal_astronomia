@@ -114,6 +114,12 @@ class InternalCatalogRouteTests(unittest.TestCase):
         self.assertNotIn("Ver conflictos", analyst)
         self.assertIn("Ver conflictos", reviewer)
 
+    def test_area_filter_is_prepared_from_projected_concept_metadata(self):
+        db=self.connect();db.execute("UPDATE concept SET knowledge_area_1='Astronomía',knowledge_area_2='Lingüística'");db.commit();db.close()
+        html=self.client.get("/ana/catalogo-interno/conceptos/1").get_data(as_text=True)
+        self.assertIn("Área de conocimiento",html);self.assertIn('data-knowledge-areas="Astronomía||Lingüística"',html)
+        self.assertIn('id="filtro-area"',html);self.assertIn("dataset.knowledgeAreas",html if "dataset.knowledgeAreas" in html else (ROOT/"static/catalogo/catalogo.js").read_text(encoding="utf-8"))
+
 
 if __name__ == "__main__":
     unittest.main()

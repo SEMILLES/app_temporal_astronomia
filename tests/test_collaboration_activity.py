@@ -10,6 +10,7 @@ from flask import Flask
 import database
 from access_control import install_access_context
 from activity import InvalidActivity, record_activity
+from concept_labels import alternative_display_label
 from routes.collaborators import collaborators_bp
 from routes.main import main_bp
 from routes.sources import sources_bp
@@ -84,6 +85,7 @@ class RoleAccessTests(unittest.TestCase):
         self.old_env={key:os.environ.get(key) for key in ("LESICO_ANALYST_ROUTE","LESICO_REVIEWER_ROUTE","LESICO_MASTER_ROUTE")}
         os.environ.update(LESICO_ANALYST_ROUTE="test-analyst",LESICO_REVIEWER_ROUTE="test-reviewer",LESICO_MASTER_ROUTE="test-master")
         app=Flask(__name__,template_folder=str(ROOT/"templates")); app.testing=True
+        app.jinja_env.filters["alternative_display_label"]=alternative_display_label
         for blueprint in (main_bp,sources_bp,concepts_bp,occurrences_bp,
                           submissions_bp,alternatives_bp,collaborators_bp):
             app.register_blueprint(blueprint)
@@ -123,6 +125,18 @@ class RoleAccessTests(unittest.TestCase):
         rows=db.execute("SELECT event_type,collaborator_name_snapshot,access_role FROM activity_event ORDER BY activity_event_id").fetchall()
         self.assertEqual(rows,[("collaborator_created","Diana","master"),("collaborator_renamed","Julio","master")])
         db.close()
+
+    def test_analyst_pending_message_has_no_reviewer_action(self):
+        db=sqlite3.connect(self.path)
+        db.execute("INSERT INTO source(source_name) VALUES('Fuente')");db.execute("INSERT INTO concept(preferred_label) VALUES('COSMOS')")
+        db.execute("INSERT INTO occurrence(source_id,original_gloss) VALUES(1,'ESTRELLA')");db.execute("INSERT INTO occurrence_concept_reference(occurrence_id,concept_id) VALUES(1,1)")
+        db.execute("INSERT INTO submission(occurrence_id,submission_type,status) VALUES(1,'ALTERNATIVE','pending')")
+        db.execute("INSERT INTO alternative_submission(submission_id,proposal_kind,reference_concept_id) VALUES(1,'NEW',1)");db.commit();db.close()
+        analyst=self.client.get("/test-analyst/ocurrencias/1/clasificar").get_data(as_text=True)
+        reviewer=self.client.get("/test-reviewer/ocurrencias/1/clasificar").get_data(as_text=True)
+        self.assertIn("Ya existe un análisis pendiente de revisión",analyst);self.assertNotIn("Ir a revisión",analyst)
+        self.assertIn("Ir a revisión",reviewer)
+        self.assertEqual(self.client.post("/test-analyst/aportes/1/decidir",data={"decision":"rejected"}).status_code,404)
 
 
 if __name__ == "__main__": unittest.main()
