@@ -35,24 +35,53 @@ class AlternativeRouteTests(unittest.TestCase):
         self.assertIn("TEST-1 — 1 ocurrencia",page);self.assertNotIn("1 ocurrencias",page)
         self.assertIn('id="existing-alternative-field" hidden',page);self.assertIn("existing.hidden=!isExisting",page)
         self.assertIn('id="permutation-field" hidden',page)
-        self.assertIn("¿Registrar componente(s) identificado(s)?",page)
+        self.assertIn("¿Se identificaron componentes?",page)
         self.assertIn('name="record_components" value="no" checked',page)
         self.assertIn('<div id="components"></div>',page);self.assertIn('id="component-template"',page)
         self.assertNotIn('<div id="components"><div class="component">',page)
+        self.assertNotIn("list.replaceChildren()",page)
 
     def test_count_one_discards_stale_permutation_and_components(self):
-        response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"1","free_permutation":"SIN INFORMACIÓN","record_components":"yes","component_position":"1","component_label":"STALE","component_alternative_id":"","component_note":""})
+        response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"1","free_permutation":"SIN INFORMACIÓN","record_components":"yes","component_position":"1","component_type":"unapproved","component_alternative_id":"","component_note":"STALE"})
         self.assertEqual(response.status_code,302)
         db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0]
         self.assertEqual(tuple(db.execute("SELECT component_count,free_permutation FROM alternative_submission_morphology WHERE submission_id=?",(sid,)).fetchone()),(1,"N/A"))
         self.assertEqual(db.execute("SELECT count(*) FROM alternative_submission_component WHERE submission_id=?",(sid,)).fetchone()[0],0);db.close()
 
     def test_na_normalizes_permutation_and_allows_optional_component(self):
-        response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A","free_permutation":"SÍ","record_components":"yes","component_position":"1","component_label":"EXPLÍCITO","component_alternative_id":"","component_note":""})
+        response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A","free_permutation":"SÍ","record_components":"yes","component_position":"1","component_type":"unapproved","component_alternative_id":"","component_note":"EXPLÍCITO"})
         self.assertEqual(response.status_code,302)
         db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0]
         self.assertEqual(tuple(db.execute("SELECT component_count,component_count_not_applicable,free_permutation FROM alternative_submission_morphology WHERE submission_id=?",(sid,)).fetchone()),(None,1,"N/A"))
-        self.assertEqual(db.execute("SELECT component_label FROM alternative_submission_component WHERE submission_id=?",(sid,)).fetchone()[0],"EXPLÍCITO");db.close()
+        self.assertEqual(tuple(db.execute("SELECT component_alternative_id,note FROM alternative_submission_component WHERE submission_id=?",(sid,)).fetchone()),(None,"EXPLÍCITO"));db.close()
+
+    def test_component_type_validation_and_unapproved_creates_no_entities(self):
+        base={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"2","free_permutation":"NO","record_components":"yes","component_position":"1"}
+        self.assertEqual(self.client.post("/ocurrencias/2/clasificar",data=dict(base,component_type="existing",component_alternative_id="999",component_note="")).status_code,400)
+        self.assertEqual(self.client.post("/ocurrencias/2/clasificar",data=dict(base,component_type="unapproved",component_alternative_id="",component_note="")).status_code,400)
+        response=self.client.post("/ocurrencias/2/clasificar",data=dict(base,component_type="unapproved",component_alternative_id="",component_note="Forma dudosa por revisar"));self.assertEqual(response.status_code,302)
+        db=self.connect();self.assertEqual(db.execute("SELECT count(*) FROM alternative").fetchone()[0],1);self.assertEqual(db.execute("SELECT count(*) FROM concept_proposal").fetchone()[0],0)
+        self.assertEqual(tuple(db.execute("SELECT component_alternative_id,note FROM alternative_submission_component").fetchone()),(None,"Forma dudosa por revisar"));db.close()
+
+    def test_new_reviewer_progressive_decision_morphology_default_and_nomenclature_copy(self):
+        db=self.connect();db.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=1");db.commit();db.close()
+        self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"})
+        page=self.client.get("/aportes/pendientes").get_data(as_text=True)
+        self.assertIn("Aceptar la propuesta del analista: crear nueva alternativa",page)
+        self.assertIn('class="new-decision-controls" hidden',page);self.assertIn('class="existing-decision-controls" hidden',page)
+        self.assertIn('name="approve_morphology" value="yes" checked',page)
+        self.assertIn("Las etiquetas de las alternativas existentes no cambian. La nueva alternativa se creará como TEST-2a.",page)
+        self.assertIn("TEST-1a — 1 ocurrencia",page);self.assertNotIn("1 ocurrencias",page)
+
+    def test_existing_reviewer_decisions_and_changed_nomenclature_warning(self):
+        self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"EXISTING","proposed_existing_alternative_id":"1"})
+        db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];db.close()
+        page=self.client.get("/aportes/pendientes").get_data(as_text=True)
+        for text in ("Aceptar la alternativa propuesta por el analista","Asignar a otra alternativa existente","Crear una nueva alternativa","Rechazar el aporte"):
+            self.assertIn(text,page)
+        self.assertIn("Esta operación modificará la nomenclatura de 1 alternativa existente.",page)
+        self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"existing_proposed"}).status_code,302)
+        db=self.connect();self.assertEqual(db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0],1);db.close()
 
     def test_route_creates_existing_submission_not_assignment(self):
         response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"EXISTING","proposed_existing_alternative_id":"1"})
@@ -71,9 +100,9 @@ class AlternativeRouteTests(unittest.TestCase):
         self.assertEqual(self.client.get(f"/aportes/{sid}").status_code,200);db=self.connect();self.assertEqual(tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()),snapshot);db.close()
 
     def test_route_captures_and_explicitly_approves_morphology(self):
-        response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","record_morphology":"yes","morphology_component_count":"2","free_permutation":"SIN INFORMACIÓN","morphology_note":"Synthetic morphology","record_components":"yes","component_position":["1","2"],"component_alternative_id":["1",""],"component_label":["","FREE"],"component_note":["Known",""]});self.assertEqual(response.status_code,302)
+        response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","record_morphology":"yes","morphology_component_count":"2","free_permutation":"SIN INFORMACIÓN","morphology_note":"Synthetic morphology","record_components":"yes","component_position":["1","2"],"component_type":["existing","unapproved"],"component_alternative_id":["1",""],"component_note":["Known","FREE"]});self.assertEqual(response.status_code,302)
         db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];self.assertEqual(db.execute("SELECT component_count FROM alternative_submission_morphology WHERE submission_id=?",(sid,)).fetchone()[0],2);db.close()
-        review=self.client.get("/aportes/pendientes").get_data(as_text=True);self.assertIn("Morfología propuesta por el analista",review);self.assertIn("Crear la alternativa y revisar morfología después",review);self.assertIn("Usar la morfología propuesta",review)
+        review=self.client.get("/aportes/pendientes").get_data(as_text=True);self.assertIn("Morfología propuesta por el analista",review);self.assertIn("Crear la alternativa y revisar la morfología después",review);self.assertIn("Usar la morfología propuesta",review)
         response=self.client.post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","approve_morphology":"yes","nomenclature_mode":"automatic"});self.assertEqual(response.status_code,302)
         db=self.connect();row=db.execute("SELECT m.created_from_submission_id,count(c.alternative_component_id) FROM alternative_morphology m LEFT JOIN alternative_component c USING(alternative_morphology_id) WHERE m.is_current=1 GROUP BY m.alternative_morphology_id").fetchone();self.assertEqual(tuple(row),(sid,2));db.close()
 

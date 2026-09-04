@@ -311,8 +311,11 @@ def decidir_aporte(submission_id):
             concept_resolution=None
             action=request.form.get("concept_resolution_action")
             if action: concept_resolution={"action":action,"concept_id":request.form.get("resolved_concept_id") or None,"label":request.form.get("new_concept_label") or None}
-            if decision == "existing":
-                run_normal_review(db,lambda connection: review_as_existing(connection,submission_id,request.form.get("alternative_id"),concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
+            if decision in ("existing", "existing_proposed"):
+                target_id=request.form.get("alternative_id")
+                if decision == "existing_proposed":
+                    target_id=db.execute("SELECT proposed_existing_alternative_id FROM alternative_submission WHERE submission_id=?",(submission_id,)).fetchone()[0]
+                run_normal_review(db,lambda connection: review_as_existing(connection,submission_id,target_id,concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
             elif decision == "new":
                 labels={key[6:]:value for key,value in request.form.items() if key.startswith("label_")}
                 before_events=db.execute("SELECT count(*) FROM renumber_change").fetchone()[0]

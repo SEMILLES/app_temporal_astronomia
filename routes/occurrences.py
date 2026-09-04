@@ -24,6 +24,29 @@ def _grammar_values(form):
     return values
 
 
+def _component_rows(form):
+    if form.get("record_components") != "yes":
+        return []
+    rows=[]
+    values=zip(form.getlist("component_position"),form.getlist("component_type"),
+               form.getlist("component_alternative_id"),form.getlist("component_note"))
+    for position,component_type,alternative,note in values:
+        note=(note or "").strip();alternative=(alternative or "").strip()
+        if component_type == "existing":
+            if not alternative:
+                raise ValueError("Seleccione una Alternative vigente para el componente.")
+            rows.append({"position":position,"component_alternative_id":alternative,
+                         "component_label":None,"note":note})
+        elif component_type == "unapproved":
+            if not note:
+                raise ValueError("El componente no aprobado o con dudas requiere una nota.")
+            rows.append({"position":position,"component_alternative_id":None,
+                         "component_label":None,"note":note})
+        elif alternative or note:
+            raise ValueError("Seleccione el tipo de componente.")
+    return rows
+
+
 def _alternative_payload(form):
     proposal_kind=form.get("proposal_kind");relations=[]
     types=form.getlist("relation_target_type");targets=form.getlist("relation_target_id");parameters=form.getlist("relation_parameter");uncertain=set(form.getlist("relation_uncertain"))
@@ -39,11 +62,7 @@ def _alternative_payload(form):
             item={"phonological_parameter":parameter,"uncertain":str(index) in uncertain};item["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None;relations.append(item)
     morphology=None
     if proposal_kind=="NEW":
-        choice=form.get("morphology_component_count");components=[]
-        if form.get("record_components") == "yes":
-            for position,alternative,label,note in zip(form.getlist("component_position"),form.getlist("component_alternative_id"),form.getlist("component_label"),form.getlist("component_note")):
-                if not alternative and not label.strip() and not note.strip():continue
-                components.append({"position":position,"component_alternative_id":alternative or None,"component_label":label,"note":note})
+        choice=form.get("morphology_component_count");components=_component_rows(form)
         morphology={"component_count":None if choice in (None,"","N/A") else choice,"component_count_not_applicable":choice=="N/A","free_permutation":form.get("free_permutation"),"note":form.get("morphology_note"),"components":components}
     return {"proposal_kind":proposal_kind,"proposed_existing_alternative_id":form.get("proposed_existing_alternative_id") or None,"phonological_relation_answer":form.get("phonological_relation_answer"),"relations":relations,"analysis_note":form.get("analysis_note"),"morphology":morphology}
 
@@ -501,15 +520,10 @@ def guardar_clasificacion(occurrence_id):
         count_choice=request.form.get("morphology_component_count")
         not_applicable=count_choice=="N/A"
         component_count=None if count_choice in (None,"","N/A") else count_choice
-        component_positions=request.form.getlist("component_position")
-        component_alternatives=request.form.getlist("component_alternative_id")
-        component_labels=request.form.getlist("component_label")
-        component_notes=request.form.getlist("component_note")
-        components=[]
-        if request.form.get("record_components") == "yes":
-            for position,alternative,label,note in zip(component_positions,component_alternatives,component_labels,component_notes):
-                if not alternative and not label.strip() and not note.strip(): continue
-                components.append({"position":position,"component_alternative_id":alternative or None,"component_label":label,"note":note})
+        try:
+            components=_component_rows(request.form)
+        except ValueError as error:
+            return str(error),400
         morphology={"component_count":component_count,"component_count_not_applicable":not_applicable,"free_permutation":request.form.get("free_permutation"),"note":request.form.get("morphology_note"),"components":components}
     conexion = conectar()
     try:
@@ -532,7 +546,8 @@ def guardar_clasificacion(occurrence_id):
 @occurrences_bp.post("/ocurrencias/<int:occurrence_id>/clasificar/aceptacion-inmediata/preview")
 @requires_reviewer
 def preview_alternative_immediate(occurrence_id):
-    operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    try: operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    except ValueError as error:return str(error),400
     return _confirmation("alternative",occurrence_id,operation)
 
 
@@ -540,7 +555,9 @@ def preview_alternative_immediate(occurrence_id):
 @requires_reviewer
 def confirm_alternative_immediate(occurrence_id):
     if request.form.get("confirm_immediate")!="yes":return "Debe confirmar explícitamente la aceptación inmediata.",400
-    db=conectar();operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    db=conectar()
+    try:operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    except ValueError as error:db.close();return str(error),400
     try:confirm_operation(db,operation)
     except ImmediateBlockingError as error:return str(error),409
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
