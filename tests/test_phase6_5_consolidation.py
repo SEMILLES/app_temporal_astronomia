@@ -88,7 +88,7 @@ class PeriodAndInterfaceTests(unittest.TestCase):
     def test_canonical_ui_navigation_morphology_and_legacy_bypasses(self):
         page=self.client.get("/ocurrencias/1/clasificar").get_data(as_text=True)
         self.assertIn("TEST-CONCEPT-1a",page)
-        self.assertIn("¿Con qué se relaciona fonológicamente?",page)
+        self.assertIn("¿Esta nueva alternativa parece estar relacionada fonológicamente con otra alternativa?",page)
         self.assertIn("Con duda",page);self.assertNotIn("Sospechada",page)
         self.assertIn('name="morphology_component_count" required',page)
         self.assertNotIn("¿Desea registrar información morfológica?",page)

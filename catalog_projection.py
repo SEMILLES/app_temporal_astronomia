@@ -19,7 +19,7 @@ def project_source(row):
         "source_id", "source_name", "source_type", "source_reference",
         "start_year", "end_year", "end_year_status", "source_scope",
         "format_original", "format_detail", "region_description",
-        "characterization",
+        "characterization", "reported_entry_count", "legacy_source_code",
     )
     return {field: row[field] for field in fields}
 
@@ -45,7 +45,7 @@ def project_occurrence(connection, occurrence_id):
         SELECT o.*, s.source_name, s.source_type, s.source_reference,
                s.start_year, s.end_year, s.end_year_status, s.source_scope,
                s.format_original, s.format_detail, s.region_description,
-               s.characterization
+               s.characterization, s.reported_entry_count, s.legacy_source_code
         FROM occurrence AS o JOIN source AS s USING(source_id)
         WHERE o.occurrence_id = ?
         """,
@@ -57,7 +57,13 @@ def project_occurrence(connection, occurrence_id):
     ).fetchone()
     return {
         "occurrence_id": row["occurrence_id"],
+        "legacy_occurrence_id": row["legacy_occurrence_id"],
         "original_gloss": row["original_gloss"],
+        "source_detail_1": row["source_detail_1"],
+        "source_detail_2": row["source_detail_2"],
+        "usage_examples_present": bool(row["usage_examples_present"]),
+        "grammatical_info_present": bool(row["grammatical_info_present"]),
+        "grammatical_note": row["grammatical_note"],
         "hyperlink": row["hyperlink"],
         "source_locator": row["source_locator"],
         "provenance_note": row["provenance_note"],
@@ -123,11 +129,22 @@ def project_alternative_media(connection, alternative_id):
     return result
 
 
+def project_nomenclature_history(connection, alternative_id):
+    return [dict(row) for row in connection.execute("""
+        SELECT e.created_at,e.origin,e.reason,e.created_by,
+               c.old_working_label,c.new_working_label
+        FROM renumber_change c JOIN renumber_event e USING(renumber_event_id)
+        WHERE c.alternative_id=? ORDER BY e.created_at DESC,e.renumber_event_id DESC
+    """, (alternative_id,))]
+
+
 def build_catalog_projection(connection):
     """Return only current canonical lexical state, using JSON-safe values."""
     all_alternatives = [dict(row) for row in connection.execute("""
-        SELECT a.alternative_id, a.concept_id, a.working_label, a.retired_at,
-               c.preferred_label
+        SELECT a.alternative_id, a.concept_id, a.original_code, a.working_label,
+               a.created_at, a.retired_at, c.preferred_label,
+               c.semantic_field_1,c.semantic_field_2,
+               c.knowledge_area_1,c.knowledge_area_2,c.created_at AS concept_created_at
         FROM alternative AS a JOIN concept AS c USING(concept_id)
     """)]
     names = {
@@ -145,6 +162,8 @@ def build_catalog_projection(connection):
         by_concept.setdefault(row["concept_id"], {
             "concept_id": row["concept_id"],
             "preferred_label": row["preferred_label"],
+            "semantic_fields": [value for value in (row["semantic_field_1"], row["semantic_field_2"]) if value],
+            "knowledge_areas": [value for value in (row["knowledge_area_1"], row["knowledge_area_2"]) if value],
             "alternatives": [], "relations": [],
         })
     for row in alternatives:
@@ -156,12 +175,14 @@ def build_catalog_projection(connection):
         occurrences.sort(key=lambda item: (_key(item["original_gloss"]), item["occurrence_id"]))
         by_concept[row["concept_id"]]["alternatives"].append({
             "alternative_id": row["alternative_id"],
+            "legacy_alternative_id": row["original_code"],
             "working_label": row["working_label"],
             "name": names[row["alternative_id"]],
             "media": project_alternative_media(connection, row["alternative_id"]),
             "occurrences": occurrences,
             "morphology": project_morphology(connection, row["alternative_id"], names),
             "relation_ids": [],
+            "nomenclature_history": project_nomenclature_history(connection, row["alternative_id"]),
         })
     concept_by_alternative = {
         row["alternative_id"]: row["concept_id"] for row in alternatives

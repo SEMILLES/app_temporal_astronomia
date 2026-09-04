@@ -143,6 +143,10 @@ def crear_esquema(conexion):
         CREATE TABLE IF NOT EXISTS concept (
             concept_id INTEGER PRIMARY KEY AUTOINCREMENT,
             preferred_label TEXT NOT NULL UNIQUE,
+            semantic_field_1 TEXT,
+            semantic_field_2 TEXT,
+            knowledge_area_1 TEXT,
+            knowledge_area_2 TEXT,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
 
@@ -154,6 +158,13 @@ def crear_esquema(conexion):
             hyperlink TEXT,
             legacy_source_detail_1 TEXT,
             legacy_source_detail_2 TEXT,
+            source_detail_1 TEXT,
+            source_detail_2 TEXT,
+            usage_examples_present INTEGER NOT NULL DEFAULT 0
+                CHECK (usage_examples_present IN (0, 1)),
+            grammatical_info_present INTEGER NOT NULL DEFAULT 0
+                CHECK (grammatical_info_present IN (0, 1)),
+            grammatical_note TEXT,
             source_locator TEXT,
             provenance_note TEXT,
             occurrence_year INTEGER,
@@ -219,6 +230,13 @@ def crear_esquema(conexion):
             hyperlink TEXT,
             legacy_source_detail_1 TEXT,
             legacy_source_detail_2 TEXT,
+            source_detail_1 TEXT,
+            source_detail_2 TEXT,
+            usage_examples_present INTEGER NOT NULL DEFAULT 0
+                CHECK (usage_examples_present IN (0, 1)),
+            grammatical_info_present INTEGER NOT NULL DEFAULT 0
+                CHECK (grammatical_info_present IN (0, 1)),
+            grammatical_note TEXT,
             source_locator TEXT,
             provenance_note TEXT,
             occurrence_year INTEGER,
@@ -431,6 +449,13 @@ def crear_esquema(conexion):
             source_id INTEGER,
             original_gloss TEXT,
             occurrence_year INTEGER,
+            source_detail_1 TEXT,
+            source_detail_2 TEXT,
+            usage_examples_present INTEGER NOT NULL DEFAULT 0
+                CHECK (usage_examples_present IN (0, 1)),
+            grammatical_info_present INTEGER NOT NULL DEFAULT 0
+                CHECK (grammatical_info_present IN (0, 1)),
+            grammatical_note TEXT,
             source_locator TEXT,
             provenance_note TEXT,
             reference_concept_id INTEGER,

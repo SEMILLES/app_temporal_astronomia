@@ -32,8 +32,9 @@ def _context(db, draft=None, error=None):
 
 def _evidence(form):
     return {name: form.get(name) for name in (
-        "source_id", "original_gloss", "occurrence_year", "source_locator",
-        "provenance_note", "hyperlink",
+        "source_id", "original_gloss", "occurrence_year", "source_detail_1",
+        "source_detail_2", "usage_examples_present", "grammatical_info_present",
+        "grammatical_note", "source_locator", "provenance_note", "hyperlink",
     )}
 
 
@@ -247,6 +248,12 @@ def _alternative_review_context(db, rows):
             alternative["display_label"]=alternative_display_label(
                 alternative["preferred_label"],alternative["working_label"]
             )
+            alternative["occurrences"]=[dict(item) for item in db.execute("""
+                SELECT o.occurrence_id,o.original_gloss,s.source_name,o.source_detail_1,o.source_detail_2
+                FROM assignment ass JOIN occurrence o USING(occurrence_id)
+                JOIN source s USING(source_id)
+                WHERE ass.alternative_id=? AND ass.is_current=1 ORDER BY o.occurrence_id
+            """,(alternative["alternative_id"],))]
         relations=db.execute("""
             SELECT r.*,a.working_label AS target_working_label,
                    ts.status AS target_submission_status,
@@ -289,7 +296,7 @@ def detalle_aporte(submission_id):
 @submissions_bp.route("/aportes/<int:submission_id>/decidir", methods=["POST"])
 def decidir_aporte(submission_id):
     decision = {"accept": "accepted", "accept_proposed": "accepted", "reject": "rejected"}.get(request.form.get("decision"), request.form.get("decision"))
-    db = conectar()
+    db = conectar(); created_message = None
     try:
         row = db.execute("SELECT submission_type FROM submission WHERE submission_id=?", (submission_id,)).fetchone()
         if row is None:
@@ -308,10 +315,14 @@ def decidir_aporte(submission_id):
                 run_normal_review(db,lambda connection: review_as_existing(connection,submission_id,request.form.get("alternative_id"),concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
             elif decision == "new":
                 labels={key[6:]:value for key,value in request.form.items() if key.startswith("label_")}
-                run_normal_review(db,lambda connection: review_as_new(connection,submission_id,concept_resolution=concept_resolution,approve_relations=request.form.get("approve_relations")=="yes",nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=request.form.get("approve_morphology")=="yes",collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
+                before_events=db.execute("SELECT count(*) FROM renumber_change").fetchone()[0]
+                new_id=run_normal_review(db,lambda connection: review_as_new(connection,submission_id,concept_resolution=concept_resolution,approve_relations=request.form.get("approve_relations")=="yes",nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=request.form.get("approve_morphology")=="yes",collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
+                created=db.execute("SELECT c.preferred_label,a.working_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.alternative_id=?",(new_id,)).fetchone()
+                changes=db.execute("SELECT count(*) FROM renumber_change").fetchone()[0]-before_events
+                created_message=f"Nueva alternativa creada como {alternative_display_label(created['preferred_label'],created['working_label'])}. Se actualizaron {changes} etiquetas del concepto {created['preferred_label']}."
             else: raise AlternativeWorkflowError("Decisión de review no válida.")
     except (AlternativeWorkflowError,GrammarWorkflowError,ImmediateAcceptanceError, sqlite3.IntegrityError, ValueError) as error:
         return str(error), 400
     finally:
         db.close()
-    return redirect(url_for("submissions.revisar_aportes"))
+    return redirect(url_for("submissions.revisar_aportes",message=created_message) if created_message else url_for("submissions.revisar_aportes"))
