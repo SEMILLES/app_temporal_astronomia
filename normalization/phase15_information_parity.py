@@ -24,27 +24,75 @@ SOURCE_RULES = {
 }
 
 MORPHOLOGY = {
-    "ASTERISMO-1a": (2, "ESTRELLA-1a"), "ASTERISMO-3a": (2, None),
-    "ASTRONOMÍA-2a": (2, None), "ASTRONOMÍA-2b": (2, None),
-    "ASTRONOMÍA-INDÍGENA-1a": (2, "ASTRONOMÍA-CULTURAL-1a"),
-    "ASTRONOMÍA-PREHISPÁNICA-1a": (2, "ASTRONOMÍA-CULTURAL-1a"),
-    "CONSTELACIÓN-2a": (2, "UNIVERSO-1b"), "COSMOS-1a": (1, None),
-    "COSMOVISIÓN-1a": (2, "COSMOS-1a"), "ECLIPSE-2a": (3, "SOL-1a"),
-    "FUERZA-ROZAMIENTO-1a": (2, "FUERZA-1a"),
-    "PATRIMONIO-DE-LA-HUMANIDAD-1a": (2, None), "SOL-2a": (2, "SOL-1a"),
-    "TIEMPO-1a": (1, None), "VÍA-LÁCTEA-2a": (2, "UNIVERSO-1b"),
+    # Stable alternative_id: (documentary reference, component_count, stable component IDs).
+    9: ("legacy ASTERISMO-1a; renumber_change 1a -> 2a", 2, (81,)),
+    11: ("ASTERISMO-3a; original_code ASTERISMO-2a", 2, ()),
+    20: ("ASTRONOMÍA-2a; original_code ASTRONOMÍA-3a", 2, ()),
+    21: ("ASTRONOMÍA-2b; original_code ASTRONOMÍA-3b", 2, ()),
+    23: ("ASTRONOMÍA-INDÍGENA-1a", 2, (22,)),
+    24: ("ASTRONOMÍA-PREHISPÁNICA-1a", 2, (22,)),
+    57: ("CONSTELACIÓN-2a; occurrence 11167", 2, (212,)),
+    61: ("COSMOS-1a; decisión Módulo 1", 1, ()),
+    62: ("COSMOVISIÓN-1a; decisión Módulo 1", 2, (61,)),
+    71: ("ECLIPSE-2a", 3, (190,)),
+    97: ("FUERZA-ROZAMIENTO-1a", 2, (93,)),
+    161: ("PATRIMONIO-DE-LA-HUMANIDAD-1a; decisión Módulo 1", 2, ()),
+    191: ("SOL-2a", 2, (190,)),
+    202: ("TIEMPO-1a; corrección explícita del error legacy", 1, ()),
+    223: ("VÍA-LÁCTEA-2a; occurrence 11169", 2, (212,)),
 }
 
-def _alternative(db, full_label):
-    rows = db.execute("""SELECT a.alternative_id FROM alternative a JOIN concept c USING(concept_id)
-        WHERE UPPER(c.preferred_label || '-' || a.working_label)=UPPER(?)""", (full_label,)).fetchall()
-    if len(rows) != 1: raise RuntimeError(f"Alternative no inequívoca: {full_label} ({len(rows)})")
-    return rows[0][0]
+VIDEO_DETAIL_SOURCE_IDS = (37, 38, 39, 44)
+
+
+def _stable_alternative(db, alternative_id):
+    row = db.execute("""SELECT a.alternative_id,a.working_label,a.original_code,
+        c.preferred_label FROM alternative a JOIN concept c USING(concept_id)
+        WHERE a.alternative_id=? AND a.retired_at IS NULL""", (alternative_id,)).fetchone()
+    if row is None:
+        raise RuntimeError(f"Falta alternative_id estable {alternative_id}")
+    return row
+
+
+def _detail_plan(db):
+    changes, preserved, numbered = [], [], []
+    duplicate_groups = duplicate_occurrences = 0
+    for source_id in VIDEO_DETAIL_SOURCE_IDS:
+        rows = db.execute("""SELECT occurrence_id,original_gloss,source_detail_1
+            FROM occurrence WHERE source_id=? ORDER BY occurrence_id""", (source_id,)).fetchall()
+        groups = {}
+        for row in rows:
+            gloss = (row["original_gloss"] or "").strip().upper()
+            if not gloss:
+                preserved.append({"occurrence_id": row["occurrence_id"], "reason": "glosa vacía"})
+                continue
+            groups.setdefault(gloss, []).append(row)
+        for gloss, occurrences in groups.items():
+            if len(occurrences) > 1:
+                duplicate_groups += 1
+                duplicate_occurrences += len(occurrences) - 1
+            for index, row in enumerate(occurrences):
+                desired = gloss if index == 0 else f"{gloss} {index}"
+                current = (row["source_detail_1"] or "").strip()
+                if current:
+                    preserved.append({"occurrence_id": row["occurrence_id"], "value": current,
+                                      "proposed": desired, "reason": "valor canónico preexistente"})
+                else:
+                    changes.append({"occurrence_id": row["occurrence_id"], "source_id": source_id,
+                                    "value": desired})
+                if index:
+                    numbered.append({"source_id": source_id, "occurrence_id": row["occurrence_id"],
+                                     "value": desired})
+    return {"changes": changes, "preserved": preserved, "numbered": numbered,
+            "duplicate_groups": duplicate_groups,
+            "duplicate_occurrences": duplicate_occurrences}
 
 def normalize(db, apply=False):
     before = audit_database(db); before_relations = [tuple(r) for r in db.execute(
         "SELECT * FROM alternative_relation ORDER BY alternative_relation_id")]
+    details = _detail_plan(db)
     plan = {"canonical_details": db.execute("SELECT count(*) FROM occurrence WHERE source_detail_1 IS NULL AND legacy_source_detail_1 IS NOT NULL OR source_detail_2 IS NULL AND legacy_source_detail_2 IS NOT NULL").fetchone()[0],
+            "video_source_details": details,
             "concept_areas": db.execute("SELECT count(*) FROM concept WHERE knowledge_area_1 IS NOT 'ASTRONOMÍA' OR knowledge_area_2 IS NOT NULL").fetchone()[0],
             "sources": [], "morphology": []}
     for source_id, desired in SOURCE_RULES.items():
@@ -53,17 +101,25 @@ def normalize(db, apply=False):
         changes = {k: v for k, v in desired.items() if k != "detail_1" and row[k] != v}
         detail_changes = db.execute("SELECT count(*) FROM occurrence WHERE source_id=? AND source_detail_1 IS NOT ?", (source_id, desired["detail_1"])).fetchone()[0]
         plan["sources"].append({"source_id": source_id, "changes": changes, "occurrence_details": detail_changes})
-    for label, (count, component) in MORPHOLOGY.items():
-        aid = _alternative(db, label); current = db.execute("SELECT * FROM alternative_morphology WHERE alternative_id=? AND is_current=1", (aid,)).fetchone()
-        plan["morphology"].append({"alternative_id": aid, "label": label,
+    for aid, (reference, count, component_ids) in MORPHOLOGY.items():
+        alternative = _stable_alternative(db, aid)
+        for component_id in component_ids:
+            _stable_alternative(db, component_id)
+        current = db.execute("SELECT * FROM alternative_morphology WHERE alternative_id=? AND is_current=1", (aid,)).fetchone()
+        plan["morphology"].append({"alternative_id": aid,
+            "current_label": f"{alternative['preferred_label']}-{alternative['working_label']}",
+            "documentary_reference": reference,
             "old": "N/A" if current and current["component_count_not_applicable"] else current["component_count"] if current else None,
-            "new": count, "component": component})
+            "new": count, "component_alternative_ids": list(component_ids)})
     if not apply: return {"mode": "dry-run", "plan": plan, "before": before}
     db.execute("BEGIN IMMEDIATE")
     try:
         db.execute("""UPDATE occurrence SET source_detail_1=COALESCE(source_detail_1,legacy_source_detail_1),
             source_detail_2=COALESCE(source_detail_2,legacy_source_detail_2)""")
         db.execute("UPDATE concept SET knowledge_area_1='ASTRONOMÍA',knowledge_area_2=NULL")
+        for item in details["changes"]:
+            db.execute("UPDATE occurrence SET source_detail_1=? WHERE occurrence_id=? AND trim(coalesce(source_detail_1,''))=''",
+                       (item["value"], item["occurrence_id"]))
         for item in plan["sources"]:
             sid=item["source_id"]; desired=SOURCE_RULES[sid]
             if item["changes"]:
@@ -72,8 +128,8 @@ def normalize(db, apply=False):
                 cols=list(item["changes"]); db.execute("UPDATE source SET "+",".join(f"{c}=?" for c in cols)+",updated_at=CURRENT_TIMESTAMP WHERE source_id=?", (*[item["changes"][c] for c in cols],sid))
             db.execute("UPDATE occurrence SET source_detail_1=?,source_detail_2=CASE WHEN ?=43 THEN NULL ELSE source_detail_2 END WHERE source_id=?", (desired["detail_1"],sid,sid))
         for item in plan["morphology"]:
-            components=[]
-            if item["component"]: components=[{"position":1,"component_alternative_id":_alternative(db,item["component"])}]
+            components=[{"position": position, "component_alternative_id": component_id}
+                        for position, component_id in enumerate(item["component_alternative_ids"], 1)]
             create_or_replace_alternative_morphology(db,item["alternative_id"],component_count=item["new"],free_permutation="N/A" if item["new"]==1 else "SIN INFORMACIÓN",components=components,note="Análisis documentado en reconstrucción astronómica Fase 15",created_by=None,created_from_submission_id=None)
         if before_relations != [tuple(r) for r in db.execute("SELECT * FROM alternative_relation ORDER BY alternative_relation_id")]: raise RuntimeError("Se alteraron relaciones")
         if db.execute("PRAGMA foreign_key_check").fetchall(): raise RuntimeError("Foreign keys inválidas")
