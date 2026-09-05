@@ -182,7 +182,7 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
         gloss = _text(original_gloss)
         if not source_id or gloss is None:
             raise RegistrationError("La fuente y la glosa original son obligatorias.")
-        source = connection.execute("SELECT source_type FROM source WHERE source_id = ?", (source_id,)).fetchone()
+        source = connection.execute("SELECT source_type FROM source WHERE source_id = ? AND retired_at IS NULL", (source_id,)).fetchone()
         if source is None:
             raise RegistrationError("La fuente no existe.")
         source_detail_1_status = source_detail_1_status or ("VALUE" if _text(source_detail_1) else "UNKNOWN")

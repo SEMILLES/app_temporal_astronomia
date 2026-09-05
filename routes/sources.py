@@ -11,15 +11,20 @@ import sqlite3
 from database import conectar
 from flask import g, abort
 from activity import record_activity
+from source_forms import source_form_values, source_insert_values, parse_source_years
+from source_structural import year_conflicts
 from source_details import SOURCE_TYPES, analysts_may_create_sources
 
 
+from routes.source_retirement import source_retirement_bp
+
 sources_bp = Blueprint("sources", __name__)
+sources_bp.register_blueprint(source_retirement_bp)
 
 
 def source_edit_allowed(connection, source):
     role = getattr(g, "current_access_role", None)
-    return source is not None and (
+    return source is not None and source["retired_at"] is None and (
         role in ("reviewer", "master") or
         (role == "analyst" and not source["analyst_protected"]
          and analysts_may_create_sources(connection))
@@ -35,7 +40,7 @@ def source_protection(source_id):
     try:
         if request.method == "POST":
             db.execute("BEGIN IMMEDIATE")
-        source = db.execute("SELECT * FROM source WHERE source_id=?", (source_id,)).fetchone()
+        source = db.execute("SELECT * FROM source WHERE source_id=? AND retired_at IS NULL", (source_id,)).fetchone()
         if source is None:
             abort(404)
         if request.method == "GET":
@@ -62,69 +67,6 @@ def source_protection(source_id):
     return redirect(url_for("sources.fuentes"))
 
 
-def parse_source_years(form):
-
-    def parse(name):
-        value = form.get(name, "").strip()
-        if not value:
-            return None
-        if not value.isdigit() or len(value) != 4:
-            raise ValueError
-        return int(value)
-
-    start_year = parse("start_year")
-    end_year = parse("end_year")
-    status = form.get("end_year_status", "").strip() or None
-    if status not in (None, "known", "ongoing", "unknown"):
-        raise ValueError
-    if (start_year is not None or end_year is not None) and status is None:
-        raise ValueError
-    if status == "known" and end_year is None:
-        raise ValueError
-    if status in ("ongoing", "unknown") and end_year is not None:
-        raise ValueError
-    if start_year is not None and end_year is not None and start_year > end_year:
-        raise ValueError
-    return start_year, end_year, status
-
-
-def source_form_values(form):
-    start_year, end_year, status = parse_source_years(form)
-    source_scope = form.get("source_scope", "").strip() or None
-    if source_scope not in (None, "INSTITUTIONAL", "PERSONAL"):
-        raise ValueError
-    reported_entry_count_value = form.get("reported_entry_count", "").strip()
-    if reported_entry_count_value:
-        if not reported_entry_count_value.isdigit():
-            raise ValueError
-        reported_entry_count = int(reported_entry_count_value)
-    else:
-        reported_entry_count = None
-    source_type=form.get("source_type", "").strip()
-    if source_type not in SOURCE_TYPES: raise ValueError
-    return (
-        form.get("source_name", "").strip(), source_type,
-        form.get("source_reference", "").strip() or None,
-        form.get("legacy_source_code", "").strip() or None,
-        source_scope,
-        form.get("format_original", "").strip() or None,
-        form.get("format_detail", "").strip() or None,
-        start_year,
-        end_year,
-        status,
-        form.get("region_description", "").strip() or None,
-        form.get("characterization", "").strip() or None,
-        reported_entry_count,
-    )
-
-
-def source_insert_values(form):
-    values = source_form_values(form)
-    if not values[0]:
-        raise ValueError
-    return values
-
-
 @sources_bp.route("/fuentes")
 def fuentes():
 
@@ -133,8 +75,8 @@ def fuentes():
         SELECT source_id, source_name, legacy_source_code, source_scope,
                source_type, source_reference, format_original, format_detail, start_year, end_year,
                end_year_status, region_description, characterization,
-               reported_entry_count, analyst_protected
-        FROM source ORDER BY source_name
+               reported_entry_count, analyst_protected, retired_at
+        FROM source WHERE retired_at IS NULL ORDER BY source_name
     """).fetchall()
     can_create=getattr(g,"current_access_role",None) in ("reviewer","master") or analysts_may_create_sources(conexion)
     conexion.close()
@@ -186,7 +128,7 @@ def editar_fuente(source_id):
         SELECT source_id, source_name, source_type, source_reference, legacy_source_code, source_scope,
                format_original, format_detail, start_year, end_year,
                end_year_status, region_description, characterization,
-               reported_entry_count, analyst_protected
+               reported_entry_count, analyst_protected, retired_at
         FROM source WHERE source_id = ?
     """, (source_id,)).fetchone()
     occurrence_count = conexion.execute("SELECT count(*) FROM occurrence WHERE source_id=?",(source_id,)).fetchone()[0]
@@ -208,7 +150,7 @@ def actualizar_fuente(source_id):
             SELECT source_name, source_type, source_reference,
                    legacy_source_code, source_scope, format_original,
                    format_detail, start_year, end_year, end_year_status,
-                   region_description, characterization, reported_entry_count, analyst_protected
+                   region_description, characterization, reported_entry_count, analyst_protected, retired_at
             FROM source WHERE source_id = ?
         """, (source_id,)).fetchone()
         if not source_edit_allowed(conexion, actual):
@@ -223,6 +165,9 @@ def actualizar_fuente(source_id):
         if not values[0]:
             return "El nombre de la fuente es obligatorio.", 400
 
+        conflicts = year_conflicts(conexion.execute("SELECT occurrence_id,occurrence_year FROM occurrence WHERE source_id=?", (source_id,)).fetchall(), {"start_year": values[7], "end_year": values[8]})
+        if conflicts and (actual["start_year"], actual["end_year"], actual["end_year_status"]) != values[7:10]:
+            return render_template("source_period_conflicts.html", source_id=source_id, conflicts=conflicts), 400
         previous_editable_state = (
             actual["source_name"], actual["source_type"], actual["source_reference"], actual["legacy_source_code"],
             actual["source_scope"], actual["format_original"],

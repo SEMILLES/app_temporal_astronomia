@@ -161,7 +161,7 @@ def editar_ocurrencia(occurrence_id):
         return "La ocurrencia no existe.", 404
     fuentes = conexion.execute("""
         SELECT source_id, source_name, source_type, start_year, end_year, end_year_status
-        FROM source ORDER BY source_name
+        FROM source WHERE retired_at IS NULL ORDER BY source_name
     """).fetchall()
     conexion.close()
     return render_template(
@@ -202,7 +202,7 @@ def actualizar_ocurrencia(occurrence_id):
         if actual is None:
             conexion.rollback()
             return "La ocurrencia no existe.", 404
-        source=conexion.execute("SELECT source_type FROM source WHERE source_id=?",(source_id,)).fetchone()
+        source=conexion.execute("SELECT source_type FROM source WHERE source_id=? AND retired_at IS NULL",(source_id,)).fetchone()
         if source is None:return "La fuente no existe.",400
         source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2=normalize_occurrence_details(source[0],source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2)
         occurrence_year = validate_occurrence_year(

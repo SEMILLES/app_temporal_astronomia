@@ -1,0 +1,3 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Fuentes retiradas</title></head><body>
+<h1>Fuentes retiradas</h1><ul>{% for source in sources %}<li>{{ source.source_name }} (ID {{ source.source_id }}) — {{ source.retired_at }} <a href="{{ url_for('sources.source_retirement.source_history', source_id=source.source_id) }}">Consultar historial</a></li>{% endfor %}</ul>
+<a href="{{ url_for('sources.fuentes') }}">Volver a fuentes</a></body></html>

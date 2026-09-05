@@ -123,6 +123,7 @@ def crear_esquema(conexion):
             source_name TEXT NOT NULL UNIQUE,
             source_type TEXT,
             analyst_protected INTEGER NOT NULL DEFAULT 1 CHECK (analyst_protected IN (0, 1)),
+            retired_at TEXT,
             source_reference TEXT,
             start_year INTEGER,
             end_year INTEGER,
@@ -187,6 +188,7 @@ def crear_esquema(conexion):
             source_name TEXT NOT NULL,
             source_type TEXT,
             analyst_protected INTEGER NOT NULL DEFAULT 1 CHECK (analyst_protected IN (0, 1)),
+            retired_at TEXT,
             source_reference TEXT,
             start_year INTEGER,
             end_year INTEGER,
@@ -835,3 +837,6 @@ def crear_esquema(conexion):
         CREATE TRIGGER IF NOT EXISTS immutable_publication_conflict_update BEFORE UPDATE ON publication_open_conflict BEGIN SELECT RAISE(ABORT,'publication conflict snapshots are immutable'); END;
         CREATE TRIGGER IF NOT EXISTS immutable_publication_conflict_delete BEFORE DELETE ON publication_open_conflict BEGIN SELECT RAISE(ABORT,'publication conflict snapshots are immutable'); END;
     """)
+
+    from source_retirement_schema import install
+    install(conexion)

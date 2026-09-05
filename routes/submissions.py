@@ -23,7 +23,7 @@ submissions_bp.add_app_template_filter(format_source_period, "source_period")
 
 def _context(db, draft=None, error=None):
     return dict(
-        fuentes=db.execute("SELECT source_id, source_name, source_type, start_year, end_year, end_year_status FROM source ORDER BY source_name").fetchall(),
+        fuentes=db.execute("SELECT source_id, source_name, source_type, start_year, end_year, end_year_status FROM source WHERE retired_at IS NULL ORDER BY source_name").fetchall(),
         conceptos=db.execute("SELECT concept_id, preferred_label FROM concept ORDER BY preferred_label").fetchall(),
         propuestas=db.execute("SELECT concept_proposal_id, proposed_label FROM concept_proposal WHERE status='pending' ORDER BY proposed_label").fetchall(),
         draft=draft, error=error,

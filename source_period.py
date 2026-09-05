@@ -9,16 +9,16 @@ def format_source_period(start_year, end_year):
 
 
 def validate_occurrence_year(connection, source_id, value):
+    source = connection.execute(
+        "SELECT start_year,end_year FROM source WHERE source_id=? AND retired_at IS NULL", (source_id,)
+    ).fetchone()
+    if source is None:
+        raise ValueError("La fuente no existe o está retirada.")
     if value in (None, ""):
         return None
     text = str(value).strip()
     if not text.isdigit() or len(text) != 4 or int(text) < 1:
         raise ValueError("El año de la ocurrencia no es válido.")
-    source = connection.execute(
-        "SELECT start_year,end_year FROM source WHERE source_id=?", (source_id,)
-    ).fetchone()
-    if source is None:
-        raise ValueError("La fuente no existe.")
     year = int(text)
     if source[0] is not None and year < source[0]:
         raise ValueError("El año de la ocurrencia está fuera del periodo de la fuente.")

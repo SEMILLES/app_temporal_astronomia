@@ -1,0 +1,37 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Retirar / migrar fuente</title></head><body>
+<h1>Retirar / migrar fuente</h1>
+{% macro describe(label, s) %}<section><h2>{{ label }}: {{ s.source_name }}</h2>
+<p>ID: {{ s.source_id if s.source_id is not none else 'Se asignará al confirmar' }} · Tipo: {{ source_types.get(s.source_type, s.source_type or 'Sin registrar') }}</p>
+<p>Periodo: {{ s.start_year or 'Sin inicio registrado' }} — {{ s.end_year or ('En curso' if s.end_year_status == 'ongoing' else 'Sin final registrado') }}</p></section>{% endmacro %}
+{{ describe('Source origen', source) }}<p>{{ count }} occurrences</p>
+{% if plan %}
+<h2>Previsualización</h2>
+{% if plan.target %}{{ describe('Source destino', plan.target) }}{% endif %}
+<p>{{ count }} occurrences serán movidas. Los Details y sus estados se conservarán literalmente. La Source origen será retirada.</p>
+{% if plan.different_types %}<p role="alert">Los tipos de Source son diferentes. Los Details se conservarán literalmente, sin reinterpretarlos ni cambiar sus estados.</p>{% endif %}
+<form method="post"><input type="hidden" name="action" value="confirm"><input type="hidden" name="token" value="{{ token }}">
+{% if plan.conflicts %}
+<p role="alert">{{ plan.conflicts|length }} occurrences quedan fuera del periodo de la Source destino.</p>
+<ul>{% for group in plan.conflicts|groupby('occurrence_year') %}<li>Año {{ group.grouper }}: {{ group.list|length }} occurrences</li>{% endfor %}</ul>
+<fieldset><legend>Resolución obligatoria</legend>
+<label><input type="radio" name="resolution" value="expand" required> Ampliar periodo de la Source destino a {{ plan.expanded_period[0] or 'Sin inicio registrado' }} — {{ plan.expanded_period[1] or 'Sin final registrado' }}</label>
+<label><input type="radio" name="resolution" value="clear" required> Eliminar año solo de las occurrences afectadas</label></fieldset>
+{% endif %}
+<p><label>Motivo de la operación <textarea name="reason" required></textarea></label></p>
+<p><label><input type="checkbox" name="confirm" value="yes" required> Confirmo el retiro y la migración de todas las occurrences indicadas.</label></p>
+<button type="submit">Confirmar retiro / migración</button>
+</form>
+{% else %}
+<form method="post"><input type="hidden" name="action" value="preview">
+<label>Destino <select name="destination_mode" id="destination-mode"><option value="existing">Source existente</option><option value="new">Crear nueva Source</option>{% if not count %}<option value="none">Retirar sin destino (sin occurrences)</option>{% endif %}</select></label>
+<fieldset id="existing-target"><legend>Source existente</legend><select name="destination_id" required><option value="">Seleccione</option>{% for target in fuentes %}<option value="{{ target.source_id }}">{{ target.source_name }} (ID {{ target.source_id }})</option>{% endfor %}</select></fieldset>
+<fieldset id="new-target" disabled hidden><legend>Crear Source destino</legend>{% include '_source_creation_fields.html' %}</fieldset>
+<button type="submit">Previsualizar</button></form>
+<script>
+const mode=document.getElementById('destination-mode');
+function setDestination(){for(const [id,value] of [['existing-target','existing'],['new-target','new']]){const fieldset=document.getElementById(id);fieldset.disabled=mode.value!==value;fieldset.hidden=fieldset.disabled;}}
+mode.addEventListener('change',setDestination);setDestination();
+</script>
+{% endif %}
+<p><a href="{{ url_for('sources.fuentes') }}">Cancelar</a></p>
+</body></html>

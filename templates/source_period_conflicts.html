@@ -1,0 +1,6 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Conflictos de periodo</title></head><body>
+<h1>No se guardó el periodo</h1>
+<p>{{ conflicts|length }} occurrences quedan fuera del periodo propuesto. Ajuste explícitamente el periodo para incluir estos años antes de guardar. No se modificaron los años ni la fuente.</p>
+<ul>{% for row in conflicts %}<li>Occurrence {{ row.occurrence_id }}: {{ row.occurrence_year }}</li>{% endfor %}</ul>
+<a href="{{ url_for('sources.editar_fuente', source_id=source_id) }}">Volver a editar el periodo</a>
+</body></html>

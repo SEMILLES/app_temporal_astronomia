@@ -17,50 +17,7 @@
         action="{{ url_for('sources.nueva_fuente') }}"
     >
 
-        <label>
-            Nombre de la fuente:
-        </label>
-
-        <input
-            type="text"
-            name="source_name"
-            list="existing-source-names"
-            required
-        >
-        <datalist id="existing-source-names">{% for fuente in fuentes %}<option value="{{ fuente['source_name'] }}">{% endfor %}</datalist>
-        <small>Revise las coincidencias sugeridas antes de crear una fuente nueva.</small>
-        <label>Tipo de fuente:</label><select name="source_type" required><option value="">Seleccione</option>{% for value,label in source_types.items() %}<option value="{{ value }}">{{ label }}</option>{% endfor %}</select>
-        <label>Referencia (opcional):</label><input type="text" name="source_reference">
-
-        <label>Código legacy (opcional):</label>
-        <input type="text" name="legacy_source_code">
-        <label>Alcance (opcional):</label>
-        <select name="source_scope">
-            <option value="">Sin especificar</option>
-            <option value="INSTITUTIONAL">Institucional</option>
-            <option value="PERSONAL">Personal</option>
-        </select>
-        <label>Formato original (opcional):</label>
-        <input type="text" name="format_original">
-        <label>Detalle del formato (opcional):</label>
-        <input type="text" name="format_detail">
-        <label>Año inicial:</label>
-        <input type="number" name="start_year" min="1" max="9999">
-        <label>Año final:</label>
-        <input type="number" name="end_year" min="1" max="9999">
-        <label>Estado del año final:</label>
-        <select name="end_year_status">
-            <option value="">Sin especificar</option>
-            <option value="known">Conocido</option>
-            <option value="ongoing">En curso</option>
-            <option value="unknown">Desconocido</option>
-        </select>
-        <label>Región (opcional):</label>
-        <textarea name="region_description"></textarea>
-        <label>Caracterización (opcional):</label>
-        <textarea name="characterization"></textarea>
-        <label>Número de entradas declarado (opcional):</label>
-        <input type="number" name="reported_entry_count" min="0">
+        {% include '_source_creation_fields.html' %}
 
         <button type="submit">
             Guardar fuente
@@ -70,6 +27,7 @@
 
 
     <h2>Fuentes registradas</h2>
+    {% if g.current_access_role in ('reviewer','master') %}<p><a href="{{ url_for('sources.source_retirement.retired_sources') }}">Consultar fuentes retiradas</a></p>{% endif %}
 
     <table
         border="1"
@@ -122,6 +80,8 @@
                         Editar
                     </a>{% endif %}
                     {% if g.current_access_role in ('reviewer','master') %}
+                    <a href="{{ url_for('sources.source_retirement.retire_source', source_id=fuente['source_id']) }}">Retirar / migrar fuente</a>
+                    <a href="{{ url_for('sources.source_retirement.source_history', source_id=fuente['source_id']) }}">Historial</a>
                     <small>{{ 'Protegida contra Analyst' if fuente['analyst_protected'] else 'No protegida contra Analyst' }}</small>
                     {% if fuente['analyst_protected'] %}
                     <a href="{{ url_for('sources.source_protection', source_id=fuente['source_id']) }}">Desproteger</a>
