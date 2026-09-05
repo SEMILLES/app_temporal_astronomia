@@ -81,6 +81,7 @@ class LegacyCatalogUITests(unittest.TestCase):
         source_block=html[source_start:source_end]
         for text in ("Información documentada para esta seña","Ejemplos de uso:</strong> Sí","Información gramatical:</strong> Sí","Nota gramatical:</strong> Nota documental de la seña"):
             self.assertIn(text,source_block)
+        self.assertIn("<h4>Información documentada para esta seña</h4>",source_block)
         grammar_start=html.index("<summary>Gramática</summary>")
         grammar_end=html.index("</details>",grammar_start)
         self.assertNotIn("Información documentada para esta seña",html[grammar_start:grammar_end])
