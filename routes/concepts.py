@@ -1,5 +1,5 @@
 from flask import (
-    Blueprint,
+    Blueprint, g,
     render_template,
     request,
     redirect,
@@ -7,6 +7,9 @@ from flask import (
 )
 
 import sqlite3
+import json
+from access_control import requires_reviewer
+from activity import record_activity
 
 from database import conectar
 from concept_labels import InvalidConceptLabel, normalize_concept_label
@@ -53,6 +56,7 @@ def conceptos():
     "/conceptos/nuevo",
     methods=["POST"]
 )
+@requires_reviewer
 def nuevo_concepto():
 
     try:
@@ -66,13 +70,17 @@ def nuevo_concepto():
 
     try:
 
-        conexion.execute("""
+        cursor = conexion.execute("""
             INSERT INTO concept
             (preferred_label)
 
             VALUES (?)
         """, (preferred_label,))
 
+        record_activity(conexion, "concept_created", entity_type="concept",
+                        entity_id=cursor.lastrowid, access_role=g.current_access_role,
+                        collaborator_id=request.form.get("collaborator_id"),
+                        comment=json.dumps({"old_label": None, "new_label": preferred_label}, ensure_ascii=False))
         conexion.commit()
 
     except sqlite3.IntegrityError:
@@ -98,6 +106,7 @@ def nuevo_concepto():
 @concepts_bp.route(
     "/conceptos/<int:concept_id>/editar"
 )
+@requires_reviewer
 def editar_concepto(concept_id):
 
     conexion = conectar()
@@ -135,6 +144,7 @@ def editar_concepto(concept_id):
     "/conceptos/<int:concept_id>/actualizar",
     methods=["POST"]
 )
+@requires_reviewer
 def actualizar_concepto(concept_id):
 
     try:
@@ -148,6 +158,8 @@ def actualizar_concepto(concept_id):
 
     try:
 
+        conexion.execute("BEGIN IMMEDIATE")
+        previous = conexion.execute("SELECT preferred_label FROM concept WHERE concept_id=?", (concept_id,)).fetchone()
         cursor = conexion.execute("""
             UPDATE concept
 
@@ -168,6 +180,11 @@ def actualizar_concepto(concept_id):
                 404
             )
 
+        if previous[0] != preferred_label:
+            record_activity(conexion, "concept_renamed", entity_type="concept",
+                            entity_id=concept_id, access_role=g.current_access_role,
+                            collaborator_id=request.form.get("collaborator_id"),
+                            comment=json.dumps({"old_label": previous[0], "new_label": preferred_label}, ensure_ascii=False))
         conexion.commit()
 
     except sqlite3.IntegrityError:
