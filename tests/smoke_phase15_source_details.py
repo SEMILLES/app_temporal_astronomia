@@ -18,7 +18,7 @@ new=page("/fase15-analyst/aportes/nuevo")+client.get("/static/source-details.js"
 for text in ("Submaterial / sección","Página","Título / identificador del video","Título del video","Tiempo","Detalle Fuente 1","Detalle Fuente 2","source-details.js"):
     assert text in new,text
 assert client.post("/fase15-analyst/fuentes/nueva",data={"source_name":"Smoke Analyst Source","source_type":"OTRO"}).status_code==302
-master=page("/fase15-master/trabajo");assert "Permitir a analistas crear nuevas fuentes" in master
+master=page("/fase15-master/trabajo");assert "Permitir a analistas crear y editar fuentes" in master
 assert client.post("/fase15-master/configuracion/creacion-fuentes",data={}).status_code==302
 assert "Registrar fuente" not in page("/fase15-analyst/trabajo")
 assert client.post("/fase15-analyst/fuentes/nueva",data={"source_name":"Denied","source_type":"OTRO"}).status_code==404

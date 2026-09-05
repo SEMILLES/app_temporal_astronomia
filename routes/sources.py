@@ -17,6 +17,51 @@ from source_details import SOURCE_TYPES, analysts_may_create_sources
 sources_bp = Blueprint("sources", __name__)
 
 
+def source_edit_allowed(connection, source):
+    role = getattr(g, "current_access_role", None)
+    return source is not None and (
+        role in ("reviewer", "master") or
+        (role == "analyst" and not source["analyst_protected"]
+         and analysts_may_create_sources(connection))
+    )
+
+
+@sources_bp.route("/fuentes/<int:source_id>/proteccion", methods=["GET", "POST"])
+def source_protection(source_id):
+    role = getattr(g, "current_access_role", None)
+    if role not in ("reviewer", "master"):
+        abort(404)
+    db = conectar()
+    try:
+        if request.method == "POST":
+            db.execute("BEGIN IMMEDIATE")
+        source = db.execute("SELECT * FROM source WHERE source_id=?", (source_id,)).fetchone()
+        if source is None:
+            abort(404)
+        if request.method == "GET":
+            return render_template("source_protection.html", fuente=source)
+        value = request.form.get("protected")
+        if value not in ("0", "1") or (value == "0" and request.form.get("confirm") != "1"):
+            abort(400)
+        protected = int(value)
+        if protected != source["analyst_protected"]:
+            fields = ("source_id", "source_name", "source_type", "source_reference",
+                      "legacy_source_code", "source_scope", "format_original", "format_detail",
+                      "start_year", "end_year", "end_year_status", "region_description",
+                      "characterization", "reported_entry_count", "analyst_protected")
+            note = "Fuente protegida" if protected else "Fuente desprotegida"
+            db.execute(f"INSERT INTO source_revision ({','.join(fields)},change_note) VALUES ({','.join('?' for _ in fields)},?)",
+                       (*[source[field] for field in fields], note))
+            db.execute("UPDATE source SET analyst_protected=?,updated_at=CURRENT_TIMESTAMP WHERE source_id=?", (protected, source_id))
+            record_activity(db, "source_protected" if protected else "source_unprotected",
+                            entity_type="source", entity_id=source_id, access_role=role,
+                            collaborator_id=request.form.get("collaborator_id"))
+        db.commit()
+    finally:
+        db.close()
+    return redirect(url_for("sources.fuentes"))
+
+
 def parse_source_years(form):
 
     def parse(name):
@@ -88,7 +133,7 @@ def fuentes():
         SELECT source_id, source_name, legacy_source_code, source_scope,
                source_type, source_reference, format_original, format_detail, start_year, end_year,
                end_year_status, region_description, characterization,
-               reported_entry_count
+               reported_entry_count, analyst_protected
         FROM source ORDER BY source_name
     """).fetchall()
     can_create=getattr(g,"current_access_role",None) in ("reviewer","master") or analysts_may_create_sources(conexion)
@@ -119,9 +164,9 @@ def nueva_fuente():
                 source_name, source_type, source_reference, legacy_source_code, source_scope,
                 format_original, format_detail, start_year, end_year,
                 end_year_status, region_description, characterization,
-                reported_entry_count, created_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """, (*values, None))
+                reported_entry_count, created_by, analyst_protected
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (*values, None, int(role != "analyst")))
         source_id=conexion.execute("SELECT last_insert_rowid()").fetchone()[0]
         if role: record_activity(conexion,"source_created",entity_type="source",entity_id=source_id,collaborator_id=request.form.get("collaborator_id"),access_role=role)
         conexion.commit()
@@ -135,18 +180,19 @@ def nueva_fuente():
 
 @sources_bp.route("/fuentes/<int:source_id>/editar")
 def editar_fuente(source_id):
-    if getattr(g,"current_access_role",None)=="analyst": abort(404)
 
     conexion = conectar()
     fuente = conexion.execute("""
         SELECT source_id, source_name, source_type, source_reference, legacy_source_code, source_scope,
                format_original, format_detail, start_year, end_year,
                end_year_status, region_description, characterization,
-               reported_entry_count
+               reported_entry_count, analyst_protected
         FROM source WHERE source_id = ?
     """, (source_id,)).fetchone()
     occurrence_count = conexion.execute("SELECT count(*) FROM occurrence WHERE source_id=?",(source_id,)).fetchone()[0]
+    allowed = source_edit_allowed(conexion, fuente)
     conexion.close()
+    if not allowed: abort(404)
     if fuente is None:
         return "La fuente no existe.", 404
     return render_template("editar_fuente.html", fuente=fuente, source_types=SOURCE_TYPES, occurrence_count=occurrence_count)
@@ -154,14 +200,6 @@ def editar_fuente(source_id):
 
 @sources_bp.route("/fuentes/<int:source_id>/actualizar", methods=["POST"])
 def actualizar_fuente(source_id):
-    if getattr(g,"current_access_role",None)=="analyst": abort(404)
-
-    try:
-        values = source_form_values(request.form)
-    except ValueError:
-        return "Los metadatos de la fuente no son válidos.", 400
-    if not values[0]:
-        return "El nombre de la fuente es obligatorio.", 400
 
     conexion = conectar()
     try:
@@ -170,12 +208,21 @@ def actualizar_fuente(source_id):
             SELECT source_name, source_type, source_reference,
                    legacy_source_code, source_scope, format_original,
                    format_detail, start_year, end_year, end_year_status,
-                   region_description, characterization, reported_entry_count
+                   region_description, characterization, reported_entry_count, analyst_protected
             FROM source WHERE source_id = ?
         """, (source_id,)).fetchone()
+        if not source_edit_allowed(conexion, actual):
+            abort(404)
         if actual is None:
             conexion.rollback()
             return "La fuente no existe.", 404
+        try:
+            values = source_form_values(request.form)
+        except ValueError:
+            return "Los metadatos de la fuente no son válidos.", 400
+        if not values[0]:
+            return "El nombre de la fuente es obligatorio.", 400
+
         previous_editable_state = (
             actual["source_name"], actual["source_type"], actual["source_reference"], actual["legacy_source_code"],
             actual["source_scope"], actual["format_original"],
@@ -191,8 +238,8 @@ def actualizar_fuente(source_id):
                     legacy_source_code, source_scope, format_original,
                     format_detail, start_year, end_year, end_year_status,
                     region_description, characterization,
-                    reported_entry_count, change_note
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    reported_entry_count, change_note, analyst_protected
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 source_id, actual["source_name"], actual["source_type"],
                 actual["source_reference"], actual["legacy_source_code"],
@@ -201,7 +248,7 @@ def actualizar_fuente(source_id):
                 actual["end_year"], actual["end_year_status"],
                 actual["region_description"], actual["characterization"],
                 actual["reported_entry_count"],
-                request.form.get("change_note") or None,
+                request.form.get("change_note") or None, actual["analyst_protected"],
             ))
         conexion.execute("""
             UPDATE source SET

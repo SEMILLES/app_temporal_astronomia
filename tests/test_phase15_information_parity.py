@@ -55,6 +55,10 @@ class Phase15AstronomyNormalizationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as raw:
             path=Path(raw)/"copy.db"; shutil.copy2(protected,path); MIGRATION.migrate(path,None)
             db=sqlite3.connect(path); db.row_factory=sqlite3.Row; db.execute("PRAGMA foreign_keys=ON")
+            # Recreate the pre-normalization details in this disposable fixture;
+            # the working database is now already normalized after Phase 15.
+            db.execute("UPDATE occurrence SET source_detail_1=NULL,source_detail_2=NULL WHERE source_id IN (37,38,39,44)")
+            db.commit()
             before=[tuple(r) for r in db.execute("SELECT * FROM alternative_relation ORDER BY alternative_relation_id")]
             report=normalize(db,apply=True)
             self.assertEqual(len(report["plan"]["morphology"]),15)

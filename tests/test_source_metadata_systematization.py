@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, g
 
 import database
 from routes.sources import sources_bp
@@ -209,6 +209,9 @@ class SourceRouteTests(unittest.TestCase):
         connection.commit()
         connection.close()
         app = Flask(__name__, template_folder=str(ROOT / "templates"))
+        @app.before_request
+        def reviewer_context():
+            g.current_access_role = "reviewer"
         app.register_blueprint(sources_bp)
         app.testing = True
         self.client = app.test_client()

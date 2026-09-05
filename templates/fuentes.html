@@ -113,7 +113,7 @@
 
                 <td>
 
-                    {% if g.current_access_role in ('reviewer','master') %}<a href="{{
+                    {% if g.current_access_role in ('reviewer','master') or (can_create and not fuente['analyst_protected']) %}<a href="{{
                         url_for(
                             'sources.editar_fuente',
                             source_id=fuente['source_id']
@@ -121,6 +121,15 @@
                     }}">
                         Editar
                     </a>{% endif %}
+                    {% if g.current_access_role in ('reviewer','master') %}
+                    <small>{{ 'Protegida contra Analyst' if fuente['analyst_protected'] else 'No protegida contra Analyst' }}</small>
+                    {% if fuente['analyst_protected'] %}
+                    <a href="{{ url_for('sources.source_protection', source_id=fuente['source_id']) }}">Desproteger</a>
+                    {% else %}
+                    <form method="post" action="{{ url_for('sources.source_protection', source_id=fuente['source_id']) }}">
+                        <input type="hidden" name="protected" value="1"><button type="submit">Proteger</button>
+                    </form>
+                    {% endif %}{% endif %}
 
                 </td>
 
