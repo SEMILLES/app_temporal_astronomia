@@ -30,7 +30,7 @@ for occurrence_id,expected in ((31,"p. 143"),(35,"FENASCOL_yt · 1:49:00"),(59,"
     catalog=page(f"/fase15-analyst/catalogo-interno/alternativas/{alternative_id}")
     assert expected in catalog,(occurrence_id,expected)
     assert "Detalle Fuente 1" not in catalog and "Detalle Fuente 2" not in catalog
-    assert catalog.count("Información técnica y trazabilidad")==1
+    assert catalog.count("Información técnica e historial")==1
 alternative_id=db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=9 AND is_current=1").fetchone()[0];db.close()
 catalog=page(f"/fase15-analyst/catalogo-interno/alternativas/{alternative_id}")
 assert "Referencia en la fuente</dt><dd>ASTERISMO</dd>" not in catalog

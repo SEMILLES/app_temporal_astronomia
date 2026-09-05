@@ -20,7 +20,7 @@ class LegacyCatalogUITests(unittest.TestCase):
         db.execute("INSERT INTO concept(preferred_label,knowledge_area_1) VALUES(?,?)", ('ASTRO<script>alert("x")</script>','Astronomía'))
         db.executemany("INSERT INTO alternative(concept_id,working_label) VALUES(1,?)", (("1a",),("1b",)))
         db.execute("INSERT INTO alternative(concept_id,working_label,retired_at) VALUES(1,'SECRETO-RETIRADO',CURRENT_TIMESTAMP)")
-        db.execute("INSERT INTO occurrence(source_id,original_gloss,source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status,source_locator,provenance_note,hyperlink) VALUES(1,'LUNA','VIDEO LUNA','00:20','VALUE','VALUE','p. 4','Nota <b>no HTML</b>','https://example.test/recurso')")
+        db.execute("INSERT INTO occurrence(source_id,original_gloss,source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status,source_locator,provenance_note,hyperlink,usage_examples_present,grammatical_info_present,grammatical_note) VALUES(1,'LUNA','VIDEO LUNA','00:20','VALUE','VALUE','p. 4','Nota <b>no HTML</b>','https://example.test/recurso',1,1,'Nota documental de la seña')")
         db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,1)")
         db.execute("INSERT INTO occurrence_grammar(occurrence_id,gender,plural,plural_uncertain,grammar_note) VALUES(1,'femenino',NULL,0,'Gramática <script>privada</script>')")
         db.execute("INSERT INTO alternative_morphology(alternative_id,component_count,free_permutation,note) VALUES(1,1,'N/A','Morfología visible')")
@@ -65,15 +65,36 @@ class LegacyCatalogUITests(unittest.TestCase):
 
     def test_catalog_hierarchy_keeps_metadata_with_its_entity(self):
         html=self.client.get("/ana/catalogo-interno/alternativas/1").get_data(as_text=True)
-        concept=html.index('class="cabecera-concepto"');occurrence=html.index('class="ocurrencia"');source=html.index("Acerca de esta fuente");technical=html.index("Información técnica y trazabilidad")
+        concept=html.index('class="cabecera-concepto"');occurrence=html.index('class="ocurrencia"');source=html.index("Acerca de esta fuente");technical=html.index("Información técnica e historial")
         self.assertLess(concept,occurrence);self.assertLess(occurrence,source);self.assertLess(source,technical)
         for text in ("Astronomía","VIDEO LUNA","00:20","Andina","Fuente caracterizada","Formato original","SRC-1"):
             self.assertIn(text,html)
         self.assertEqual(html.count("Acerca de esta fuente"),1)
-        self.assertEqual(html.count("Información técnica y trazabilidad"),1);self.assertNotIn('tecnica-occurrence',html);self.assertNotIn('tecnica-alternative',html);self.assertNotIn('tecnica-concept',html)
+        self.assertEqual(html.count("Información técnica e historial"),1);self.assertNotIn("<summary>Historial de nomenclatura</summary>",html);self.assertNotIn("Información técnica y trazabilidad",html)
         self.assertGreater(html.index("Historial de nomenclatura"),html.index("Morfología"))
         self.assertLess(html.index('class="identificador-alternativa"'),html.index('class="media-alternativa"') if 'class="media-alternativa"' in html else html.index("Ocurrencias y fuentes"))
         self.assertNotIn("Campo semántico",html)
+    def test_occurrence_documentation_is_inside_source_details_and_note_is_conditional(self):
+        html=self.client.get("/ana/catalogo-interno/alternativas/1").get_data(as_text=True)
+        source_start=html.index("<summary>Acerca de esta fuente</summary>")
+        source_end=html.index("</details>",source_start)
+        source_block=html[source_start:source_end]
+        for text in ("Información documentada para esta seña","Ejemplos de uso:</strong> Sí","Información gramatical:</strong> Sí","Nota gramatical:</strong> Nota documental de la seña"):
+            self.assertIn(text,source_block)
+        grammar_start=html.index("<summary>Gramática</summary>")
+        grammar_end=html.index("</details>",grammar_start)
+        self.assertNotIn("Información documentada para esta seña",html[grammar_start:grammar_end])
+        db=self.connect();db.execute("UPDATE occurrence SET usage_examples_present=0,grammatical_info_present=0,grammatical_note='NO MOSTRAR'");db.commit();db.close()
+        html=self.client.get("/ana/catalogo-interno/alternativas/1").get_data(as_text=True)
+        self.assertIn("Ejemplos de uso:</strong> No",html);self.assertIn("Información gramatical:</strong> No",html);self.assertNotIn("NO MOSTRAR",html)
+    def test_single_closed_technical_history_block_preserves_history(self):
+        html=self.client.get("/ana/catalogo-interno/alternativas/1").get_data(as_text=True)
+        self.assertEqual(html.count("<summary>Información técnica e historial</summary>"),1)
+        self.assertNotIn("<summary>Historial de nomenclatura</summary>",html)
+        self.assertNotIn("<summary>Información técnica y trazabilidad</summary>",html)
+        self.assertIn("<h4>Historial de nomenclatura</h4>",html)
+        self.assertIn("Sin cambios de nomenclatura registrados.",html)
+        self.assertNotIn("<details class=\"bloque informacion-tecnica-historial\" open",html)
     def test_provenance_document_records_exact_source(self):
         text=(ROOT/"docs/legacy_catalog_ui.md").read_text(encoding="utf-8")
         self.assertIn("ab5a06d5f3a9cf2e2da82dc664571f7a46996bcd",text)
