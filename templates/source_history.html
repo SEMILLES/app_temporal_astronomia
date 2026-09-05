@@ -1,14 +1,14 @@
 <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Historial de fuente</title></head><body>
 <h1>Historial: {{ source.source_name }} (ID {{ source.source_id }})</h1>
 {% if source.retired_at %}<p>Fuente retirada: {{ source.retired_at }}</p>{% endif %}
-{% for event in events %}<section><h2>Retiro / migración completado</h2>
+{% for event in events %}{% if event.event_type != 'source_retired' %}{% include '_source_distribution_history.html' %}{% else %}<section><h2>Retiro / migración completado</h2>
 <p>{{ event.occurred_at }} · {{ event.collaborator_name_snapshot or 'Sin identificar' }} · {{ event.access_role }}</p>
 <p>Origen: {{ event.operation.source_name }} ({{ event.operation.source_id }}). Destino: {{ event.operation.destination_name or 'Sin destino' }} ({{ event.operation.destination_id or '—' }}).</p>
 <p>{{ event.operation.occurrence_count }} occurrences migradas. Motivo: {{ event.operation.reason }}</p>
 <p>IDs de occurrences: {{ event.operation.occurrence_ids|join(', ') or 'Ninguna' }}</p>
 {% if event.operation.period_after %}<p>Periodo ampliado: {{ event.operation.period_before[0] or 'Sin inicio registrado' }} — {{ event.operation.period_before[1] or 'Sin final registrado' }} → {{ event.operation.period_after[0] or 'Sin inicio registrado' }} — {{ event.operation.period_after[1] or 'Sin final registrado' }}</p>{% endif %}
 {% if event.operation.cleared_years %}<p>Años eliminados: {% for item in event.operation.cleared_years %}Occurrence {{ item.occurrence_id }}: {{ item.previous_year }}. {% endfor %}</p>{% endif %}
-</section>{% endfor %}
+</section>{% endif %}{% endfor %}
 <h2>Versiones anteriores de la fuente</h2>
 {% for revision in revisions %}<details><summary>Revisión {{ revision.source_revision_id }} — {{ revision.changed_at }}</summary>
 <p>{{ revision.source_name }} · {{ revision.changed_by or 'Sin identificar' }} · {{ revision.change_note or 'Sin nota' }}</p>

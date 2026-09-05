@@ -1,5 +1,5 @@
 <!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Operación no realizada</title></head><body>
 <h1>Operación no realizada</h1><p role="alert">{{ error }}</p>
-<a href="{{ url_for('sources.source_retirement.retire_source', source_id=source_id) }}">Volver a previsualizar</a>
+<a href="{{ retry_url or url_for('sources.source_retirement.retire_source', source_id=source_id) }}">Volver a previsualizar</a>
 <a href="{{ url_for('sources.fuentes') }}">Volver a fuentes</a>
 </body></html>

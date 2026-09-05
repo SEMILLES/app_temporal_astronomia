@@ -1,0 +1,28 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Previsualización estructural</title></head><body>
+<h1>{{ 'División de Source' if plan.kind == 'split' else 'Fusión de Sources' }} — Previsualización</h1>
+{% if plan.kind == 'split' %}<p>Modo: {{ 'Conservar original: seguirá activa.' if plan.mode == 'keep' else 'Reemplazar original: será retirada.' }}</p>{% endif %}
+<h2>Orígenes</h2><ul>{% for source in plan.origins %}<li>{{ source.source_name }} (ID {{ source.source_id }}) · {{ source_types.get(source.source_type, source.source_type or 'Sin tipo') }} · Periodo {{ source.start_year or 'Sin inicio' }} — {{ source.end_year or 'Sin final' }} · {{ plan.occurrences|selectattr('source_id','equalto',source.source_id)|list|length }} occurrences · {{ 'Será retirada' if source.source_id in plan.retire_ids else 'Seguirá activa' }}</li>{% endfor %}</ul>
+<p>{{ plan.occurrences|length }} occurrences en la distribución. Los Details y sus estados se conservarán literalmente, sin reinterpretarlos. No se modificarán gramática ni assignments.</p>
+{% if plan.divergent_fields %}<p role="alert">Las fuentes de origen tienen metadata diferente. Revise la metadata final del destino; no se combinará automáticamente.</p>
+<details><summary>Comparar metadata de los orígenes</summary><table border="1" cellpadding="6"><tr><th>Campo</th><th>{{ plan.origins[0].source_name }}</th><th>{{ plan.origins[1].source_name }}</th></tr>
+{% for field,label in [('source_name','Nombre'),('source_type','Tipo'),('start_year','Año inicial'),('end_year','Año final'),('end_year_status','Estado del año final'),('source_reference','Referencia'),('legacy_source_code','Código legacy'),('source_scope','Alcance'),('region_description','Región'),('characterization','Caracterización'),('format_original','Formato original'),('format_detail','Detalle de formato'),('reported_entry_count','Entradas declaradas')] %}
+{% if field in plan.divergent_fields %}<tr><th>{{ label }}</th>{% for source in plan.origins %}<td>{{ source_types.get(source[field],source[field]) if field == 'source_type' else (source[field] if source[field] is not none else 'Sin registrar') }}</td>{% endfor %}</tr>{% endif %}{% endfor %}
+</table></details>{% endif %}
+<form method="post"><input type="hidden" name="action" value="confirm"><input type="hidden" name="token" value="{{ token }}">
+{% for group in plan.groups %}<section><h2>Destino: {{ group.target.source_name }} ({{ 'nueva, ID al confirmar' if group.target.source_id is none else 'ID ' ~ group.target.source_id }})</h2>
+<p>{{ group.occurrences|length }} occurrences asignadas. Tipo: {{ source_types.get(group.target.source_type,group.target.source_type or 'Sin tipo') }}. Periodo: {{ group.target.start_year or 'Sin inicio' }} — {{ group.target.end_year or 'Sin final' }}{% if group.target.end_year_status == 'ongoing' %} (en curso){% endif %}.</p>
+{% if group.target.source_id is none %}<dl>
+{% for field,label in [('source_reference','Referencia'),('legacy_source_code','Código legacy'),('source_scope','Alcance'),('region_description','Región'),('characterization','Caracterización'),('format_original','Formato original'),('format_detail','Detalle de formato'),('reported_entry_count','Entradas declaradas')] %}<dt>{{ label }}</dt><dd>{{ group.target[field] if group.target[field] is not none else 'Sin registrar' }}</dd>{% endfor %}
+</dl><p>La Source nueva quedará protegida contra Analyst.</p>{% endif %}
+{% if group.different_types %}<p role="alert">Tipo de Source diferente: los Details se conservarán literalmente.</p>{% endif %}
+<ul>{% for occurrence in group.occurrences %}<li>Occurrence {{ occurrence.occurrence_id }} · {{ occurrence.original_gloss or 'Sin glosa' }} · Año {{ occurrence.occurrence_year or 'Sin año' }} → {{ group.target.source_name }}</li>{% endfor %}</ul>
+{% if group.conflicts %}<p role="alert">{{ group.conflicts|length }} occurrences quedan fuera del periodo de este destino.</p>
+<ul>{% for year in group.conflicts|groupby('occurrence_year') %}<li>{{ year.grouper }}: {{ year.list|length }} occurrences</li>{% endfor %}</ul>
+<fieldset><legend>Resolución para {{ group.target.source_name }}</legend>
+<label><input type="radio" name="resolution_{{ group.key }}" value="expand" required> Ampliar periodo a {{ group.expanded_period[0] or 'Sin inicio' }} — {{ group.expanded_period[1] or 'Sin final' }}</label>
+<label><input type="radio" name="resolution_{{ group.key }}" value="clear" required> Eliminar año solo de las occurrences fuera de rango</label></fieldset>{% endif %}</section>{% endfor %}
+<p><label>Motivo de la operación <textarea name="reason" required></textarea></label></p>
+<p><label><input type="checkbox" name="confirm" value="yes" required> Confirmo los destinos, las resoluciones y los retiros indicados.</label></p>
+<button type="submit">Confirmar {{ 'división' if plan.kind == 'split' else 'fusión' }}</button></form>
+<p><a href="{{ url_for('sources.source_retirement.split_source' if plan.kind == 'split' else 'sources.source_retirement.merge_sources', source_id=plan.origins[0].source_id) }}">Volver a preparar</a> · <a href="{{ url_for('sources.fuentes') }}">Cancelar</a></p>
+</body></html>

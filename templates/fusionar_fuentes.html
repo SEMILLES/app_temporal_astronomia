@@ -1,0 +1,17 @@
+<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Fusionar fuentes</title></head><body>
+<h1>Fusionar fuentes</h1><p>Source A: {{ source.source_name }} (ID {{ source.source_id }})</p>
+<p>A y B serán retiradas. Todas sus occurrences pasarán a una Source C nueva. Para conservar un origen, use «Retirar / migrar fuente».</p>
+<form method="post"><input type="hidden" name="action" value="preview">
+<p><label>Source B <select name="other_source_id" id="other-source" required><option value="">Seleccione</option>{% for target in fuentes if target.source_id != source.source_id %}<option value="{{ target.source_id }}">{{ target.source_name }} (ID {{ target.source_id }})</option>{% endfor %}</select></label></p>
+<p><label>Metadata de C <select name="metadata_template" id="metadata-template"><option value="first">Heredar metadata de A</option><option value="second">Heredar metadata de B</option><option value="blank">Crear metadata nueva</option></select></label></p>
+<p>La plantilla prellena el formulario. Revise y edite la metadata final antes de previsualizar.</p>
+<fieldset id="merge-fields"><legend>Source C nueva</legend>{% include '_source_creation_fields.html' %}</fieldset>
+<p><button type="submit">Previsualizar fusión</button></p></form>
+<script id="source-metadata" type="application/json">{{ metadata|tojson }}</script>
+<script>
+const metadata=JSON.parse(document.getElementById('source-metadata').textContent);
+const choice=document.getElementById('metadata-template'), other=document.getElementById('other-source');
+function fillMetadata(){const id=choice.value==='first'?{{ source.source_id|tojson }}:choice.value==='second'?other.value:null;const values=metadata[id]||{};
+ document.querySelectorAll('#merge-fields [name]').forEach(input=>{input.value=values[input.name]||'';if(input.name==='source_name'&&input.value)input.value+=' — fusión';});}
+choice.addEventListener('change',fillMetadata);other.addEventListener('change',()=>{if(choice.value==='second')fillMetadata();});fillMetadata();
+</script><p><a href="{{ url_for('sources.fuentes') }}">Cancelar</a></p></body></html>

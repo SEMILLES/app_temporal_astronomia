@@ -1,0 +1,11 @@
+<section><h2>{{ 'División de Source' if event.event_type == 'source_split' else 'Fusión de Sources' }}</h2>
+<p>{{ event.occurred_at }} · {{ event.collaborator_name_snapshot or 'Sin identificar' }} · {{ event.access_role }}</p>
+<p>Motivo: {{ event.operation.reason }}</p>
+{% if event.operation.kind == 'split' %}<p>Modo: {{ 'Conservar original' if event.operation.mode == 'keep' else 'Reemplazar original' }}</p>{% endif %}
+<p>Orígenes: {% for origin in event.operation.origins %}{{ origin.source_name }} (ID {{ origin.source_id }}) — {{ 'retirada' if origin.source_id in event.operation.retired_source_ids else 'conservada activa' }}. {% endfor %}</p>
+{% if event.operation.template_source_id %}<p>Plantilla de metadata: Source {{ event.operation.template_source_id }}.</p>{% elif event.operation.kind == 'merge' %}<p>Metadata nueva, sin plantilla.</p>{% endif %}
+<ul>{% for target in event.operation.destinations %}<li>Destino {{ target.source_name }} (ID {{ target.source_id }}){% if target.source_id in event.operation.created_source_ids %}, creada en esta operación{% endif %}. Occurrences asignadas: {{ target.occurrence_ids|join(', ') or 'Ninguna' }}.</li>{% endfor %}</ul>
+<details><summary>{{ event.operation.moves|length }} occurrences movidas</summary><ul>{% for move in event.operation.moves %}<li>Occurrence {{ move.occurrence_id }}: Source {{ move.source_id }} → Source {{ move.destination_id }}. Revisión anterior {{ move.occurrence_revision_id }}.</li>{% endfor %}</ul></details>
+{% for period in event.operation.period_changes %}<p>Source {{ period.source_id }}: periodo {{ period.before[0] or 'Sin inicio' }} — {{ period.before[1] or 'Sin final' }} ampliado a {{ period.after[0] or 'Sin inicio' }} — {{ period.after[1] or 'Sin final' }}.</p>{% endfor %}
+{% if event.operation.cleared_years %}<p>Años eliminados: {% for item in event.operation.cleared_years %}Occurrence {{ item.occurrence_id }}: {{ item.previous_year }}. {% endfor %}</p>{% endif %}
+</section>

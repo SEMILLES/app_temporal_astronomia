@@ -81,6 +81,8 @@
                     </a>{% endif %}
                     {% if g.current_access_role in ('reviewer','master') %}
                     <a href="{{ url_for('sources.source_retirement.retire_source', source_id=fuente['source_id']) }}">Retirar / migrar fuente</a>
+                    <a href="{{ url_for('sources.source_retirement.split_source', source_id=fuente['source_id']) }}">Dividir fuente</a>
+                    <a href="{{ url_for('sources.source_retirement.merge_sources', source_id=fuente['source_id']) }}">Fusionar fuentes</a>
                     <a href="{{ url_for('sources.source_retirement.source_history', source_id=fuente['source_id']) }}">Historial</a>
                     <small>{{ 'Protegida contra Analyst' if fuente['analyst_protected'] else 'No protegida contra Analyst' }}</small>
                     {% if fuente['analyst_protected'] %}
