@@ -1,3 +1,4 @@
+from tests.form_client import FormClient
 import json
 import shutil
 import sqlite3
@@ -14,7 +15,9 @@ from tests import test_alternative_routes as fixtures
 
 
 class WorkflowIntegrityTests(unittest.TestCase):
-    setUp = fixtures.AlternativeRouteTests.setUp
+    def setUp(self):
+        fixtures.AlternativeRouteTests.setUp(self)
+        self.client = FormClient(self.client)
     tearDown = fixtures.AlternativeRouteTests.tearDown
     connect = fixtures.AlternativeRouteTests.connect
 

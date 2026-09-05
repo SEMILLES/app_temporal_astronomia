@@ -1,6 +1,7 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><title>Editar ocurrencia - LeSiCo</title><body>
 <h1>Editar ocurrencia</h1><p><strong>ID:</strong> {{ ocurrencia['occurrence_id'] }}</p>
 <form method="post" action="{{ url_for('occurrences.actualizar_ocurrencia',occurrence_id=ocurrencia['occurrence_id']) }}">
+<input type="hidden" name="edit_token" value="{{ edit_token }}">
 <p><label>Fuente: <select name="source_id" required>{% for fuente in fuentes %}<option value="{{ fuente['source_id'] }}" data-source-type="{{ fuente['source_type'] }}" data-min-year="{{ fuente['start_year'] or '' }}" data-max-year="{{ fuente['end_year'] or '' }}"{% if fuente['source_id']==ocurrencia['source_id'] %} selected{% endif %}>{{ fuente['source_name'] }}</option>{% endfor %}</select></label></p>
 <p><label>Glosa original: <input name="original_gloss" value="{{ ocurrencia['original_gloss'] or '' }}"></label></p>
 {% set draft=ocurrencia %}{% include '_source_details_form.html' %}

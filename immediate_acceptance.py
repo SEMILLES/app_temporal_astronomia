@@ -1,3 +1,5 @@
+from edit_concurrency import check_edit
+
 from alternative_workflow import (create_alternative_submission,
     review_as_existing,review_as_new)
 from grammar_workflow import create_grammar_submission,resolve_grammar_submission
@@ -6,6 +8,8 @@ from concept_labels import normalize_concept_label
 from activity import record_activity
 from conflict_presentation import format_subject
 
+
+_INTERNAL = object()
 
 class ImmediateAcceptanceError(ValueError): pass
 class ImmediateBlockingError(ImmediateAcceptanceError):
@@ -49,8 +53,10 @@ def confirm_operation(connection,operation):
         connection.rollback();raise
 
 
-def grammar_operation(occurrence_id,values,*,actor_context,reviewed_by=None,review_note=None):
+def grammar_operation(occurrence_id,values,*,actor_context,reviewed_by=None,review_note=None,expected_edit_token=_INTERNAL):
     def operation(connection):
+        if expected_edit_token is not _INTERNAL:
+            check_edit(connection, "grammar", occurrence_id, expected_edit_token)
         submission_id=create_grammar_submission(connection,occurrence_id,values,submitted_by=reviewed_by,collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
         resolve_grammar_submission(connection,submission_id,"accepted",reviewed_by=reviewed_by,review_note=review_note,collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
         return submission_id

@@ -1,3 +1,5 @@
+from edit_concurrency import edit_token, check_edit, sign, unsign, StaleEdit, STALE_PREVIEW
+from alternative_preconditions import state_token, check_state
 from flask import Blueprint, render_template, request, redirect, url_for, g, abort
 
 import sqlite3
@@ -56,6 +58,8 @@ def _labels_from_form(form):
 
 def _management_context(connection, alternative_id, *, message=None, error=None,
                         relation_result=None, structural_result=None):
+    if not connection.in_transaction:
+        connection.execute("BEGIN")
     alternative = connection.execute("""
         SELECT a.*,c.preferred_label FROM alternative a JOIN concept c USING(concept_id)
         WHERE a.alternative_id=?
@@ -112,7 +116,9 @@ def _management_context(connection, alternative_id, *, message=None, error=None,
     concepts = connection.execute("SELECT concept_id,preferred_label FROM concept WHERE concept_id<>? ORDER BY preferred_label,concept_id", (alternative["concept_id"],)).fetchall()
     structural_history = connection.execute("SELECT * FROM activity_event WHERE entity_type='alternative' AND entity_id=? AND event_type IN ('alternative_retired','alternative_merged','alternative_split','alternative_moved') ORDER BY occurred_at DESC,activity_event_id DESC", (alternative_id,)).fetchall()
     current_occurrences = connection.execute("SELECT o.occurrence_id,o.original_gloss,s.source_name FROM assignment x JOIN occurrence o USING(occurrence_id) JOIN source s USING(source_id) WHERE x.alternative_id=? AND x.is_current=1 ORDER BY o.occurrence_id", (alternative_id,)).fetchall()
-    return dict(alternative=alternative, morphology=morphology,
+    return dict(edit_token=edit_token(connection, "morphology", alternative_id),
+                nomenclature_token=state_token(connection, alternative_id, {"kind": "nomenclature"}),
+                alternative=alternative, morphology=morphology,
                 morphology_history=morphology_history,
                 morphology_components=morphology_components, relations=relations,
                 relation_history=relation_history, concept_alternatives=concept_alternatives,
@@ -123,6 +129,20 @@ def _management_context(connection, alternative_id, *, message=None, error=None,
                 current_occurrences=current_occurrences,
                 message=message, error=error, relation_result=relation_result,
                 structural_result=structural_result)
+
+
+def _structural_spec(form):
+    kind = form.get("action", "").split("_", 1)[-1]
+    if kind == "retire":
+        values = {str(k): None if v in (None, "", "unassigned") else int(v)
+                  for k, v in _occurrence_mapping(form, "occurrence_").items()}
+        return {"kind": kind, "resolutions": values}
+    if kind == "merge":
+        return {"kind": kind, "target_id": int(form.get("target_id", 0)), "relation_mode": form.get("relation_mode")}
+    if kind == "split":
+        return {"kind": kind, "new_count": int(form.get("new_count", 0)),
+                "distribution": {str(k): int(v) for k, v in _occurrence_mapping(form, "split_occurrence_").items()}}
+    return {"kind": kind, "destination_concept_id": int(form.get("destination_concept_id", 0))}
 
 
 def _occurrence_mapping(form, prefix):
@@ -333,6 +353,13 @@ def actualizar_gestion_alternativa(alternative_id):
     relation_result = None
     structural_result = None
     try:
+        expected_fingerprint = None
+        if action in ("confirm_retire", "confirm_merge", "confirm_split", "confirm_move"):
+            payload = unsign(request.form.get("preview_token"), STALE_PREVIEW)
+            if (payload.get("purpose") != "structural-alternative" or
+                    payload.get("source_id") != alternative_id or payload.get("spec") != _structural_spec(request.form)):
+                raise StaleEdit(STALE_PREVIEW)
+            expected_fingerprint = payload["fingerprint"]
         if action == "morphology":
             if request.form.get("confirm") != "yes":
                 raise AlternativeAdminError("Confirme la actualización de morfología.")
@@ -343,14 +370,16 @@ def actualizar_gestion_alternativa(alternative_id):
                 "free_permutation": request.form.get("free_permutation"),
                 "note": request.form.get("morphology_note"),
                 "components": _components_from_form(request.form),
-            }, _actor())
+            }, _actor(), edit_token=request.form.get("edit_token"))
             message = "Morfología actualizada." if changed else "No hay cambios."
         elif action in ("preview_add_relation", "preview_retire_relation"):
+            conexion.execute("BEGIN")
             relation_result = relation_preview(
                 conexion, alternative_id,
                 action="add" if action == "preview_add_relation" else "retire",
                 target_id=request.form.get("target_id"), parameter=request.form.get("parameter"),
                 relation_id=request.form.get("relation_id"))
+            relation_result["token"] = state_token(conexion, alternative_id, relation_result["relation"])
             message = "Revise el efecto sobre la nomenclatura y confirme."
         elif action == "confirm_relation":
             if request.form.get("confirm") != "yes":
@@ -360,7 +389,8 @@ def actualizar_gestion_alternativa(alternative_id):
                 target_id=request.form.get("target_id"), parameter=request.form.get("parameter"),
                 relation_id=request.form.get("relation_id") or None,
                 labels=_labels_from_form(request.form), mode=request.form.get("mode", "automatic"),
-                reason=request.form.get("reason"), actor=_actor())
+                reason=request.form.get("reason"), actor=_actor(),
+                state_token=request.form.get("state_token"))
             message = "Relación actualizada." + (" La nomenclatura no cambia." if event_id is None else " Nomenclatura actualizada.")
         elif action == "apply_nomenclature":
             if request.form.get("confirm") != "yes":
@@ -372,30 +402,35 @@ def actualizar_gestion_alternativa(alternative_id):
                 abort(404)
             event_id = apply_direct_nomenclature(
                 conexion, concept_row["concept_id"], _labels_from_form(request.form),
-                mode=request.form.get("mode", "automatic"), reason=request.form.get("reason"), actor=_actor())
+                mode=request.form.get("mode", "automatic"), reason=request.form.get("reason"), actor=_actor(),
+                state_token=request.form.get("state_token"), source_id=alternative_id)
             message = "La nomenclatura ya está actualizada." if event_id is None else "Nomenclatura actualizada."
         elif action == "preview_retire":
             structural_result = retire_preview(conexion, alternative_id, _occurrence_mapping(request.form, "occurrence_")); message = "Revise el retiro estructural antes de confirmarlo."
         elif action == "confirm_retire":
             if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
-            apply_retire(conexion,alternative_id,_occurrence_mapping(request.form,"occurrence_"),reason=request.form.get("reason"),actor=_actor()); return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa retirada."))
+            apply_retire(conexion,alternative_id,_occurrence_mapping(request.form,"occurrence_"),reason=request.form.get("reason"),actor=_actor(),expected_fingerprint=expected_fingerprint); return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa retirada."))
         elif action == "preview_merge":
             structural_result=merge_preview(conexion,alternative_id,int(request.form.get("target_id",0)),request.form.get("relation_mode")); message="Revise la fusiÃ³n antes de confirmarla."
         elif action == "confirm_merge":
             if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
-            target_id=int(request.form.get("target_id"));apply_merge(conexion,alternative_id,target_id,request.form.get("relation_mode"),reason=request.form.get("reason"),actor=_actor());return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message=f"Alternativa fusionada en {target_id}."))
+            target_id=int(request.form.get("target_id"));apply_merge(conexion,alternative_id,target_id,request.form.get("relation_mode"),reason=request.form.get("reason"),actor=_actor(),expected_fingerprint=expected_fingerprint);return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message=f"Alternativa fusionada en {target_id}."))
         elif action == "preview_split":
             structural_result=split_preview(conexion,alternative_id,_occurrence_mapping(request.form,"split_occurrence_"),request.form.get("new_count"));message="Revise la divisiÃ³n antes de confirmarla."
         elif action == "confirm_split":
             if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
-            apply_split(conexion,alternative_id,_occurrence_mapping(request.form,"split_occurrence_"),request.form.get("new_count"),reason=request.form.get("reason"),actor=_actor());return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa dividida."))
+            apply_split(conexion,alternative_id,_occurrence_mapping(request.form,"split_occurrence_"),request.form.get("new_count"),reason=request.form.get("reason"),actor=_actor(),expected_fingerprint=expected_fingerprint);return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa dividida."))
         elif action == "preview_move":
             structural_result=move_preview(conexion,alternative_id,int(request.form.get("destination_concept_id",0)));message="Revise el movimiento antes de confirmarlo."
         elif action == "confirm_move":
             if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
-            apply_move(conexion,alternative_id,int(request.form.get("destination_concept_id")),reason=request.form.get("reason"),actor=_actor());return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa movida."))
+            apply_move(conexion,alternative_id,int(request.form.get("destination_concept_id")),reason=request.form.get("reason"),actor=_actor(),expected_fingerprint=expected_fingerprint);return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa movida."))
         else:
             raise AlternativeAdminError("Acción administrativa no válida.")
+        if structural_result is not None:
+            structural_result["token"] = sign({"purpose": "structural-alternative",
+                "source_id": alternative_id, "spec": _structural_spec(request.form),
+                "fingerprint": structural_result["fingerprint"]})
         context = _management_context(conexion, alternative_id, message=message,
                                       relation_result=relation_result, structural_result=structural_result)
         return render_template("gestionar_alternativa.html", **context)
@@ -405,9 +440,9 @@ def actualizar_gestion_alternativa(alternative_id):
             sqlite3.IntegrityError) as error:
         if conexion.in_transaction:
             conexion.rollback()
-        context = _management_context(conexion, alternative_id, error=str(error),
+        context = _management_context(conexion, alternative_id, error="No fue posible aplicar los cambios." if isinstance(error, sqlite3.IntegrityError) else str(error),
                                       relation_result=relation_result, structural_result=structural_result)
-        return render_template("gestionar_alternativa.html", **context), 400
+        return render_template("gestionar_alternativa.html", **context), 409 if isinstance(error, StaleEdit) else 400
     finally:
         conexion.close()
 
@@ -416,10 +451,11 @@ def actualizar_gestion_alternativa(alternative_id):
 @requires_reviewer
 def gestionar_video(alternative_id):
     conexion=conectar()
+    conexion.execute("BEGIN")
     alternative=conexion.execute("""SELECT a.alternative_id,a.concept_id,a.working_label,c.preferred_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.alternative_id=?""",(alternative_id,)).fetchone()
     if alternative is None: conexion.close(); abort(404)
-    current=get_current_video(conexion,alternative_id); history=get_video_history(conexion,alternative_id); conexion.close()
-    return render_template("gestionar_video_alternativa.html",alternative=alternative,current_video=current,video_history=history,error=request.args.get("error"))
+    current=get_current_video(conexion,alternative_id); history=get_video_history(conexion,alternative_id); token=edit_token(conexion,"video",alternative_id); conexion.close()
+    return render_template("gestionar_video_alternativa.html",edit_token=token,alternative=alternative,current_video=current,video_history=history,error=request.args.get("error"))
 
 
 @alternatives_bp.route("/alternativas/<int:alternative_id>/video",methods=["POST"])
@@ -431,11 +467,13 @@ def actualizar_video(alternative_id):
         if action=="add": add_video(conexion,alternative_id,request.form.get("youtube_url"),actor)
         elif action=="replace":
             if request.form.get("confirm")!="yes": raise AlternativeVideoError("Confirme el reemplazo del video vigente.")
-            replace_video(conexion,alternative_id,request.form.get("youtube_url"),actor)
+            replace_video(conexion,alternative_id,request.form.get("youtube_url"),actor,edit_token=request.form.get("edit_token"))
         elif action=="retire":
             if request.form.get("confirm")!="yes": raise AlternativeVideoError("Confirme el retiro del video vigente.")
-            retire_video(conexion,alternative_id,actor,request.form.get("comment"))
+            retire_video(conexion,alternative_id,actor,request.form.get("comment"),edit_token=request.form.get("edit_token"))
         else: raise AlternativeVideoError("Acción de video no válida.")
+    except StaleEdit as error:
+        return str(error),409
     except (AlternativeVideoError,InvalidYouTubeURL,sqlite3.IntegrityError) as error:
         return str(error),400
     finally: conexion.close()

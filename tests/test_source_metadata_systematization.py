@@ -1,3 +1,4 @@
+from tests.form_client import FormClient
 import importlib.util
 import sqlite3
 import tempfile
@@ -214,7 +215,7 @@ class SourceRouteTests(unittest.TestCase):
             g.current_access_role = "reviewer"
         app.register_blueprint(sources_bp)
         app.testing = True
-        self.client = app.test_client()
+        self.client = FormClient(app.test_client())
 
     def tearDown(self):
         database.BASE_DATOS = self.previous_database_path

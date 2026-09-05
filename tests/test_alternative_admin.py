@@ -1,3 +1,4 @@
+from tests.form_client import FormClient
 import sqlite3
 import unittest
 
@@ -145,7 +146,7 @@ class AlternativeAdminRouteTests(unittest.TestCase):
         @app.before_request
         def role_context():
             g.current_access_role = self.role
-        self.client = app.test_client()
+        self.client = FormClient(app.test_client())
 
     def tearDown(self):
         database.BASE_DATOS = self.old_path

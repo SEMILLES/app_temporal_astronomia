@@ -1,6 +1,11 @@
 """Transactional structural operations for canonical alternatives."""
 
 import json
+import sqlite3
+import inspect
+from functools import wraps
+from alternative_preconditions import relevant_state
+from edit_concurrency import fingerprint, StaleEdit, STALE_PREVIEW
 
 from activity import record_activity
 from alternative_admin import AlternativeAdminError, actor_name, _blocking_ids, _reject_new_blocking
@@ -88,6 +93,9 @@ def _simulate(connection, callback):
     connection.execute("SAVEPOINT structural_preview")
     try:
         result = callback()
+        _nomenclature(connection, result["source"]["concept_id"], "preview", None)
+        if result["kind"] == "move":
+            _nomenclature(connection, result["destination"]["concept_id"], "preview", None)
         result["conflicts"] = _conflict_preflight(connection)
         return result
     finally:
@@ -95,6 +103,30 @@ def _simulate(connection, callback):
         connection.execute("RELEASE structural_preview")
 
 
+def _read_only_preview(function):
+    @wraps(function)
+    def preview(connection, *args, **kwargs):
+        arguments = inspect.signature(function).bind(connection, *args, **kwargs).arguments
+        source_id = arguments.get("source_id", arguments.get("alternative_id"))
+        # serialize captures one SQLite snapshot, including our transaction when
+        # revalidating. All simulation writes stay in an isolated memory DB.
+        clone = sqlite3.connect(":memory:")
+        clone.row_factory = sqlite3.Row
+        try:
+            clone.deserialize(connection.serialize())
+            clone.execute("PRAGMA foreign_keys=ON")
+            destination = arguments.get("destination_concept_id")
+            target = arguments.get("target_id")
+            state = fingerprint(relevant_state(clone, source_id, destination, target))
+            result = function(clone, *args, **kwargs)
+            result["fingerprint"] = state
+            return result
+        finally:
+            clone.close()
+    return preview
+
+
+@_read_only_preview
 def retire_preview(connection, alternative_id, resolutions=None):
     source = _active(connection, alternative_id); occurrences = _occurrences(connection, alternative_id)
     resolutions = {int(k): (None if v in (None, "", "unassigned") else int(v)) for k, v in (resolutions or {}).items()}
@@ -120,11 +152,14 @@ def retire_preview(connection, alternative_id, resolutions=None):
     return _simulate(connection, operation)
 
 
-def apply_retire(connection, alternative_id, resolutions, *, reason, actor):
-    reason=_reason(reason); retire_preview(connection, alternative_id, resolutions)
-    source=_active(connection, alternative_id); occurrences=_occurrences(connection, alternative_id)
-    before=_blocking_ids(connection); connection.execute("BEGIN IMMEDIATE")
+def apply_retire(connection, alternative_id, resolutions, *, reason, actor, expected_fingerprint):
+    connection.execute("BEGIN IMMEDIATE")
     try:
+        if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, alternative_id, None)):
+            raise StaleEdit(STALE_PREVIEW)
+        reason=_reason(reason); retire_preview(connection, alternative_id, resolutions)
+        source=_active(connection, alternative_id); occurrences=_occurrences(connection, alternative_id)
+        before=_blocking_ids(connection)
         for row in occurrences:
             destination=resolutions.get(row["occurrence_id"], resolutions.get(str(row["occurrence_id"])))
             if destination in (None,"","unassigned"):
@@ -138,6 +173,7 @@ def apply_retire(connection, alternative_id, resolutions, *, reason, actor):
     except Exception: connection.rollback(); raise
 
 
+@_read_only_preview
 def merge_preview(connection, source_id, target_id, relation_mode):
     source=_active(connection,source_id); target=_active(connection,target_id)
     if source_id==target_id or source["concept_id"]!=target["concept_id"]: raise StructuralAlternativeError("La fusiÃ³n exige dos alternativas distintas y vigentes del mismo concepto.")
@@ -161,11 +197,13 @@ def merge_preview(connection, source_id, target_id, relation_mode):
     return _simulate(connection,operation)
 
 
-def apply_merge(connection,source_id,target_id,relation_mode,*,reason,actor):
-    reason=_reason(reason); merge_preview(connection,source_id,target_id,relation_mode)
-    source=_active(connection,source_id); occurrences=_occurrences(connection,source_id); relations=_relations(connection,source_id); before=_blocking_ids(connection)
+def apply_merge(connection,source_id,target_id,relation_mode,*,reason,actor,expected_fingerprint):
     connection.execute("BEGIN IMMEDIATE")
     try:
+        if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, source_id, None, target_id)):
+            raise StaleEdit(STALE_PREVIEW)
+        reason=_reason(reason); merge_preview(connection,source_id,target_id,relation_mode)
+        source=_active(connection,source_id); occurrences=_occurrences(connection,source_id); relations=_relations(connection,source_id); before=_blocking_ids(connection)
         for row in occurrences:create_or_replace_assignment(connection,row["occurrence_id"],target_id,created_by=actor_name(connection,actor.get("collaborator_id")))
         _retire_parts(connection,source_id); created=[]
         if relation_mode=="union":
@@ -181,6 +219,7 @@ def apply_merge(connection,source_id,target_id,relation_mode,*,reason,actor):
     except Exception:connection.rollback();raise
 
 
+@_read_only_preview
 def split_preview(connection,source_id,distribution,new_count):
     source=_active(connection,source_id); occurrences=_occurrences(connection,source_id)
     try:new_count=int(new_count)
@@ -197,10 +236,12 @@ def split_preview(connection,source_id,distribution,new_count):
     _relations_before=_relations(connection,source_id);return _simulate(connection,operation)
 
 
-def apply_split(connection,source_id,distribution,new_count,*,reason,actor):
-    reason=_reason(reason);split_preview(connection,source_id,distribution,new_count);source=_active(connection,source_id);occurrences=_occurrences(connection,source_id);before=_blocking_ids(connection)
+def apply_split(connection,source_id,distribution,new_count,*,reason,actor,expected_fingerprint):
     connection.execute("BEGIN IMMEDIATE")
     try:
+        if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, source_id, None)):
+            raise StaleEdit(STALE_PREVIEW)
+        reason=_reason(reason);split_preview(connection,source_id,distribution,new_count);source=_active(connection,source_id);occurrences=_occurrences(connection,source_id);before=_blocking_ids(connection)
         _retire_parts(connection,source_id);ids=[connection.execute("INSERT INTO alternative(concept_id,working_label,created_by) VALUES(?,NULL,?)",(source["concept_id"],actor_name(connection,actor.get("collaborator_id")))).lastrowid for _ in range(int(new_count))]
         for row in occurrences:
             index=distribution.get(row["occurrence_id"],distribution.get(str(row["occurrence_id"])))
@@ -211,6 +252,7 @@ def apply_split(connection,source_id,distribution,new_count,*,reason,actor):
     except Exception:connection.rollback();raise
 
 
+@_read_only_preview
 def move_preview(connection,source_id,destination_concept_id):
     source=_active(connection,source_id);destination=connection.execute("SELECT * FROM concept WHERE concept_id=?",(destination_concept_id,)).fetchone()
     if destination is None:raise StructuralAlternativeError("El concepto destino no existe.")
@@ -222,10 +264,12 @@ def move_preview(connection,source_id,destination_concept_id):
     return _simulate(connection,operation)
 
 
-def apply_move(connection,source_id,destination_concept_id,*,reason,actor):
-    reason=_reason(reason);move_preview(connection,source_id,destination_concept_id);source=_active(connection,source_id);before=_blocking_ids(connection);old_context={r["occurrence_id"]:{"concept_id":r["reference_concept_id"],"concept_proposal_id":r["reference_concept_proposal_id"]} for r in _occurrences(connection,source_id)}
+def apply_move(connection,source_id,destination_concept_id,*,reason,actor,expected_fingerprint):
     connection.execute("BEGIN IMMEDIATE")
     try:
+        if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, source_id, destination_concept_id)):
+            raise StaleEdit(STALE_PREVIEW)
+        reason=_reason(reason);move_preview(connection,source_id,destination_concept_id);source=_active(connection,source_id);before=_blocking_ids(connection);old_context={r["occurrence_id"]:{"concept_id":r["reference_concept_id"],"concept_proposal_id":r["reference_concept_proposal_id"]} for r in _occurrences(connection,source_id)}
         connection.execute("UPDATE alternative_relation SET is_current=0 WHERE is_current=1 AND (alternative_low_id=? OR alternative_high_id=?)",(source_id,source_id));connection.execute("UPDATE alternative SET concept_id=? WHERE alternative_id=?",(destination_concept_id,source_id))
         origin_event=_nomenclature(connection,source["concept_id"],reason,actor_name(connection,actor.get("collaborator_id")));destination_event=_nomenclature(connection,int(destination_concept_id),reason,actor_name(connection,actor.get("collaborator_id")));_persist_final_conflicts(connection,actor);_reject_new_blocking(connection,before)
         _event(connection,"alternative_moved",source_id,actor,reason,origin_concept_id=source["concept_id"],destination_concept_id=int(destination_concept_id),origin_renumber_event_id=origin_event,destination_renumber_event_id=destination_event,occurrence_context_snapshot=old_context)

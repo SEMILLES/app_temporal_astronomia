@@ -1,3 +1,4 @@
+from tests.form_client import FormClient
 import sqlite3
 import tempfile
 import unittest
@@ -20,7 +21,7 @@ class ImmediateAcceptanceRouteTests(unittest.TestCase):
         self.app=Flask(__name__,template_folder=str(ROOT/"templates"));self.app.testing=True;self.app.jinja_env.filters.update(alternative_display_label=alternative_display_label,human_concept_label=human_concept_label,source_period=format_source_period);self.app.register_blueprint(occurrences_bp);self.app.register_blueprint(submissions_bp)
         @self.app.before_request
         def role():g.current_access_role=self.role
-        self.client=self.app.test_client();self.patches=[patch("routes.occurrences.conectar",side_effect=self.connect),patch("routes.submissions.conectar",side_effect=self.connect)]
+        self.client=FormClient(self.app.test_client());self.patches=[patch("routes.occurrences.conectar",side_effect=self.connect),patch("routes.submissions.conectar",side_effect=self.connect)]
         for item in self.patches:item.start()
     def tearDown(self):
         for item in self.patches:item.stop()

@@ -1,3 +1,4 @@
+from tests.form_client import FormClient
 import os
 import sqlite3
 import subprocess
@@ -64,7 +65,7 @@ class PeriodAndInterfaceTests(unittest.TestCase):
         app=Flask(__name__,template_folder=str(ROOT/"templates"));app.testing=True
         app.jinja_env.filters.update(human_concept_label=human_concept_label,alternative_display_label=alternative_display_label)
         for blueprint in (concepts_bp,alternatives_bp,occurrences_bp,submissions_bp):app.register_blueprint(blueprint)
-        self.client=app.test_client()
+        self.client=FormClient(app.test_client())
 
     def tearDown(self):database.BASE_DATOS=self.old;self.tmp.cleanup()
 

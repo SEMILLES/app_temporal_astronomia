@@ -1,8 +1,12 @@
 """Transactional management of canonical Alternative YouTube videos."""
 
+from edit_concurrency import check_edit
+
 from activity import record_activity, resolve_collaborator
 from youtube_media import normalize_youtube_url, parse_youtube_url, youtube_embed_url
 
+
+_INTERNAL = object()
 
 class AlternativeVideoError(ValueError): pass
 class VideoAlreadyCurrent(AlternativeVideoError): pass
@@ -56,10 +60,13 @@ def add_video(connection, alternative_id, url, actor):
     except Exception: connection.rollback(); raise
 
 
-def replace_video(connection, alternative_id, url, actor):
+def replace_video(connection, alternative_id, url, actor, *, edit_token=_INTERNAL):
     normalized=normalize_youtube_url(url); role,cid,name=_actor(connection,actor)
     try:
-        connection.execute("BEGIN IMMEDIATE"); current=get_current_video(connection,alternative_id)
+        connection.execute("BEGIN IMMEDIATE")
+        if edit_token is not _INTERNAL:
+            check_edit(connection, "video", alternative_id, edit_token)
+        current=get_current_video(connection,alternative_id)
         if not current: raise NoCurrentVideo("La alternativa no tiene un video vigente.")
         if current["video_id"]==parse_youtube_url(normalized): raise VideoAlreadyCurrent("El video indicado ya es el video vigente de esta alternativa.")
         connection.execute("UPDATE alternative_media SET is_current=0,retired_at=CURRENT_TIMESTAMP WHERE alternative_media_id=?",(current["alternative_media_id"],))
@@ -70,10 +77,13 @@ def replace_video(connection, alternative_id, url, actor):
     except Exception: connection.rollback(); raise
 
 
-def retire_video(connection, alternative_id, actor, comment=None):
+def retire_video(connection, alternative_id, actor, comment=None, *, edit_token=_INTERNAL):
     role,cid,_=_actor(connection,actor)
     try:
-        connection.execute("BEGIN IMMEDIATE"); current=get_current_video(connection,alternative_id)
+        connection.execute("BEGIN IMMEDIATE")
+        if edit_token is not _INTERNAL:
+            check_edit(connection, "video", alternative_id, edit_token)
+        current=get_current_video(connection,alternative_id)
         if not current: raise NoCurrentVideo("La alternativa no tiene un video vigente.")
         connection.execute("UPDATE alternative_media SET is_current=0,retired_at=CURRENT_TIMESTAMP WHERE alternative_media_id=?",(current["alternative_media_id"],))
         record_activity(connection,"alternative_video_retired",entity_type="alternative",entity_id=alternative_id,collaborator_id=cid,access_role=role,comment=comment)

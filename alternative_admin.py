@@ -5,6 +5,9 @@ nomenclature services.  It owns the transaction whenever several canonical
 objects must change together.
 """
 
+from edit_concurrency import check_edit
+from alternative_preconditions import check_state
+
 from alternative_morphology import create_or_replace_alternative_morphology
 from alternative_nomenclature import (
     apply_nomenclature, calculate_nomenclature_preview, validate_final_labels,
@@ -16,6 +19,8 @@ from alternative_relations import (
 from phonological_parameters import validate_phonological_parameter
 from activity import record_activity
 
+
+_INTERNAL = object()
 
 class AlternativeAdminError(ValueError):
     pass
@@ -85,11 +90,13 @@ def _reject_new_blocking(connection, before):
         raise AlternativeAdminError("La operación crearía un conflicto bloqueante: " + "; ".join(descriptions))
 
 
-def update_morphology(connection, alternative_id, values, actor):
-    _active_alternative(connection, alternative_id)
-    before = _blocking_ids(connection)
+def update_morphology(connection, alternative_id, values, actor, *, edit_token=_INTERNAL):
     connection.execute("BEGIN IMMEDIATE")
     try:
+        if edit_token is not _INTERNAL:
+            check_edit(connection, "morphology", alternative_id, edit_token)
+        _active_alternative(connection, alternative_id)
+        before = _blocking_ids(connection)
         morphology_id, changed = create_or_replace_alternative_morphology(
             connection, alternative_id, created_by=actor_name(connection, actor.get("collaborator_id")),
             created_from_submission_id=None, **values
@@ -156,20 +163,24 @@ def relation_preview(connection, alternative_id, *, action, target_id=None,
 
 def apply_relation_change(connection, alternative_id, *, action, target_id=None,
                           parameter=None, relation_id=None, labels=None,
-                          mode="automatic", reason=None, actor=None):
-    actor = actor or {}
-    expected = relation_preview(connection, alternative_id, action=action, target_id=target_id,
-                                parameter=parameter, relation_id=relation_id)
-    concept_id = _active_alternative(connection, alternative_id)["concept_id"]
-    suggested = expected["suggestions"]
-    final = suggested if labels is None else {int(key): value for key, value in labels.items()}
-    changed_from_auto = final != suggested
-    origin = "manual" if mode == "manual" or changed_from_auto else "automatic_assisted"
-    if origin == "manual" and not (reason or "").strip():
-        raise AlternativeAdminError("La nomenclatura manual o ajustada exige una razón.")
-    before = _blocking_ids(connection)
+                          mode="automatic", reason=None, actor=None, state_token=_INTERNAL):
     connection.execute("BEGIN IMMEDIATE")
     try:
+        if state_token is not _INTERNAL:
+            spec = {"action": action, "target_id": int(target_id), "parameter": parameter,
+                    "relation_id": int(relation_id) if relation_id else None}
+            check_state(connection, alternative_id, spec, state_token)
+        actor = actor or {}
+        expected = relation_preview(connection, alternative_id, action=action, target_id=target_id,
+                                    parameter=parameter, relation_id=relation_id)
+        concept_id = _active_alternative(connection, alternative_id)["concept_id"]
+        suggested = expected["suggestions"]
+        final = suggested if labels is None else {int(key): value for key, value in labels.items()}
+        changed_from_auto = final != suggested
+        origin = "manual" if mode == "manual" or changed_from_auto else "automatic_assisted"
+        if origin == "manual" and not (reason or "").strip():
+            raise AlternativeAdminError("La nomenclatura manual o ajustada exige una razón.")
+        before = _blocking_ids(connection)
         if action == "add":
             relation_pk = create_current_relation(connection, alternative_id, int(target_id),
                 validate_phonological_parameter(parameter), created_by=actor_name(connection, actor.get("collaborator_id")))
@@ -194,15 +205,18 @@ def apply_relation_change(connection, alternative_id, *, action, target_id=None,
         raise
 
 
-def apply_direct_nomenclature(connection, concept_id, labels, *, mode, reason, actor):
-    preview = calculate_nomenclature_preview(connection, concept_id)
-    labels = preview["suggestions"] if labels is None else {int(k): v for k, v in labels.items()}
-    origin = "automatic_assisted" if mode == "automatic" and labels == preview["suggestions"] else "manual"
-    if origin == "manual" and not (reason or "").strip():
-        raise AlternativeAdminError("La nomenclatura manual o ajustada exige una razón.")
-    before = _blocking_ids(connection)
+def apply_direct_nomenclature(connection, concept_id, labels, *, mode, reason, actor,
+                              state_token=_INTERNAL, source_id=None):
     connection.execute("BEGIN IMMEDIATE")
     try:
+        if state_token is not _INTERNAL:
+            check_state(connection, source_id, {"kind": "nomenclature"}, state_token)
+        preview = calculate_nomenclature_preview(connection, concept_id)
+        labels = preview["suggestions"] if labels is None else {int(k): v for k, v in labels.items()}
+        origin = "automatic_assisted" if mode == "automatic" and labels == preview["suggestions"] else "manual"
+        if origin == "manual" and not (reason or "").strip():
+            raise AlternativeAdminError("La nomenclatura manual o ajustada exige una razón.")
+        before = _blocking_ids(connection)
         event_id = apply_nomenclature(connection, concept_id, labels, origin=origin, reason=reason,
                                       created_by=actor_name(connection, actor.get("collaborator_id")))
         if event_id is not None:

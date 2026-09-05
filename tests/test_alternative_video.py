@@ -1,3 +1,4 @@
+from tests.form_client import FormClient
 import importlib.util, sqlite3, tempfile, unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -81,7 +82,7 @@ class VideoRouteRoleTests(unittest.TestCase):
         app=Flask(__name__,template_folder=str(ROOT/"templates")); app.testing=True; app.jinja_env.filters["alternative_display_label"]=lambda c,a:f"{c}-{a}"; app.register_blueprint(alternatives_bp); install_access_context(app); app.wsgi_app.routes={"ana":"analyst","rev":"reviewer","mas":"master"}
         self.patches=[patch("routes.alternatives.conectar",side_effect=self.connect),patch("access_control.conectar",side_effect=self.connect)]
         for item in self.patches:item.start()
-        self.client=app.test_client()
+        self.client=FormClient(app.test_client())
     def connect(self):
         db=sqlite3.connect(self.path); db.row_factory=sqlite3.Row; db.execute("PRAGMA foreign_keys=ON"); return db
     def tearDown(self):

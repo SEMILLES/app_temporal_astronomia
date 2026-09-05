@@ -1,3 +1,4 @@
+from tests.form_client import FormClient
 import importlib.util
 import sqlite3
 import tempfile
@@ -36,7 +37,9 @@ class MigrationTests(unittest.TestCase):
 
 
 class SourceProtectionTests(unittest.TestCase):
-    setUp = roles.RoleAccessTests.setUp
+    def setUp(self):
+        roles.RoleAccessTests.setUp(self)
+        self.client = FormClient(self.client)
     tearDown = roles.RoleAccessTests.tearDown
 
     def post(self, role, path, data):

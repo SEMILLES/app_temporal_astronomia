@@ -1,3 +1,4 @@
+from tests.form_client import FormClient
 import importlib.util
 import json
 import re
@@ -216,6 +217,7 @@ class RetirementTests(unittest.TestCase):
 class RetirementRouteTests(unittest.TestCase):
     def setUp(self):
         roles.RoleAccessTests.setUp(self)
+        self.client = FormClient(self.client)
         from concept_labels import human_concept_label
         self.client.application.jinja_env.filters["human_concept_label"] = human_concept_label
         db = database.conectar(); seed(db); db.close()

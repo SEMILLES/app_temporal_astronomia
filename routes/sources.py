@@ -1,3 +1,4 @@
+from edit_concurrency import edit_token, check_edit, StaleEdit
 from flask import (
     Blueprint,
     render_template,
@@ -10,7 +11,7 @@ import sqlite3
 
 from database import conectar
 from flask import g, abort
-from activity import record_activity
+from activity import record_activity, resolve_collaborator
 from source_forms import source_form_values, source_insert_values, parse_source_years
 from source_structural import year_conflicts
 from source_details import SOURCE_TYPES, analysts_may_create_sources
@@ -124,6 +125,7 @@ def nueva_fuente():
 def editar_fuente(source_id):
 
     conexion = conectar()
+    conexion.execute("BEGIN")
     fuente = conexion.execute("""
         SELECT source_id, source_name, source_type, source_reference, legacy_source_code, source_scope,
                format_original, format_detail, start_year, end_year,
@@ -133,11 +135,12 @@ def editar_fuente(source_id):
     """, (source_id,)).fetchone()
     occurrence_count = conexion.execute("SELECT count(*) FROM occurrence WHERE source_id=?",(source_id,)).fetchone()[0]
     allowed = source_edit_allowed(conexion, fuente)
+    token = edit_token(conexion, "source", source_id)
     conexion.close()
     if not allowed: abort(404)
     if fuente is None:
         return "La fuente no existe.", 404
-    return render_template("editar_fuente.html", fuente=fuente, source_types=SOURCE_TYPES, occurrence_count=occurrence_count)
+    return render_template("editar_fuente.html", fuente=fuente, source_types=SOURCE_TYPES, occurrence_count=occurrence_count, edit_token=token)
 
 
 @sources_bp.route("/fuentes/<int:source_id>/actualizar", methods=["POST"])
@@ -158,6 +161,7 @@ def actualizar_fuente(source_id):
         if actual is None:
             conexion.rollback()
             return "La fuente no existe.", 404
+        check_edit(conexion, "source", source_id, request.form.get("edit_token"))
         try:
             values = source_form_values(request.form)
         except ValueError:
@@ -183,8 +187,8 @@ def actualizar_fuente(source_id):
                     legacy_source_code, source_scope, format_original,
                     format_detail, start_year, end_year, end_year_status,
                     region_description, characterization,
-                    reported_entry_count, change_note, analyst_protected
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    reported_entry_count, change_note, analyst_protected, changed_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 source_id, actual["source_name"], actual["source_type"],
                 actual["source_reference"], actual["legacy_source_code"],
@@ -194,6 +198,7 @@ def actualizar_fuente(source_id):
                 actual["region_description"], actual["characterization"],
                 actual["reported_entry_count"],
                 request.form.get("change_note") or None, actual["analyst_protected"],
+                resolve_collaborator(conexion, request.form.get("collaborator_id"))[1],
             ))
         conexion.execute("""
             UPDATE source SET
@@ -207,6 +212,9 @@ def actualizar_fuente(source_id):
         if previous_editable_state != values and getattr(g,"current_access_role",None):
             record_activity(conexion,"source_updated",entity_type="source",entity_id=source_id,collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g,"current_access_role",None),comment=request.form.get("change_note"))
         conexion.commit()
+    except StaleEdit as error:
+        conexion.rollback()
+        return str(error), 409
     except (sqlite3.IntegrityError, ValueError):
         conexion.rollback()
         return "Los metadatos o el tipo de la fuente no son válidos.", 400

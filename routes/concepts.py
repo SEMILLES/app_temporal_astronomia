@@ -1,3 +1,4 @@
+from edit_concurrency import edit_token, check_edit, StaleEdit
 from flask import (
     Blueprint, g,
     render_template,
@@ -110,6 +111,7 @@ def nuevo_concepto():
 def editar_concepto(concept_id):
 
     conexion = conectar()
+    conexion.execute("BEGIN")
 
     concepto = conexion.execute("""
         SELECT
@@ -121,6 +123,7 @@ def editar_concepto(concept_id):
         WHERE concept_id = ?
     """, (concept_id,)).fetchone()
 
+    token = edit_token(conexion, "concept", concept_id)
     conexion.close()
 
     if concepto is None:
@@ -132,7 +135,7 @@ def editar_concepto(concept_id):
 
     return render_template(
         "editar_concepto.html",
-        concepto=concepto
+        concepto=concepto, edit_token=token
     )
 
 
@@ -160,6 +163,10 @@ def actualizar_concepto(concept_id):
 
         conexion.execute("BEGIN IMMEDIATE")
         previous = conexion.execute("SELECT preferred_label FROM concept WHERE concept_id=?", (concept_id,)).fetchone()
+        if previous is None:
+            conexion.close()
+            return "El concepto no existe.", 404
+        check_edit(conexion, "concept", concept_id, request.form.get("edit_token"))
         cursor = conexion.execute("""
             UPDATE concept
 
@@ -187,6 +194,10 @@ def actualizar_concepto(concept_id):
                             comment=json.dumps({"old_label": previous[0], "new_label": preferred_label}, ensure_ascii=False))
         conexion.commit()
 
+    except StaleEdit as error:
+        conexion.rollback()
+        conexion.close()
+        return str(error), 409
     except sqlite3.IntegrityError:
 
         conexion.close()

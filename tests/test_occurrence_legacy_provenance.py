@@ -1,3 +1,4 @@
+from tests.form_client import FormClient
 import importlib.util
 import sqlite3
 import tempfile
@@ -217,7 +218,7 @@ class OccurrenceRouteTests(unittest.TestCase):
         app = Flask(__name__, template_folder=str(ROOT / "templates"))
         app.register_blueprint(occurrences_bp)
         app.testing = True
-        self.client = app.test_client()
+        self.client = FormClient(app.test_client())
 
     def tearDown(self):
         database.BASE_DATOS = self.previous_database_path

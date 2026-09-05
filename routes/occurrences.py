@@ -1,3 +1,5 @@
+from activity import record_activity, resolve_collaborator
+from edit_concurrency import edit_token, check_edit, StaleEdit
 from flask import Blueprint, render_template, request, redirect, url_for, g
 
 import sqlite3
@@ -98,6 +100,7 @@ def _confirmation(template_kind,occurrence_id,operation):
         occurrence=db.execute("SELECT occurrence_id,original_gloss FROM occurrence WHERE occurrence_id=?",(occurrence_id,)).fetchone()
         current=db.execute("SELECT * FROM occurrence_grammar WHERE occurrence_id=? AND is_current=1",(occurrence_id,)).fetchone() if template_kind=="grammar" else None
         result=preview_operation(db,operation)
+    except StaleEdit as error:return str(error),409
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
     finally:db.close()
     summary={"occurrence":dict(occurrence) if occurrence else None,"current":dict(current) if current else None,"proposed":_grammar_values(request.form) if template_kind=="grammar" else _alternative_payload(request.form),"decision":_alternative_decision(request.form) if template_kind=="alternative" else None}
@@ -166,6 +169,7 @@ def nueva_ocurrencia():
 @occurrences_bp.route("/ocurrencias/<int:occurrence_id>/editar")
 def editar_ocurrencia(occurrence_id):
     conexion = conectar()
+    conexion.execute("BEGIN")
     ocurrencia = conexion.execute("""
         SELECT occurrence_id, source_id, original_gloss, source_detail_1,
                source_detail_2, source_detail_1_status, source_detail_2_status, occurrence_year, usage_examples_present,
@@ -179,9 +183,10 @@ def editar_ocurrencia(occurrence_id):
         SELECT source_id, source_name, source_type, start_year, end_year, end_year_status
         FROM source WHERE retired_at IS NULL ORDER BY source_name
     """).fetchall()
+    token = edit_token(conexion, "occurrence", occurrence_id)
     conexion.close()
     return render_template(
-        "editar_ocurrencia.html", ocurrencia=ocurrencia, fuentes=fuentes
+        "editar_ocurrencia.html", ocurrencia=ocurrencia, fuentes=fuentes, edit_token=token
     )
 
 
@@ -218,6 +223,7 @@ def actualizar_ocurrencia(occurrence_id):
         if actual is None:
             conexion.rollback()
             return "La ocurrencia no existe.", 404
+        check_edit(conexion, "occurrence", occurrence_id, request.form.get("edit_token"))
         source=conexion.execute("SELECT source_type FROM source WHERE source_id=? AND retired_at IS NULL",(source_id,)).fetchone()
         if source is None:return "La fuente no existe.",400
         source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2=normalize_occurrence_details(source[0],source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2)
@@ -244,8 +250,8 @@ def actualizar_ocurrencia(occurrence_id):
                     legacy_source_detail_2, source_locator, provenance_note,
                     occurrence_year, source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status,
                     usage_examples_present,grammatical_info_present,
-                    grammatical_note,change_note
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    grammatical_note,change_note,changed_by
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 occurrence_id, actual["legacy_occurrence_id"],
                 actual["source_id"], actual["original_gloss"],
@@ -254,7 +260,8 @@ def actualizar_ocurrencia(occurrence_id):
                 actual["provenance_note"], actual["occurrence_year"],
                 actual["source_detail_1"],actual["source_detail_2"],actual["source_detail_1_status"],actual["source_detail_2_status"],
                 actual["usage_examples_present"],actual["grammatical_info_present"],
-                actual["grammatical_note"],change_note
+                actual["grammatical_note"],change_note,
+                resolve_collaborator(conexion, request.form.get("collaborator_id"))[1]
             ))
         cursor = conexion.execute("""
             UPDATE occurrence SET
@@ -267,7 +274,14 @@ def actualizar_ocurrencia(occurrence_id):
         if cursor.rowcount != 1:
             conexion.rollback()
             return "La ocurrencia no existe.", 404
+        if new_state != previous_editable_state and getattr(g, "current_access_role", None):
+            record_activity(conexion, "occurrence_updated", entity_type="occurrence",
+                            entity_id=occurrence_id, access_role=g.current_access_role,
+                            collaborator_id=request.form.get("collaborator_id"), comment=change_note)
         conexion.commit()
+    except StaleEdit as error:
+        conexion.rollback()
+        return str(error), 409
     except (sqlite3.IntegrityError, ValueError):
         conexion.rollback()
         return "La fuente o el año de la ocurrencia no son válidos.", 400
@@ -327,10 +341,12 @@ def _load_grammar_page_data(conexion, occurrence_id):
 @occurrences_bp.route("/ocurrencias/<int:occurrence_id>/gramatica")
 def mostrar_gramatica(occurrence_id):
     conexion = conectar()
+    conexion.execute("BEGIN")
     try:
         occurrence, current, history, pending = _load_grammar_page_data(
             conexion, occurrence_id
         )
+        token = edit_token(conexion, "grammar", occurrence_id)
     finally:
         conexion.close()
     if occurrence is None:
@@ -344,6 +360,7 @@ def mostrar_gramatica(occurrence_id):
     return render_template(
         "gramatica_ocurrencia.html",
         occurrence=occurrence,
+        edit_token=token,
         current=current,
         history=history,
         pending=pending,
@@ -408,7 +425,7 @@ def guardar_gramatica(occurrence_id):
 @occurrences_bp.post("/ocurrencias/<int:occurrence_id>/gramatica/aceptacion-inmediata/preview")
 @requires_reviewer
 def preview_grammar_immediate(occurrence_id):
-    operation=grammar_operation(occurrence_id,_grammar_values(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    operation=grammar_operation(occurrence_id,_grammar_values(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"), expected_edit_token=request.form.get("edit_token"))
     return _confirmation("grammar",occurrence_id,operation)
 
 
@@ -416,8 +433,9 @@ def preview_grammar_immediate(occurrence_id):
 @requires_reviewer
 def confirm_grammar_immediate(occurrence_id):
     if request.form.get("confirm_immediate")!="yes":return "Debe confirmar explícitamente la aceptación inmediata.",400
-    db=conectar();operation=grammar_operation(occurrence_id,_grammar_values(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
+    db=conectar();operation=grammar_operation(occurrence_id,_grammar_values(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"), expected_edit_token=request.form.get("edit_token"))
     try:confirm_operation(db,operation)
+    except StaleEdit as error:return str(error),409
     except ImmediateBlockingError as error:return str(error),409
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
     finally:db.close()

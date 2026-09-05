@@ -31,7 +31,7 @@ class StructuralAlternativeTests(unittest.TestCase):
         with self.assertRaises(StructuralAlternativeError):retire_preview(self.db,1,{1:2})
         preview=retire_preview(self.db,1,{1:2,2:"unassigned"})
         self.assertEqual(len(preview["occurrences"]),2);self.assertIsNone(self.db.execute("SELECT retired_at FROM alternative WHERE alternative_id=1").fetchone()[0])
-        apply_retire(self.db,1,{1:2,2:"unassigned"},reason="retiro documentado",actor=self.actor)
+        apply_retire(self.db,1,{1:2,2:"unassigned"},expected_fingerprint=retire_preview(self.db,1,{1:2,2:"unassigned"})["fingerprint"],reason="retiro documentado",actor=self.actor)
         self.assertIsNotNone(self.db.execute("SELECT retired_at FROM alternative WHERE alternative_id=1").fetchone()[0])
         self.assertEqual(self.db.execute("SELECT count(*) FROM assignment WHERE occurrence_id=1").fetchone()[0],2)
         self.assertEqual(self.db.execute("SELECT count(*) FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0],0)
@@ -42,14 +42,14 @@ class StructuralAlternativeTests(unittest.TestCase):
         self.db.execute("INSERT INTO alternative_morphology(alternative_id,component_count,free_permutation) VALUES(2,2,'NO')")
         self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(2,3,'MOV_M1')");self.db.commit()
         preview=merge_preview(self.db,1,2,"union");self.assertEqual(preview["relations_created"],[])
-        apply_merge(self.db,1,2,"union",reason="misma alternativa",actor=self.actor)
+        apply_merge(self.db,1,2,"union",expected_fingerprint=merge_preview(self.db,1,2,"union")["fingerprint"],reason="misma alternativa",actor=self.actor)
         self.assertEqual(self.db.execute("SELECT count(*) FROM assignment WHERE alternative_id=2 AND is_current=1").fetchone()[0],3)
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology WHERE alternative_id=2 AND is_current=1").fetchone()[0],1)
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE alternative_low_id=2 AND alternative_high_id=3 AND phonological_parameter='MOV_M1' AND is_current=1").fetchone()[0],1)
         self.assertEqual(self.db.execute("SELECT count(*) FROM activity_event WHERE event_type='alternative_merged'").fetchone()[0],1)
 
     def test_split_creates_new_ids_without_morphology_or_relations(self):
-        ids,event=apply_split(self.db,1,{1:1,2:2},2,reason="dos formas",actor=self.actor)
+        ids,event=apply_split(self.db,1,{1:1,2:2},2,expected_fingerprint=split_preview(self.db,1,{1:1,2:2},2)["fingerprint"],reason="dos formas",actor=self.actor)
         self.assertEqual(len(ids),2);self.assertTrue(all(item>4 for item in ids))
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology WHERE alternative_id IN (?,?)",ids).fetchone()[0],0)
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE is_current=1 AND (alternative_low_id IN (?,?) OR alternative_high_id IN (?,?))",(*ids,*ids)).fetchone()[0],0)
@@ -60,7 +60,7 @@ class StructuralAlternativeTests(unittest.TestCase):
     def test_move_preserves_identity_assignment_context_morphology(self):
         assignment=self.db.execute("SELECT assignment_id FROM assignment WHERE occurrence_id=1 AND is_current=1").fetchone()[0]
         context=tuple(self.db.execute("SELECT concept_id,concept_proposal_id FROM occurrence_concept_reference WHERE occurrence_id=1 AND is_current=1").fetchone())
-        apply_move(self.db,1,2,reason="reclasificaciÃ³n",actor=self.actor)
+        apply_move(self.db,1,2,expected_fingerprint=move_preview(self.db,1,2)["fingerprint"],reason="reclasificaciÃ³n",actor=self.actor)
         self.assertEqual(self.db.execute("SELECT concept_id FROM alternative WHERE alternative_id=1").fetchone()[0],2)
         self.assertEqual(self.db.execute("SELECT assignment_id FROM assignment WHERE occurrence_id=1 AND is_current=1").fetchone()[0],assignment)
         self.assertEqual(tuple(self.db.execute("SELECT concept_id,concept_proposal_id FROM occurrence_concept_reference WHERE occurrence_id=1 AND is_current=1").fetchone()),context)
@@ -70,7 +70,7 @@ class StructuralAlternativeTests(unittest.TestCase):
 
     def test_rollback_is_atomic(self):
         self.db.execute("CREATE TRIGGER fail_activity BEFORE INSERT ON activity_event WHEN NEW.event_type='alternative_retired' BEGIN SELECT RAISE(ABORT,'synthetic');END");self.db.commit()
-        with self.assertRaises(sqlite3.IntegrityError):apply_retire(self.db,1,{1:2,2:2},reason="fallar",actor=self.actor)
+        with self.assertRaises(sqlite3.IntegrityError):apply_retire(self.db,1,{1:2,2:2},expected_fingerprint=retire_preview(self.db,1,{1:2,2:2})["fingerprint"],reason="fallar",actor=self.actor)
         self.assertIsNone(self.db.execute("SELECT retired_at FROM alternative WHERE alternative_id=1").fetchone()[0])
         self.assertEqual(self.db.execute("SELECT count(*) FROM assignment WHERE alternative_id=1 AND is_current=1").fetchone()[0],2)
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE is_current=1 AND (alternative_low_id=1 OR alternative_high_id=1)").fetchone()[0],2)
