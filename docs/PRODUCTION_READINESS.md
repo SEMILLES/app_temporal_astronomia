@@ -1,5 +1,7 @@
 # Fase 18A: arranque de producción
 
+Primitivas de backup y restauración incorporadas en 18B: [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md).
+
 Instalar `requirements.txt` en el entorno Python del servidor. No se añade ni se
 elige todavía un servidor WSGI o proveedor de hosting.
 
