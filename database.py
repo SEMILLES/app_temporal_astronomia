@@ -1,11 +1,14 @@
 import os
 import sqlite3
 from pathlib import Path
+from runtime_config import is_production
 
 
 DEFAULT_BASE_DATOS = Path(__file__).resolve().parent / "lesico_prototipo.db"
 _configured_database = os.environ.get("LESICO_DATABASE_PATH")
 USING_EXPLICIT_DATABASE = _configured_database is not None
+if is_production() and not USING_EXPLICIT_DATABASE:
+    raise RuntimeError("Producción requiere LESICO_DATABASE_PATH explícita y existente")
 if USING_EXPLICIT_DATABASE:
     if not _configured_database.strip():
         raise RuntimeError("LESICO_DATABASE_PATH no puede estar vacía")
@@ -54,7 +57,11 @@ REQUIRED_APPLICATION_TABLES = frozenset({
 
 def conectar():
 
-    conexion = sqlite3.connect(BASE_DATOS)
+    if is_production():
+        # mode=rw prevents silently recreating a removed production database.
+        conexion = sqlite3.connect(BASE_DATOS.as_uri() + "?mode=rw", uri=True, timeout=5.0)
+    else:
+        conexion = sqlite3.connect(BASE_DATOS, timeout=5.0)
 
     conexion.row_factory = sqlite3.Row
 
@@ -82,6 +89,8 @@ def validar_base_explicita():
                     "SELECT name FROM sqlite_master WHERE type = 'table'"
                 )
             }
+            if is_production() and REQUIRED_APPLICATION_TABLES <= tables:
+                validar_columnas_produccion(conexion)
         finally:
             conexion.close()
     except sqlite3.Error as error:
@@ -95,6 +104,24 @@ def validar_base_explicita():
             "LESICO_DATABASE_PATH no contiene las tablas requeridas: "
             + ", ".join(missing)
         )
+
+
+def validar_columnas_produccion(conexion):
+    """Compare runtime columns with the current schema, built only in memory."""
+    reference = sqlite3.connect(":memory:")
+    try:
+        crear_esquema(reference)
+        for table in sorted(REQUIRED_APPLICATION_TABLES):
+            expected = {row[1] for row in reference.execute(f'PRAGMA table_info("{table}")')}
+            actual = {row[1] for row in conexion.execute(f'PRAGMA table_info("{table}")')}
+            missing = sorted(expected - actual)
+            if missing:
+                raise RuntimeError(
+                    f"LESICO_DATABASE_PATH esquema incompatible: {table}; faltan columnas: "
+                    + ", ".join(missing)
+                )
+    finally:
+        reference.close()
 
 
 def preparar_base_para_startup():

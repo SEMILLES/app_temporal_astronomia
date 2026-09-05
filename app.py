@@ -1,5 +1,11 @@
 import os
 from flask import Flask
+from runtime_config import is_production
+
+PRODUCTION = is_production()
+SECRET_KEY = os.environ.get("LESICO_SECRET_KEY")
+if PRODUCTION and not (SECRET_KEY and SECRET_KEY.strip()):
+    raise RuntimeError("Producción requiere LESICO_SECRET_KEY estable y externa")
 
 from database import preparar_base_para_startup
 from concept_labels import alternative_display_label, human_concept_label
@@ -19,7 +25,8 @@ from conflict_presentation import local_timestamp
 
 
 app = Flask(__name__)
-app.config["SECRET_KEY"] = os.environ.get("LESICO_SECRET_KEY")
+app.config["SECRET_KEY"] = SECRET_KEY
+app.config["DEBUG"] = False
 
 app.jinja_env.filters["human_concept_label"] = human_concept_label
 app.jinja_env.filters["alternative_display_label"] = alternative_display_label
@@ -46,4 +53,6 @@ preparar_base_para_startup()
 
 
 if __name__ == "__main__":
+    if PRODUCTION:
+        raise RuntimeError("Producción requiere un servidor WSGI con wsgi:application")
     app.run(debug=True)
