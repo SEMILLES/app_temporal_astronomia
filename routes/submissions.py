@@ -277,6 +277,14 @@ def _alternative_review_context(db, rows):
                 virtual_occurrences={"new":row["occurrence_id"]},
             )
         morphology=submission_morphology(db,row["submission_id"])
+        if morphology:
+            components = []
+            for component in morphology[1]:
+                item = dict(component)
+                label = db.execute("SELECT c.preferred_label,a.working_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.alternative_id=?", (item["component_alternative_id"],)).fetchone()
+                item["display_label"] = alternative_display_label(label["preferred_label"], label["working_label"]) if label else None
+                components.append(item)
+            morphology = morphology[0], components
         result[row["submission_id"]]=dict(alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_preview=preview,proposed_morphology=morphology)
     return result
 

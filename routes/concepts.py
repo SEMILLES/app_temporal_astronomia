@@ -31,21 +31,25 @@ def conceptos():
 
     conexion = conectar()
 
-    conceptos = conexion.execute("""
+    sort = request.args.get("sort", "recent")
+    orders = {"recent": "concept_id DESC", "oldest": "concept_id ASC", "az": "preferred_label, concept_id"}
+    if sort not in orders:
+        sort = "recent"
+    conceptos = conexion.execute(f"""
         SELECT
             concept_id,
             preferred_label
 
         FROM concept
 
-        ORDER BY preferred_label
+        ORDER BY {orders[sort]}
     """).fetchall()
 
     conexion.close()
 
     return render_template(
         "conceptos.html",
-        conceptos=conceptos
+        conceptos=conceptos, sort=sort
     )
 
 

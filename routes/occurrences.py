@@ -53,7 +53,7 @@ def _component_rows(form):
         note=(note or "").strip();alternative=(alternative or "").strip()
         if component_type == "existing":
             if not alternative:
-                raise ValueError("Seleccione una Alternative vigente para el componente.")
+                raise ValueError("Seleccione una Alternativa vigente para el componente.")
             rows.append({"position":position,"component_alternative_id":alternative,
                          "component_label":None,"note":note})
         elif component_type == "unapproved":
