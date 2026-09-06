@@ -1,6 +1,7 @@
 import os
 from flask import Flask
 from runtime_config import is_production
+from instance_presentation import install_instance_presentation
 
 PRODUCTION = is_production()
 SECRET_KEY = os.environ.get("LESICO_SECRET_KEY")
@@ -27,6 +28,8 @@ from conflict_presentation import local_timestamp
 app = Flask(__name__)
 app.config["SECRET_KEY"] = SECRET_KEY
 app.config["DEBUG"] = False
+app.config["LESICO_INSTANCE_MODE"] = os.environ.get("LESICO_INSTANCE_MODE", "production")
+install_instance_presentation(app)
 
 app.jinja_env.filters["human_concept_label"] = human_concept_label
 app.jinja_env.filters["alternative_display_label"] = alternative_display_label

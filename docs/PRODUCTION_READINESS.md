@@ -1,5 +1,15 @@
 # Fase 18A: arranque de producción
 
+Identificación de instancia (fase 18C1): configurar `LESICO_INSTANCE_MODE=production`
+en Production y `LESICO_INSTANCE_MODE=testing` en Pruebas. **Ambos deben usar
+`LESICO_ENV=production`**, porque ambos requieren configuración segura de servidor.
+La dimensión de instancia es independiente del modo técnico Flask: no se infiere
+del dominio ni del nombre del environment. Solo el valor exacto `testing` muestra
+el banner «ENTORNO DE PRUEBAS» y prefija los títulos HTML con `[PRUEBAS]`.
+Si falta la variable o tiene otro valor, no se muestra señalización de pruebas.
+Es una indicación visual, no un mecanismo de autorización. Se lee al arrancar;
+los cambios de configuración requieren reiniciar los procesos.
+
 Primitivas de backup y restauración incorporadas en 18B: [BACKUP_RECOVERY.md](BACKUP_RECOVERY.md).
 
 Instalar `requirements.txt` en el entorno Python del servidor. No se añade ni se
