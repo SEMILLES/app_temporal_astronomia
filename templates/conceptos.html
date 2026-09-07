@@ -38,10 +38,9 @@
 
     <h2>Conceptos registrados</h2>
     <form method="get"><label>Ordenar por <select name="sort">
-    {% for value, label in [('recent', 'Más recientes'), ('oldest', 'Más antiguos'), ('az', 'A–Z')] %}
+    {% for value, label in [('id_asc', 'ID ascendente'), ('id_desc', 'ID descendente'), ('az', 'A–Z')] %}
     <option value="{{ value }}"{% if sort == value %} selected{% endif %}>{{ label }}</option>
     {% endfor %}</select></label><button type="submit">Ordenar</button></form>
-    <p>Más recientes y Más antiguos ordenan por ID; no representan la cronología histórica de los conceptos importados.</p>
 
     <table
         border="1"

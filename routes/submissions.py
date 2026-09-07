@@ -77,7 +77,7 @@ def guardar_aporte():
         return render_template("nueva_ocurrencia.html", **context), 400
     finally:
         db.close()
-    return redirect(url_for("occurrences.editar_ocurrencia", occurrence_id=occurrence_id))
+    return redirect(url_for("occurrences.mostrar_gramatica", occurrence_id=occurrence_id, flow="registration"))
 
 
 def _concept_immediate_operation(form):
@@ -104,7 +104,7 @@ def confirm_concept_immediate():
     try:result=confirm_operation(db,_concept_immediate_operation(request.form))
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
     finally:db.close()
-    return redirect(url_for("occurrences.editar_ocurrencia",occurrence_id=result["result"]["occurrence_id"]))
+    return redirect(url_for("occurrences.mostrar_gramatica",occurrence_id=result["result"]["occurrence_id"],flow="registration"))
 
 
 @submissions_bp.route("/borradores")
@@ -171,7 +171,7 @@ def completar_borrador(draft_id):
         return str(error), 400
     finally:
         db.close()
-    return redirect(url_for("occurrences.editar_ocurrencia", occurrence_id=occurrence_id))
+    return redirect(url_for("occurrences.mostrar_gramatica", occurrence_id=occurrence_id, flow="registration"))
 
 
 def _rows(db, pending=False):

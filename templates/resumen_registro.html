@@ -1,0 +1,16 @@
+<!doctype html><html lang="es"><meta charset="utf-8"><title>Resumen del registro</title><body>
+<p><strong>Paso 4 de 4 — Resumen</strong></p>
+<h1>Ocurrencia registrada</h1>
+<p>ID: OCC-{{ '%06d'|format(occurrence.occurrence_id) }}</p>
+<p>Glosa: {{ occurrence.original_gloss }}</p>
+<p>Fuente: {{ occurrence.source_name }}</p>
+{% if occurrence.reference_label %}<p>Concepto contextual: {{ occurrence.reference_label }}</p>{% endif %}
+<p>Estado de Gramática: {{ grammar_status }}</p>
+<p>Estado de Análisis léxico: {{ analysis_status }}</p>
+<nav><ul>
+<li><a href="{{ url_for('occurrences.editar_ocurrencia', occurrence_id=occurrence.occurrence_id) }}">Ver / editar occurrence</a></li>
+<li><a href="{{ url_for('occurrences.mostrar_gramatica', occurrence_id=occurrence.occurrence_id) }}">Gramática</a></li>
+<li><a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=occurrence.occurrence_id) }}">Clasificar occurrence</a></li>
+<li><a href="{{ url_for('occurrences.ocurrencias') }}">Volver a ocurrencias</a></li>
+<li><a href="{{ url_for('main.trabajo') }}">Ir al trabajo</a></li>
+</ul></nav></body></html>

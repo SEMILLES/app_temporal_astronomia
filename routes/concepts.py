@@ -31,10 +31,10 @@ def conceptos():
 
     conexion = conectar()
 
-    sort = request.args.get("sort", "recent")
-    orders = {"recent": "concept_id DESC", "oldest": "concept_id ASC", "az": "preferred_label, concept_id"}
+    sort = request.args.get("sort", "id_asc")
+    orders = {"id_desc": "concept_id DESC", "id_asc": "concept_id ASC", "az": "preferred_label, concept_id"}
     if sort not in orders:
-        sort = "recent"
+        sort = "id_asc"
     conceptos = conexion.execute(f"""
         SELECT
             concept_id,

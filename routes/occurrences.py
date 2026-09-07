@@ -21,6 +21,15 @@ from immediate_acceptance import (ImmediateAcceptanceError,ImmediateBlockingErro
 occurrences_bp = Blueprint("occurrences", __name__)
 
 
+def _registration_flow():
+    return request.args.get("flow") == "registration" or request.form.get("flow") == "registration"
+
+
+@occurrences_bp.context_processor
+def registration_context():
+    return {"registration_flow": _registration_flow()}
+
+
 def _grammar_values(form):
     values={field:form.get(field) for field in ("gender","plural","agentive","conjugated_form","negation","note")}
     for field in ("gender","plural","agentive","conjugated_form","negation"):values[field+"_uncertain"]=form.get(field+"_uncertain")
@@ -415,6 +424,8 @@ def guardar_gramatica(occurrence_id):
         return "No fue posible guardar el análisis gramatical.", 500
     finally:
         conexion.close()
+    if _registration_flow():
+        return redirect(url_for("occurrences.clasificar_ocurrencia", occurrence_id=occurrence_id, flow="registration"))
     return redirect(url_for(
         "occurrences.mostrar_gramatica",
         occurrence_id=occurrence_id,
@@ -439,6 +450,8 @@ def confirm_grammar_immediate(occurrence_id):
     except ImmediateBlockingError as error:return str(error),409
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
     finally:db.close()
+    if _registration_flow():
+        return redirect(url_for("occurrences.clasificar_ocurrencia", occurrence_id=occurrence_id, flow="registration"))
     return redirect(url_for("occurrences.mostrar_gramatica",occurrence_id=occurrence_id,result="accepted"))
 
 
@@ -580,6 +593,8 @@ def guardar_clasificacion(occurrence_id):
         return str(error),400
     finally:
         conexion.close()
+    if _registration_flow():
+        return redirect(url_for("occurrences.resumen_registro", occurrence_id=occurrence_id))
     return redirect(url_for("occurrences.clasificar_ocurrencia", occurrence_id=occurrence_id))
 
 
@@ -602,4 +617,38 @@ def confirm_alternative_immediate(occurrence_id):
     except ImmediateBlockingError as error:return str(error),409
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
     finally:db.close()
+    if _registration_flow():
+        return redirect(url_for("occurrences.resumen_registro", occurrence_id=occurrence_id))
     return redirect(url_for("occurrences.clasificar_ocurrencia",occurrence_id=occurrence_id))
+
+
+@occurrences_bp.get("/ocurrencias/<int:occurrence_id>/resumen")
+def resumen_registro(occurrence_id):
+    db = conectar()
+    try:
+        db.execute("BEGIN")
+        occurrence, current, _, pending = _load_grammar_page_data(db, occurrence_id)
+        if occurrence is None:
+            return "La ocurrencia no existe.", 404
+        pending_analysis = db.execute("""
+            SELECT 1 FROM submission WHERE occurrence_id=?
+              AND submission_type='ALTERNATIVE' AND status='pending'
+        """, (occurrence_id,)).fetchone()
+        assignment = db.execute("""
+            SELECT al.working_label FROM assignment a
+            JOIN alternative al ON al.alternative_id=a.alternative_id
+            WHERE a.occurrence_id=? AND a.is_current=1
+        """, (occurrence_id,)).fetchone()
+        grammar_status = ("Pendiente de revisión" if pending else
+                          "Con análisis vigente" if current else "Sin analizar")
+        analysis_status = "Sin analizar / sin clasificación"
+        if assignment:
+            analysis_status = "Clasificada"
+            if assignment["working_label"]:
+                analysis_status += ": " + assignment["working_label"]
+        if pending_analysis:
+            analysis_status = "Pendiente de revisión"
+        return render_template("resumen_registro.html", occurrence=occurrence,
+                               grammar_status=grammar_status, analysis_status=analysis_status)
+    finally:
+        db.close()

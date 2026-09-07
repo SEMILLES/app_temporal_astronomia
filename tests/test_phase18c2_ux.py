@@ -105,7 +105,7 @@ class ComponentAndConceptUXTests(unittest.TestCase):
             self.assertEqual(page.locator('[name=component_0_note]').input_value(), 'Note 0')
             browser.close()
 
-    def test_concept_order_default_oldest_az_and_invalid(self):
+    def test_concept_order_default_id_asc_desc_az_and_invalid(self):
         app = self.client.application
         app.register_blueprint(concepts_bp)
         app.add_url_rule('/trabajo', endpoint='main.trabajo', view_func=lambda: '')
@@ -116,12 +116,12 @@ class ComponentAndConceptUXTests(unittest.TestCase):
         db.commit()
         db.close()
         import re
-        for query, expected in [('', [3, 2, 1]), ('?sort=recent', [3, 2, 1]),
-                                ('?sort=oldest', [1, 2, 3]), ('?sort=az', [3, 1, 2]),
-                                ('?sort=invalid', [3, 2, 1])]:
+        for query, expected in [('', [1, 2, 3]), ('?sort=id_desc', [3, 2, 1]),
+                                ('?sort=id_asc', [1, 2, 3]), ('?sort=az', [3, 1, 2]),
+                                ('?sort=invalid', [1, 2, 3])]:
             html = self.client.get('/conceptos' + query).get_data(as_text=True)
             self.assertEqual([int(x) for x in re.findall(r'<td>\s*(\d+)\s*</td>', html)], expected)
-            for label in ('Más recientes', 'Más antiguos', 'A–Z'):
+            for label in ('ID ascendente', 'ID descendente', 'A–Z'):
                 self.assertIn(label, html)
 
 
