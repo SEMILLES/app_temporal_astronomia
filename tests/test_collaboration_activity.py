@@ -116,6 +116,34 @@ class RoleAccessTests(unittest.TestCase):
         self.assertEqual(self.client.get("/test-master/aportes/pendientes").status_code,200)
         self.assertEqual(self.client.get("/test-reviewer/ocurrencias").status_code,200)
 
+
+    def test_work_page_internal_links_preserve_role_prefix(self):
+        master = self.client.get("/test-master/trabajo")
+        self.assertEqual(master.status_code, 200)
+        master_html = master.get_data(as_text=True)
+
+        self.assertIn('href="/test-master/conflictos"', master_html)
+        self.assertIn('href="/test-master/catalogo-interno"', master_html)
+        self.assertIn('href="/test-master/actualizar-catalogo"', master_html)
+
+        self.assertNotIn('href="/conflictos"', master_html)
+        self.assertNotIn('href="/catalogo-interno"', master_html)
+        self.assertNotIn('href="/actualizar-catalogo"', master_html)
+
+        reviewer = self.client.get("/test-reviewer/trabajo")
+        self.assertEqual(reviewer.status_code, 200)
+        reviewer_html = reviewer.get_data(as_text=True)
+
+        self.assertIn('href="/test-reviewer/catalogo-interno"', reviewer_html)
+        self.assertNotIn('href="/catalogo-interno"', reviewer_html)
+
+        analyst = self.client.get("/test-analyst/trabajo")
+        self.assertEqual(analyst.status_code, 200)
+        analyst_html = analyst.get_data(as_text=True)
+
+        self.assertIn('href="/test-analyst/catalogo-interno"', analyst_html)
+        self.assertNotIn('href="/catalogo-interno"', analyst_html)
+        
     def test_master_create_and_rename_preserve_snapshot(self):
         response=self.client.post("/test-master/colaboradores",data={"display_name":"Julio","collaborator_id":"1","access_role":"analyst"})
         self.assertEqual(response.status_code,302)
