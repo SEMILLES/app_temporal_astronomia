@@ -1,6 +1,15 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><title>Clasificar ocurrencia</title><body>
+{% set form_values = form_values|default({}) %}
 {% if registration_flow %}<p><strong>Paso 3 de 4 — Análisis léxico</strong></p>{% endif %}
-<h1>Clasificar ocurrencia</h1><section><h2>Glosa original</h2><p><strong>{{ occurrence['original_gloss'] }}</strong> · {{ occurrence['source_name'] }}</p>{% if occurrence['occurrence_year'] %}<p>Año: {{ occurrence['occurrence_year'] }}</p>{% endif %}</section>
+<h1>Clasificar ocurrencia</h1>
+{% if error|default(None) %}
+<section role="alert">
+<h2>No fue posible guardar el análisis</h2>
+<p><strong>{{ error }}</strong></p>
+<p>Revise la información indicada y vuelva a enviar el formulario.</p>
+</section>
+{% endif %}
+<section><h2>Glosa original</h2><p><strong>{{ occurrence['original_gloss'] }}</strong> · {{ occurrence['source_name'] }}</p>{% if occurrence['occurrence_year'] %}<p>Año: {{ occurrence['occurrence_year'] }}</p>{% endif %}</section>
 <section><h2>Concepto</h2><p>{{ occurrence['reference_label'] or 'Contexto pendiente' }}</p></section>
 <section><h2>Alternativas vigentes</h2>{% for alternative in alternatives %}<details><summary>{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }} — {{ alternative['occurrences']|length }} {{ 'ocurrencia' if alternative['occurrences']|length == 1 else 'ocurrencias' }}</summary><p><small>ID {{ alternative['alternative_id'] }}</small></p>{% for evidence in alternative['occurrences'] %}<p>{{ evidence['original_gloss'] }} · {{ evidence['source_name'] }}{% if evidence['occurrence_year'] %} · {{ evidence['occurrence_year'] }}{% endif %}</p>{% else %}<p>Sin ocurrencias vigentes.</p>{% endfor %}</details>{% else %}<p>No hay alternativas vigentes para este concepto.</p>{% endfor %}</section>
 <details><summary>Propuestas pendientes comparables</summary>{% for pending in pending_context %}<p><strong>{{ occurrence['reference_label'] }} — [PENDIENTE #{{ pending['submission_id'] }}]</strong>: {{ pending['original_gloss'] }} · {{ pending['source_name'] }}</p>{% else %}<p>No hay propuestas pendientes comparables.</p>{% endfor %}</details>
@@ -14,21 +23,21 @@
 
 <h2>Decisión del analista</h2>
 
-<p><label><input type="radio" name="proposal_kind" value="EXISTING" required> Corresponde a una alternativa existente</label></p>
+<p><label><input type="radio" name="proposal_kind" value="EXISTING" required{% if form_values.get('proposal_kind') == 'EXISTING' %} checked{% endif %}> Corresponde a una alternativa existente</label></p>
 
 <p id="existing-alternative-field" hidden>
 <label>Alternativa existente
 <select name="proposed_existing_alternative_id">
 <option value="">Seleccione</option>
 {% for alternative in alternatives %}
-<option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
+<option value="{{ alternative['alternative_id'] }}"{% if form_values.get('proposed_existing_alternative_id') == (alternative['alternative_id'] ~ '') %} selected{% endif %}>{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
 {% endfor %}
 </select>
 </label>
 </p>
 
-<p><label><input type="radio" name="proposal_kind" value="NEW"> Parece una nueva alternativa</label></p>
-<p><label><input type="radio" name="proposal_kind" value="UNSURE"> No estoy seguro</label></p>
+<p><label><input type="radio" name="proposal_kind" value="NEW"{% if form_values.get('proposal_kind') == 'NEW' %} checked{% endif %}> Parece una nueva alternativa</label></p>
+<p><label><input type="radio" name="proposal_kind" value="UNSURE"{% if form_values.get('proposal_kind') == 'UNSURE' %} checked{% endif %}> No estoy seguro</label></p>
 
 <fieldset id="phonological-relations">
 <legend>Relaciones fonológicas</legend>
@@ -36,9 +45,9 @@
 <p>¿Esta nueva alternativa parece estar relacionada fonológicamente con otra alternativa?
 <select name="phonological_relation_answer">
 <option value="">Seleccione</option>
-<option value="YES">Sí</option>
-<option value="NO">No</option>
-<option value="UNSURE">No estoy seguro</option>
+<option value="YES"{% if form_values.get('phonological_relation_answer') == 'YES' %} selected{% endif %}>Sí</option>
+<option value="NO"{% if form_values.get('phonological_relation_answer') == 'NO' %} selected{% endif %}>No</option>
+<option value="UNSURE"{% if form_values.get('phonological_relation_answer') == 'UNSURE' %} selected{% endif %}>No estoy seguro</option>
 </select>
 </p>
 
@@ -49,7 +58,7 @@
 <select name="relation_alternative_id">
 <option value="">Seleccione</option>
 {% for alternative in alternatives %}
-<option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
+<option value="{{ alternative['alternative_id'] }}"{% if form_values.get('relation_alternative_id') == (alternative['alternative_id'] ~ '') %} selected{% endif %}>{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
 {% endfor %}
 </select>
 </label>
@@ -60,12 +69,12 @@
 <select name="relation_parameter">
 <option value="">Seleccione</option>
 {% for parameter in phonological_parameters %}
-<option value="{{ parameter }}">{{ parameter }}</option>
+<option value="{{ parameter }}"{% if form_values.get('relation_parameter') == parameter %} selected{% endif %}>{{ parameter }}</option>
 {% endfor %}
 </select>
 </label>
 
-<label><input type="checkbox" name="relation_uncertain" value="0"> Con duda</label>
+<label><input type="checkbox" name="relation_uncertain" value="0"{% if form_values.get('relation_uncertain') == '0' %} checked{% endif %}> Con duda</label>
 
 </div>
 </div>
@@ -78,9 +87,9 @@
 <label>Cantidad de componentes
 <select name="morphology_component_count" required>
 <option value="">Seleccione</option>
-<option value="N/A">N/A</option>
+<option value="N/A"{% if form_values.get('morphology_component_count') == 'N/A' %} selected{% endif %}>N/A</option>
 {% for count in range(1,11) %}
-<option value="{{ count }}">{{ count }}</option>
+<option value="{{ count }}"{% if form_values.get('morphology_component_count') == (count ~ '') %} selected{% endif %}>{{ count }}</option>
 {% endfor %}
 </select>
 </label>
@@ -89,9 +98,9 @@
 <p id="permutation-field" hidden>
 <label>¿Los componentes admiten permutación libre?
 <select name="free_permutation">
-<option value="SIN INFORMACIÓN">Sin información</option>
-<option value="SÍ">Sí</option>
-<option value="NO">No</option>
+<option value="SIN INFORMACIÓN"{% if form_values.get('free_permutation', 'SIN INFORMACIÓN') == 'SIN INFORMACIÓN' %} selected{% endif %}>Sin información</option>
+<option value="SÍ"{% if form_values.get('free_permutation') == 'SÍ' %} selected{% endif %}>Sí</option>
+<option value="NO"{% if form_values.get('free_permutation') == 'NO' %} selected{% endif %}>No</option>
 </select>
 </label>
 </p>
@@ -99,8 +108,8 @@
 <div id="component-registration-field" hidden>
 
 <p>¿Se identificaron componentes?
-<label><input type="radio" name="record_components" value="yes"> Sí</label>
-<label><input type="radio" name="record_components" value="no" checked> No</label>
+<label><input type="radio" name="record_components" value="yes"{% if form_values.get('record_components') == 'yes' %} checked{% endif %}> Sí</label>
+<label><input type="radio" name="record_components" value="no"{% if form_values.get('record_components', 'no') == 'no' %} checked{% endif %}> No</label>
 </p>
 
 <div id="component-controls" hidden>
@@ -146,11 +155,11 @@
 </fieldset>
 </template>
 
-<p><label>Observación <textarea name="morphology_note"></textarea></label></p>
+<p><label>Observación <textarea name="morphology_note">{{ form_values.get('morphology_note', '') }}</textarea></label></p>
 
 </fieldset>
 
-<p><label>Nota general de análisis <textarea name="analysis_note"></textarea></label></p>
+<p><label>Nota general de análisis <textarea name="analysis_note">{{ form_values.get('analysis_note', '') }}</textarea></label></p>
 
 {% if g.current_access_role in ('reviewer','master') %}
 <details>

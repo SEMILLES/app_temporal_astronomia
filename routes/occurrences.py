@@ -455,9 +455,7 @@ def confirm_grammar_immediate(occurrence_id):
     return redirect(url_for("occurrences.mostrar_gramatica",occurrence_id=occurrence_id,result="accepted"))
 
 
-@occurrences_bp.route("/ocurrencias/<int:occurrence_id>/clasificar")
-def clasificar_ocurrencia(occurrence_id):
-    conexion = conectar()
+def _load_classification_page_data(conexion, occurrence_id):
     occurrence = conexion.execute("""
         SELECT o.occurrence_id, o.original_gloss, o.hyperlink,
                o.occurrence_year,o.source_locator,o.provenance_note,
@@ -480,48 +478,79 @@ def clasificar_ocurrencia(occurrence_id):
           ON cp.concept_proposal_id=r.concept_proposal_id
         WHERE o.occurrence_id = ?
     """, (occurrence_id,)).fetchone()
+
     if occurrence is None:
-        conexion.close()
-        return "La ocurrencia no existe.", 404
-    context_concept_id = occurrence["reference_concept_id"] or occurrence["resolved_concept_id"]
+        return None
+
+    context_concept_id = (
+        occurrence["reference_concept_id"]
+        or occurrence["resolved_concept_id"]
+    )
+
     alternatives = []
     pending_context = []
+
     if context_concept_id is not None:
-        alternatives = [dict(row) for row in conexion.execute("""
-            SELECT alternative_id,working_label FROM alternative
-            WHERE concept_id=? AND retired_at IS NULL ORDER BY working_label
-        """, (context_concept_id,)).fetchall()]
+        alternatives = [
+            dict(row)
+            for row in conexion.execute("""
+                SELECT alternative_id,working_label
+                FROM alternative
+                WHERE concept_id=? AND retired_at IS NULL
+                ORDER BY working_label
+            """, (context_concept_id,)).fetchall()
+        ]
+
         for alternative in alternatives:
             alternative["occurrences"] = conexion.execute("""
                 SELECT o.original_gloss,s.source_name,o.occurrence_year
-                FROM assignment a JOIN occurrence o USING(occurrence_id)
+                FROM assignment a
+                JOIN occurrence o USING(occurrence_id)
                 JOIN source s USING(source_id)
                 WHERE a.alternative_id=? AND a.is_current=1
             """, (alternative["alternative_id"],)).fetchall()
+
         pending_context = conexion.execute("""
             SELECT s.submission_id,o.original_gloss,src.source_name
-            FROM submission s JOIN alternative_submission als USING(submission_id)
-            JOIN occurrence o USING(occurrence_id) JOIN source src USING(source_id)
-            WHERE s.status='pending' AND s.submission_type='ALTERNATIVE'
-              AND als.proposal_kind='NEW' AND als.reference_concept_id=?
+            FROM submission s
+            JOIN alternative_submission als USING(submission_id)
+            JOIN occurrence o USING(occurrence_id)
+            JOIN source src USING(source_id)
+            WHERE s.status='pending'
+              AND s.submission_type='ALTERNATIVE'
+              AND als.proposal_kind='NEW'
+              AND als.reference_concept_id=?
               AND s.occurrence_id != ?
         """, (context_concept_id, occurrence_id)).fetchall()
+
     existing_pending = conexion.execute("""
         SELECT s.submission_id,als.proposal_kind,als.analysis_note
-        FROM submission s JOIN alternative_submission als USING(submission_id)
-        WHERE s.occurrence_id=? AND s.submission_type='ALTERNATIVE' AND s.status='pending'
+        FROM submission s
+        JOIN alternative_submission als USING(submission_id)
+        WHERE s.occurrence_id=?
+          AND s.submission_type='ALTERNATIVE'
+          AND s.status='pending'
     """, (occurrence_id,)).fetchone()
-    component_alternatives=conexion.execute("""
+
+    component_alternatives = conexion.execute("""
         SELECT a.alternative_id,a.working_label,c.preferred_label,
                GROUP_CONCAT(o.original_gloss, ' / ') AS evidence_glosses
-        FROM alternative a JOIN concept c USING(concept_id)
-        LEFT JOIN assignment ass ON ass.alternative_id=a.alternative_id AND ass.is_current=1
+        FROM alternative a
+        JOIN concept c USING(concept_id)
+        LEFT JOIN assignment ass
+          ON ass.alternative_id=a.alternative_id AND ass.is_current=1
         LEFT JOIN occurrence o ON o.occurrence_id=ass.occurrence_id
         WHERE a.retired_at IS NULL
         GROUP BY a.alternative_id,a.working_label,c.preferred_label
         ORDER BY c.preferred_label,a.working_label
     """).fetchall()
-    concepts=conexion.execute("SELECT concept_id,preferred_label FROM concept ORDER BY preferred_label").fetchall()
+
+    concepts = conexion.execute("""
+        SELECT concept_id,preferred_label
+        FROM concept
+        ORDER BY preferred_label
+    """).fetchall()
+
     history = conexion.execute("""
         SELECT a.assignment_id, a.alternative_id, a.is_current,
                a.created_at, a.supersedes_assignment_id,
@@ -529,16 +558,54 @@ def clasificar_ocurrencia(occurrence_id):
         FROM assignment AS a
         JOIN alternative AS al ON al.alternative_id = a.alternative_id
         JOIN concept AS c ON c.concept_id = al.concept_id
-        WHERE a.occurrence_id = ? ORDER BY a.assignment_id DESC
+        WHERE a.occurrence_id = ?
+        ORDER BY a.assignment_id DESC
     """, (occurrence_id,)).fetchall()
-    conexion.close()
+
+    return {
+        "occurrence": occurrence,
+        "alternatives": alternatives,
+        "pending_context": pending_context,
+        "existing_pending": existing_pending,
+        "phonological_parameters": PHONOLOGICAL_PARAMETERS,
+        "history": history,
+        "component_alternatives": component_alternatives,
+        "concepts": concepts,
+    }
+
+
+def _render_classification_page(
+    occurrence_id,
+    *,
+    error=None,
+    form_values=None,
+    status=200,
+):
+    conexion = conectar()
+    try:
+        context = _load_classification_page_data(conexion, occurrence_id)
+    finally:
+        conexion.close()
+
+    if context is None:
+        return "La ocurrencia no existe.", 404
+
+    context["error"] = error
+    context["form_values"] = form_values or {}
+
     return render_template(
-        "clasificar_ocurrencia.html", occurrence=occurrence,
-        alternatives=alternatives, pending_context=pending_context,
-        existing_pending=existing_pending,
-        phonological_parameters=PHONOLOGICAL_PARAMETERS, history=history,
-        component_alternatives=component_alternatives,
-        concepts=concepts,
+        "clasificar_ocurrencia.html",
+        **context,
+    ), status
+
+
+@occurrences_bp.route("/ocurrencias/<int:occurrence_id>/clasificar")
+def clasificar_ocurrencia(occurrence_id):
+    return _render_classification_page(
+        occurrence_id,
+        error=None,
+        form_values=None,
+        status=200,
     )
 
 
@@ -576,7 +643,12 @@ def guardar_clasificacion(occurrence_id):
         try:
             components=_component_rows(request.form)
         except ValueError as error:
-            return str(error),400
+            return _render_classification_page(
+                occurrence_id,
+                error=str(error),
+                form_values=request.form,
+                status=400,
+            )
         morphology={"component_count":component_count,"component_count_not_applicable":not_applicable,"free_permutation":request.form.get("free_permutation"),"note":request.form.get("morphology_note"),"components":components}
     conexion = conectar()
     try:
@@ -589,8 +661,13 @@ def guardar_clasificacion(occurrence_id):
             collaborator_id=request.form.get("collaborator_id"),
             access_role=getattr(g, "current_access_role", None),
         )
-    except (AlternativeWorkflowError,ValueError,sqlite3.IntegrityError) as error:
-        return str(error),400
+    except (AlternativeWorkflowError, ValueError, sqlite3.IntegrityError) as error:
+        return _render_classification_page(
+            occurrence_id,
+            error=str(error),
+            form_values=request.form,
+            status=400,
+        )
     finally:
         conexion.close()
     if _registration_flow():
