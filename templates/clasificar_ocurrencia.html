@@ -4,12 +4,346 @@
 <section><h2>Concepto</h2><p>{{ occurrence['reference_label'] or 'Contexto pendiente' }}</p></section>
 <section><h2>Alternativas vigentes</h2>{% for alternative in alternatives %}<details><summary>{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }} — {{ alternative['occurrences']|length }} {{ 'ocurrencia' if alternative['occurrences']|length == 1 else 'ocurrencias' }}</summary><p><small>ID {{ alternative['alternative_id'] }}</small></p>{% for evidence in alternative['occurrences'] %}<p>{{ evidence['original_gloss'] }} · {{ evidence['source_name'] }}{% if evidence['occurrence_year'] %} · {{ evidence['occurrence_year'] }}{% endif %}</p>{% else %}<p>Sin ocurrencias vigentes.</p>{% endfor %}</details>{% else %}<p>No hay alternativas vigentes para este concepto.</p>{% endfor %}</section>
 <details><summary>Propuestas pendientes comparables</summary>{% for pending in pending_context %}<p><strong>{{ occurrence['reference_label'] }} — [PENDIENTE #{{ pending['submission_id'] }}]</strong>: {{ pending['original_gloss'] }} · {{ pending['source_name'] }}</p>{% else %}<p>No hay propuestas pendientes comparables.</p>{% endfor %}</details>
-{% if existing_pending %}<section><h2>Propuesta pendiente #{{ existing_pending['submission_id'] }}</h2><p>Ya existe un análisis pendiente de revisión.</p>{% if g.current_access_role in ('reviewer','master') %}<a href="{{ url_for('submissions.revisar_aportes') }}#submission-{{ existing_pending['submission_id'] }}">Ir a revisión</a>{% endif %}</section>
-{% else %}<form method="post">{% if registration_flow %}<input type="hidden" name="flow" value="registration">{% endif %}<h2>Decisión del analista</h2><p><label><input type="radio" name="proposal_kind" value="EXISTING" required> Corresponde a una alternativa existente</label></p><p id="existing-alternative-field" hidden><label>Alternativa existente <select name="proposed_existing_alternative_id"><option value="">Seleccione</option>{% for alternative in alternatives %}<option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>{% endfor %}</select></label></p><p><label><input type="radio" name="proposal_kind" value="NEW"> Parece una nueva alternativa</label></p><p><label><input type="radio" name="proposal_kind" value="UNSURE"> No estoy seguro</label></p>
-<fieldset id="phonological-relations"><legend>Relaciones fonológicas</legend><p>¿Esta nueva alternativa parece estar relacionada fonológicamente con otra alternativa? <select name="phonological_relation_answer"><option value="">Seleccione</option><option value="YES">Sí</option><option value="NO">No</option><option value="UNSURE">No estoy seguro</option></select></p><div id="relations"><div class="relation"><label>Alternativa relacionada <select name="relation_alternative_id"><option value="">Seleccione</option>{% for alternative in alternatives %}<option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>{% endfor %}</select></label><input type="hidden" name="relation_target_type_0" value="alternative"><label>Parámetro <select name="relation_parameter"><option value="">Seleccione</option>{% for parameter in phonological_parameters %}<option value="{{ parameter }}">{{ parameter }}</option>{% endfor %}</select></label><label><input type="checkbox" name="relation_uncertain" value="0"> Con duda</label></div></div></fieldset>
-<fieldset id="morphology"><legend>Morfología de la nueva alternativa</legend><p><label>Cantidad de componentes <select name="morphology_component_count" required><option value="">Seleccione</option><option value="N/A">N/A</option>{% for count in range(1,11) %}<option value="{{ count }}">{{ count }}</option>{% endfor %}</select></label></p><p id="permutation-field" hidden><label>¿Los componentes admiten permutación libre? <select name="free_permutation"><option value="SIN INFORMACIÓN">Sin información</option><option value="SÍ">Sí</option><option value="NO">No</option></select></label></p><div id="component-registration-field" hidden><p>¿Se identificaron componentes? <label><input type="radio" name="record_components" value="yes"> Sí</label> <label><input type="radio" name="record_components" value="no" checked> No</label></p><div id="component-controls" hidden><div id="components"></div><button type="button" id="add-component">Agregar componente</button><button type="button" id="remove-last-component" disabled>Eliminar último componente</button></div></div><template id="component-template"><fieldset class="component"><legend>Componente</legend><input type="number" min="1" name="component_position" aria-label="Posición"><p>Tipo de componente: <label><input type="radio" name="component_type_INDEX" value="existing"> Alternativa existente</label> <label><input type="radio" name="component_type_INDEX" value="unapproved"> Componente no aprobado / con dudas</label></p><div class="existing-component" hidden><label>Alternativa vigente <select name="component_alternative_id"><option value="">Seleccione</option>{% for component in component_alternatives %}<option value="{{ component['alternative_id'] }}">{{ component['preferred_label'] }}-{{ component['working_label'] }}</option>{% endfor %}</select></label></div><div class="unapproved-component" hidden><label>Nota (obligatoria si hay dudas) <textarea name="component_note"></textarea></label></div></fieldset></template><p><label>Observación <textarea name="morphology_note"></textarea></label></p></fieldset>
+
+{% if existing_pending %}
+<section><h2>Propuesta pendiente #{{ existing_pending['submission_id'] }}</h2><p>Ya existe un análisis pendiente de revisión.</p>{% if g.current_access_role in ('reviewer','master') %}<a href="{{ url_for('submissions.revisar_aportes') }}#submission-{{ existing_pending['submission_id'] }}">Ir a revisión</a>{% endif %}</section>
+
+{% else %}
+<form method="post">
+{% if registration_flow %}<input type="hidden" name="flow" value="registration">{% endif %}
+
+<h2>Decisión del analista</h2>
+
+<p><label><input type="radio" name="proposal_kind" value="EXISTING" required> Corresponde a una alternativa existente</label></p>
+
+<p id="existing-alternative-field" hidden>
+<label>Alternativa existente
+<select name="proposed_existing_alternative_id">
+<option value="">Seleccione</option>
+{% for alternative in alternatives %}
+<option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
+{% endfor %}
+</select>
+</label>
+</p>
+
+<p><label><input type="radio" name="proposal_kind" value="NEW"> Parece una nueva alternativa</label></p>
+<p><label><input type="radio" name="proposal_kind" value="UNSURE"> No estoy seguro</label></p>
+
+<fieldset id="phonological-relations">
+<legend>Relaciones fonológicas</legend>
+
+<p>¿Esta nueva alternativa parece estar relacionada fonológicamente con otra alternativa?
+<select name="phonological_relation_answer">
+<option value="">Seleccione</option>
+<option value="YES">Sí</option>
+<option value="NO">No</option>
+<option value="UNSURE">No estoy seguro</option>
+</select>
+</p>
+
+<div id="relations">
+<div class="relation">
+
+<label>Alternativa relacionada
+<select name="relation_alternative_id">
+<option value="">Seleccione</option>
+{% for alternative in alternatives %}
+<option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
+{% endfor %}
+</select>
+</label>
+
+<input type="hidden" name="relation_target_type_0" value="alternative">
+
+<label>Parámetro
+<select name="relation_parameter">
+<option value="">Seleccione</option>
+{% for parameter in phonological_parameters %}
+<option value="{{ parameter }}">{{ parameter }}</option>
+{% endfor %}
+</select>
+</label>
+
+<label><input type="checkbox" name="relation_uncertain" value="0"> Con duda</label>
+
+</div>
+</div>
+</fieldset>
+
+<fieldset id="morphology">
+<legend>Morfología de la nueva alternativa</legend>
+
+<p>
+<label>Cantidad de componentes
+<select name="morphology_component_count" required>
+<option value="">Seleccione</option>
+<option value="N/A">N/A</option>
+{% for count in range(1,11) %}
+<option value="{{ count }}">{{ count }}</option>
+{% endfor %}
+</select>
+</label>
+</p>
+
+<p id="permutation-field" hidden>
+<label>¿Los componentes admiten permutación libre?
+<select name="free_permutation">
+<option value="SIN INFORMACIÓN">Sin información</option>
+<option value="SÍ">Sí</option>
+<option value="NO">No</option>
+</select>
+</label>
+</p>
+
+<div id="component-registration-field" hidden>
+
+<p>¿Se identificaron componentes?
+<label><input type="radio" name="record_components" value="yes"> Sí</label>
+<label><input type="radio" name="record_components" value="no" checked> No</label>
+</p>
+
+<div id="component-controls" hidden>
+
+<div id="components"></div>
+
+<p><small>Puede registrar solo los componentes que haya logrado identificar; no es necesario completar la cantidad total declarada.</small></p>
+
+<button type="button" id="add-component">Agregar componente identificado</button>
+<button type="button" id="remove-last-component" disabled>Eliminar último componente</button>
+
+</div>
+</div>
+
+<template id="component-template">
+<fieldset class="component">
+<legend>Componente</legend>
+
+<input type="number" min="1" name="component_position" aria-label="Posición">
+
+<p>Tipo de componente:
+<label><input type="radio" name="component_type_INDEX" value="existing"> Alternativa existente</label>
+<label><input type="radio" name="component_type_INDEX" value="unapproved"> Componente no aprobado / con dudas</label>
+</p>
+
+<div class="existing-component" hidden>
+<label>Alternativa vigente
+<select name="component_alternative_id">
+<option value="">Seleccione</option>
+{% for component in component_alternatives %}
+<option value="{{ component['alternative_id'] }}">{{ component['preferred_label'] }}-{{ component['working_label'] }}</option>
+{% endfor %}
+</select>
+</label>
+</div>
+
+<div class="unapproved-component" hidden>
+<label>Nota (obligatoria si hay dudas)
+<textarea name="component_note"></textarea>
+</label>
+</div>
+
+</fieldset>
+</template>
+
+<p><label>Observación <textarea name="morphology_note"></textarea></label></p>
+
+</fieldset>
+
 <p><label>Nota general de análisis <textarea name="analysis_note"></textarea></label></p>
-{% if g.current_access_role in ('reviewer','master') %}<details><summary>Aceptar inmediatamente como revisor</summary><p>Esta sección avanzada aplica la decisión sin enviarla a la cola de revisión.</p><label>Decisión <select name="canonical_decision"><option value="">Seleccione</option><option value="existing">Alternativa existente</option><option value="new">Nueva alternativa</option></select></label><select name="canonical_alternative_id"><option value="">Alternativa final</option>{% for alternative in alternatives %}<option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>{% endfor %}</select><label><input type="radio" name="approve_relations" value="no" checked> Revisar relaciones después</label><label><input type="radio" name="approve_relations" value="yes"> Usar relaciones propuestas</label><label><input type="radio" name="approve_morphology" value="no" checked> Revisar morfología después</label><label><input type="radio" name="approve_morphology" value="yes"> Usar morfología propuesta</label><input type="hidden" name="nomenclature_mode" value="automatic"><button formaction="{{ url_for('occurrences.preview_alternative_immediate',occurrence_id=occurrence['occurrence_id']) }}">Aceptar inmediatamente</button></details>{% endif %}
-<p><button>{{ "Mandar a revisión y finalizar" if registration_flow else "Mandar a revisión" }}</button> <a href="{{ url_for('occurrences.editar_ocurrencia',occurrence_id=occurrence['occurrence_id']) }}">Cancelar</a></p></form>
-<script>(function(){const morphology=document.getElementById('morphology'),relations=document.getElementById('phonological-relations'),relationFields=document.getElementById('relations'),existing=document.getElementById('existing-alternative-field'),answer=document.querySelector('[name=phonological_relation_answer]'),count=document.querySelector('[name=morphology_component_count]'),permutation=document.getElementById('permutation-field'),registration=document.getElementById('component-registration-field'),controls=document.getElementById('component-controls'),list=document.getElementById('components');function componentType(row){const selected=row.querySelector('[data-component-type]:checked');row.querySelector('.existing-component').hidden=!selected||selected.value!=='existing';row.querySelector('.unapproved-component').hidden=false;if(selected&&selected.value==='unapproved')row.querySelector('select').value=''}function toggle(){const choice=document.querySelector('[name=proposal_kind]:checked'),isNew=choice&&choice.value==='NEW',isExisting=choice&&choice.value==='EXISTING',yes=isNew&&answer.value==='YES',n=Number(count.value),showPermutation=isNew&&count.value!=='N/A'&&n>=2,allowComponents=isNew&&(count.value==='N/A'||n>=2),record=document.querySelector('[name=record_components]:checked');existing.hidden=!isExisting;morphology.hidden=!isNew;relations.hidden=!isNew;relationFields.hidden=!yes;permutation.hidden=!showPermutation;registration.hidden=!allowComponents;controls.hidden=!allowComponents||!record||record.value!=='yes';morphology.querySelector('[name=morphology_component_count]').required=isNew}document.querySelectorAll('[name=proposal_kind],[name=record_components]').forEach(x=>x.addEventListener('change',toggle));answer.addEventListener('change',toggle);count.addEventListener('change',toggle);document.getElementById('add-component').onclick=function(){const clone=document.getElementById('component-template').content.firstElementChild.cloneNode(true),index=list.children.length;clone.querySelector('[name=component_position]').value=String(index+1);clone.querySelectorAll('[name=component_type_INDEX]').forEach(x=>{x.name='component_'+index+'_type';x.dataset.componentType='';x.addEventListener('change',()=>componentType(clone))});['position','alternative_id','note'].forEach(field=>clone.querySelector('[name=component_'+field+']').name='component_'+index+'_'+field);const identity=document.createElement('input');identity.type='hidden';identity.name='component_row_id';identity.value=String(index);clone.appendChild(identity);list.appendChild(clone);updateRemoveButton()};function updateRemoveButton(){document.getElementById('remove-last-component').disabled=list.children.length<=1}document.getElementById('remove-last-component').onclick=function(){if(list.children.length>1)list.lastElementChild.remove();updateRemoveButton()};toggle()})();</script>{% endif %}
-<details><summary>Historial de clasificaciones</summary>{% for item in history %}<p>#{{ item['assignment_id'] }} — {{ item['preferred_label'] | alternative_display_label(item['working_label']) }} — {{ 'Vigente' if item['is_current'] else 'Histórica' }}</p>{% else %}<p>Sin clasificación.</p>{% endfor %}</details>{% if registration_flow %}<p><a href="{{ url_for('occurrences.resumen_registro', occurrence_id=occurrence['occurrence_id']) }}">Revisar análisis después</a></p>{% endif %}</body></html>
+
+{% if g.current_access_role in ('reviewer','master') %}
+<details>
+<summary>Aceptar inmediatamente como revisor</summary>
+
+<p>Esta sección avanzada aplica la decisión sin enviarla a la cola de revisión.</p>
+
+<label>Decisión
+<select name="canonical_decision">
+<option value="">Seleccione</option>
+<option value="existing">Alternativa existente</option>
+<option value="new">Nueva alternativa</option>
+</select>
+</label>
+
+<select name="canonical_alternative_id">
+<option value="">Alternativa final</option>
+{% for alternative in alternatives %}
+<option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
+{% endfor %}
+</select>
+
+<label><input type="radio" name="approve_relations" value="no" checked> Revisar relaciones después</label>
+<label><input type="radio" name="approve_relations" value="yes"> Usar relaciones propuestas</label>
+
+<label><input type="radio" name="approve_morphology" value="no" checked> Revisar morfología después</label>
+<label><input type="radio" name="approve_morphology" value="yes"> Usar morfología propuesta</label>
+
+<input type="hidden" name="nomenclature_mode" value="automatic">
+
+<button formaction="{{ url_for('occurrences.preview_alternative_immediate',occurrence_id=occurrence['occurrence_id']) }}">Aceptar inmediatamente</button>
+
+</details>
+{% endif %}
+
+<p>
+<button>{{ "Mandar a revisión y finalizar" if registration_flow else "Mandar a revisión" }}</button>
+<a href="{{ url_for('occurrences.editar_ocurrencia',occurrence_id=occurrence['occurrence_id']) }}">Cancelar</a>
+</p>
+
+</form>
+
+<script>
+(function(){
+    const morphology=document.getElementById('morphology'),
+          relations=document.getElementById('phonological-relations'),
+          relationFields=document.getElementById('relations'),
+          existing=document.getElementById('existing-alternative-field'),
+          existingSelect=existing.querySelector('[name=proposed_existing_alternative_id]'),
+          answer=document.querySelector('[name=phonological_relation_answer]'),
+          count=document.querySelector('[name=morphology_component_count]'),
+          permutation=document.getElementById('permutation-field'),
+          registration=document.getElementById('component-registration-field'),
+          controls=document.getElementById('component-controls'),
+          list=document.getElementById('components'),
+          addButton=document.getElementById('add-component'),
+          removeButton=document.getElementById('remove-last-component');
+
+    function componentType(row){
+        const selected=row.querySelector('[data-component-type]:checked');
+
+        row.querySelector('.existing-component').hidden=
+            !selected||selected.value!=='existing';
+
+        row.querySelector('.unapproved-component').hidden=false;
+
+        if(selected&&selected.value==='unapproved'){
+            row.querySelector('select').value='';
+        }
+    }
+
+    function updateRemoveButton(){
+        removeButton.disabled=list.children.length<=1;
+    }
+
+    function addComponent(){
+        const clone=document
+            .getElementById('component-template')
+            .content
+            .firstElementChild
+            .cloneNode(true);
+
+        const index=list.children.length;
+
+        clone.querySelector('[name=component_position]').value=
+            String(index+1);
+
+        clone.querySelectorAll('[name=component_type_INDEX]')
+            .forEach(x=>{
+                x.name='component_'+index+'_type';
+                x.dataset.componentType='';
+                x.addEventListener(
+                    'change',
+                    ()=>componentType(clone)
+                );
+            });
+
+        ['position','alternative_id','note'].forEach(field=>{
+            clone.querySelector('[name=component_'+field+']').name=
+                'component_'+index+'_'+field;
+        });
+
+        const identity=document.createElement('input');
+        identity.type='hidden';
+        identity.name='component_row_id';
+        identity.value=String(index);
+
+        clone.appendChild(identity);
+        list.appendChild(clone);
+
+        updateRemoveButton();
+    }
+
+    function toggle(){
+        const choice=document.querySelector('[name=proposal_kind]:checked'),
+              isNew=choice&&choice.value==='NEW',
+              isExisting=choice&&choice.value==='EXISTING',
+              yes=isNew&&answer.value==='YES',
+              n=Number(count.value),
+              showPermutation=
+                  isNew&&count.value!=='N/A'&&n>=2,
+              allowComponents=
+                  isNew&&(count.value==='N/A'||n>=2),
+              record=document.querySelector('[name=record_components]:checked');
+
+        existing.hidden=!isExisting;
+
+        /*
+         * Ocultar no basta: un select oculto sigue formando parte del POST.
+         * Se deshabilita cuando la decisión no es EXISTING para impedir
+         * que una selección anterior se envíe junto con proposal_kind=NEW.
+         */
+        existingSelect.disabled=!isExisting;
+
+        morphology.hidden=!isNew;
+        relations.hidden=!isNew;
+        relationFields.hidden=!yes;
+        permutation.hidden=!showPermutation;
+        registration.hidden=!allowComponents;
+
+        const recordingComponents=
+            allowComponents&&record&&record.value==='yes';
+
+        controls.hidden=!recordingComponents;
+
+        morphology
+            .querySelector('[name=morphology_component_count]')
+            .required=isNew;
+
+        /*
+         * La cantidad total declarada y la cantidad de componentes
+         * efectivamente identificados son independientes.
+         * Si el analista dice que identificó componentes, se crea
+         * únicamente una primera fila. Puede añadir otras si las conoce.
+         */
+        if(recordingComponents&&list.children.length===0){
+            addComponent();
+        }
+    }
+
+    document
+        .querySelectorAll('[name=proposal_kind],[name=record_components]')
+        .forEach(x=>x.addEventListener('change',toggle));
+
+    answer.addEventListener('change',toggle);
+    count.addEventListener('change',toggle);
+
+    addButton.onclick=addComponent;
+
+    removeButton.onclick=function(){
+        if(list.children.length>1){
+            list.lastElementChild.remove();
+        }
+        updateRemoveButton();
+    };
+
+    toggle();
+})();
+</script>
+
+{% endif %}
+
+<details>
+<summary>Historial de clasificaciones</summary>
+{% for item in history %}
+<p>#{{ item['assignment_id'] }} — {{ item['preferred_label'] | alternative_display_label(item['working_label']) }} — {{ 'Vigente' if item['is_current'] else 'Histórica' }}</p>
+{% else %}
+<p>Sin clasificación.</p>
+{% endfor %}
+</details>
+
+{% if registration_flow %}
+<p><a href="{{ url_for('occurrences.resumen_registro', occurrence_id=occurrence['occurrence_id']) }}">Revisar análisis después</a></p>
+{% endif %}
+
+</body></html>
