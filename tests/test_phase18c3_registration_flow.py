@@ -41,7 +41,10 @@ class RegistrationFlowTests(unittest.TestCase):
         ]:
             html = self.client.get('/ocurrencias/1/' + path).get_data(as_text=True)
             self.assertIn(step, html)
-            self.assertIn(f'href="{target}">{label}</a>', html)
+            self.assertRegex(
+                html,
+                rf'href="{re.escape(target)}">\s*{re.escape(label)}\s*</a>',
+            )
             self.assertEqual(self.client.get(target).status_code, 200)
             self.assertEqual(self.snapshot(), before)
 

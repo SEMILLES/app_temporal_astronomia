@@ -263,7 +263,7 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
     def test_form_prefills_complete_current_and_displays_legacy_value(self):
         db=self.connect(); create_or_replace_occurrence_grammar(db,1,gender="LEGACY-VALUE",plural="REDUP.",gender_uncertain=1); db.close()
         page=self.client.get("/ocurrencias/1/gramatica").get_data(as_text=True)
-        self.assertIn("LEGACY-VALUE (legacy)",page); self.assertIn('value="REDUP." selected',page); self.assertIn('name="gender_uncertain" checked',page)
+        self.assertIn("LEGACY-VALUE (legacy)",page); self.assertIn('value="REDUP." selected',page); self.assertRegex(page,r'name="gender_uncertain"\s+checked')
 
     def test_review_lists_alternative_and_reject_does_not_modify_canonical(self):
         db=self.connect(); cur=db.execute("INSERT INTO submission(occurrence_id,submission_type,status) VALUES(1,'ALTERNATIVE','pending')"); sid=cur.lastrowid
@@ -374,6 +374,110 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
             ).status_code,
             302,
         )
+
+
+    def test_grammar_forms_include_spanish_validation_messages(self):
+        page=self.client.get("/ocurrencias/1/gramatica").get_data(as_text=True)
+        self.assertIn(
+            "Debe explicar en la nota por qué marcó uno o más campos con duda.",
+            page,
+        )
+
+        db=self.connect()
+        create_grammar_submission(
+            db,
+            1,
+            {
+                "gender":"MASC-O",
+                "gender_uncertain":1,
+                "note":"Duda documentada.",
+            },
+        )
+        db.close()
+
+        page=self.client.get("/aportes/pendientes").get_data(as_text=True)
+        self.assertIn(
+            "Debe responder la nota del analista para resolver la duda antes de aceptar.",
+            page,
+        )
+        self.assertNotIn(
+            'aria-label="Respuesta del revisor" required',
+            page,
+        )
+
+    def test_resolved_detail_reports_exact_reviewer_changes(self):
+        db=self.connect()
+        sid=create_grammar_submission(
+            db,
+            1,
+            {
+                "gender":"MASC-HOMBRE",
+                "gender_uncertain":1,
+                "note":"Nota original.",
+            },
+        )
+        resolve_grammar_submission(
+            db,
+            sid,
+            "accepted",
+            reviewed_values={
+                "gender":"MASC-O",
+                "plural":"",
+                "agentive":"",
+                "conjugated_form":"",
+                "negation":"",
+            },
+            review_note="Respuesta del revisor.",
+        )
+        db.close()
+
+        page=self.client.get(f"/aportes/{sid}").get_data(as_text=True)
+        self.assertIn("Detalle del aporte",page)
+        self.assertIn("REVISIÓN REALIZADA",page)
+        self.assertIn("Aceptado con cambios",page)
+        self.assertIn("MASC-HOMBRE",page)
+        self.assertIn("MASC-O",page)
+        self.assertIn("Nota original.",page)
+        self.assertIn("Respuesta del revisor.",page)
+        self.assertIn(
+            "La propuesta original contenía al menos un campo marcado con duda.",
+            page,
+        )
+        self.assertIn(
+            "el resultado canónico se registró sin marcas de duda.",
+            page,
+        )
+        self.assertNotIn(
+            "El Revisor/Master debe resolverla",
+            page,
+        )
+
+    def test_aportes_distinguishes_grammar_acceptance_with_and_without_changes(self):
+        db=self.connect()
+
+        first=create_grammar_submission(db,1,{"gender":"FEM-A"})
+        resolve_grammar_submission(db,first,"accepted")
+
+        second=create_grammar_submission(db,1,{"gender":"MASC-O"})
+        resolve_grammar_submission(
+            db,
+            second,
+            "accepted",
+            reviewed_values={
+                "gender":"FEM-A",
+                "plural":"",
+                "agentive":"",
+                "conjugated_form":"",
+                "negation":"",
+            },
+            review_note="Corrección documentada.",
+        )
+        db.close()
+
+        page=self.client.get("/aportes").get_data(as_text=True)
+        self.assertIn("Aceptado sin cambios",page)
+        self.assertIn("Aceptado con cambios",page)
+
 
 
 if __name__ == "__main__": unittest.main()

@@ -201,7 +201,21 @@ def _rows(db, pending=False):
         proposed_concept.preferred_label AS proposed_concept_label,
         proposed_alt.working_label AS proposed_working_label,
         current_concept.preferred_label AS current_concept_label,
-        current_alt.working_label AS current_working_label
+        current_alt.working_label AS current_working_label,
+        reviewed_grammar.occurrence_grammar_id AS reviewed_grammar_id,
+        reviewed_grammar.gender AS reviewed_gender,
+        reviewed_grammar.gender_uncertain AS reviewed_gender_uncertain,
+        reviewed_grammar.plural AS reviewed_plural,
+        reviewed_grammar.plural_uncertain AS reviewed_plural_uncertain,
+        reviewed_grammar.agentive AS reviewed_agentive,
+        reviewed_grammar.agentive_uncertain AS reviewed_agentive_uncertain,
+        reviewed_grammar.conjugated_form AS reviewed_conjugated_form,
+        reviewed_grammar.conjugated_form_uncertain AS reviewed_conjugated_form_uncertain,
+        reviewed_grammar.negation AS reviewed_negation,
+        reviewed_grammar.negation_uncertain AS reviewed_negation_uncertain,
+        reviewed_grammar.grammar_note AS reviewed_grammar_note,
+        reviewed_grammar.change_note AS reviewed_change_note,
+        reviewed_grammar.created_by AS reviewed_created_by
         FROM submission s JOIN occurrence o USING(occurrence_id)
         JOIN source src ON src.source_id=o.source_id
         LEFT JOIN grammar_submission gs USING(submission_id)
@@ -220,6 +234,8 @@ def _rows(db, pending=False):
         LEFT JOIN assignment current_assignment ON current_assignment.occurrence_id=o.occurrence_id AND current_assignment.is_current=1
         LEFT JOIN alternative current_alt ON current_alt.alternative_id=current_assignment.alternative_id
         LEFT JOIN concept current_concept ON current_concept.concept_id=current_alt.concept_id
+        LEFT JOIN occurrence_grammar reviewed_grammar
+          ON reviewed_grammar.created_from_submission_id=s.submission_id
         {where} ORDER BY s.submission_id DESC""").fetchall()
 
 

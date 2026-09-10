@@ -40,14 +40,30 @@ class GrammarReviewUXTests(unittest.TestCase):
                 'EVIDENCE',
                 'Synthetic source',
                 'Concepto contextual:</strong> ASTRONOMIA',
-                'Asignación vigente:</strong> ASTRONOMIA-1a',
                 'Nota del analista:</strong> Help &lt;script&gt;note&lt;/script&gt;',
-                'SIN-MARCA <strong>(con duda)</strong>',
-                'K (P-ASL) <strong>(con duda)</strong>',
-                '<td>SEÑA-DIFERENTES</td>',
-                '<td>Sin analizar</td>',
             ):
                 self.assertIn(text, html)
+
+            self.assertRegex(
+                html,
+                r'Asignación vigente:</strong>\s*ASTRONOMIA-1a',
+            )
+            self.assertRegex(
+                html,
+                r'SIN-MARCA\s*<strong>\(con duda\)</strong>',
+            )
+            self.assertRegex(
+                html,
+                r'K \(P-ASL\)\s*<strong>\(con duda\)</strong>',
+            )
+            self.assertRegex(
+                html,
+                r'<td>\s*SEÑA-DIFERENTES\s*</td>',
+            )
+            self.assertRegex(
+                html,
+                r'<td>\s*Sin analizar\s*</td>',
+            )
 
             self.assertEqual(html.count('(con duda)'), 2)
 
