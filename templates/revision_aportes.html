@@ -2,7 +2,54 @@
 <h1>Revisión de aportes pendientes</h1>{% if request.args.get('message') %}<p role="status"><strong>{{ request.args.get('message') }}</strong></p>{% endif %}
 {% for aporte in aportes %}{% set ctx=alternative_context.get(aporte['submission_id']) %}
 <section id="submission-{{ aporte['submission_id'] }}"><details{% if detail %} open{% endif %}><summary><strong>#{{ aporte['submission_id'] }} · {{ aporte['original_gloss'] }}{% if aporte['display_concept'] %} · {{ aporte['display_concept'] }}{% endif %}</strong><br>Propuesta: {% if aporte['proposal_kind']=='NEW' %}nueva alternativa{% elif aporte['proposal_kind']=='EXISTING' %}alternativa existente{% elif aporte['proposal_kind']=='UNSURE' %}clasificación por determinar{% else %}análisis gramatical{% endif %} · Fuente: {{ aporte['source_name'] }} · Revisar</summary>
-{% if aporte['submission_type']=='GRAMMAR' %}{% set current=current_by_occurrence.get(aporte['occurrence_id']) %}<h2>Análisis gramatical propuesto</h2><p><strong>Ocurrencia ID:</strong> {{ aporte['occurrence_id'] }} · <strong>Glosa:</strong> {{ aporte['original_gloss'] }} · <strong>Fuente:</strong> {{ aporte['source_name'] }}</p>{% if aporte['display_concept'] %}<p><strong>Concepto contextual:</strong> {{ aporte['display_concept'] }}</p>{% endif %}{% if aporte['current_working_label'] %}<p><strong>Asignación vigente:</strong> {{ aporte['current_concept_label'] | alternative_display_label(aporte['current_working_label']) }}</p>{% endif %}<table><tr><th>Campo</th><th>Vigente</th><th>Propuesto</th></tr>{% for field,label in [('gender','Género'),('plural','Plural'),('agentive','Agentivo'),('conjugated_form','Forma conjugada'),('negation','Negación')] %}<tr><td>{{ label }}</td><td>{{ current[field] if current and current[field] else 'Sin analizar' }}</td><td>{{ aporte[field] or 'Sin analizar' }}{% if aporte[field ~ '_uncertain'] %} <strong>(con duda)</strong>{% endif %}</td></tr>{% endfor %}</table>{% if aporte['note'] %}<p><strong>Nota del analista:</strong> {{ aporte['note'] }}</p>{% endif %}{% if aporte['status']=='pending' %}<form method="post" action="{{ url_for('submissions.decidir_aporte',submission_id=aporte['submission_id']) }}"><textarea name="review_note" aria-label="Nota de revisión"></textarea><button name="decision" value="accepted">Aceptar</button><button name="decision" value="rejected">Rechazar</button></form>{% endif %}
+{% if aporte['submission_type']=='GRAMMAR' %}
+{% set current=current_by_occurrence.get(aporte['occurrence_id']) %}
+{% set grammar_fields=[('gender','Género'),('plural','Plural'),('agentive','Agentivo'),('conjugated_form','Forma conjugada'),('negation','Negación')] %}
+{% set uncertainty=namespace(any=false) %}
+{% for field,label in grammar_fields %}{% if aporte[field ~ '_uncertain'] %}{% set uncertainty.any=true %}{% endif %}{% endfor %}
+<h2>Análisis gramatical propuesto</h2>
+<p><strong>Ocurrencia ID:</strong> {{ aporte['occurrence_id'] }} · <strong>Glosa:</strong> {{ aporte['original_gloss'] }} · <strong>Fuente:</strong> {{ aporte['source_name'] }}</p>
+{% if aporte['display_concept'] %}<p><strong>Concepto contextual:</strong> {{ aporte['display_concept'] }}</p>{% endif %}
+{% if aporte['current_working_label'] %}<p><strong>Asignación vigente:</strong> {{ aporte['current_concept_label'] | alternative_display_label(aporte['current_working_label']) }}</p>{% endif %}
+<table>
+<tr><th>Campo</th><th>Vigente</th><th>Propuesto por el analista</th></tr>
+{% for field,label in grammar_fields %}
+<tr><td>{{ label }}</td><td>{{ current[field] if current and current[field] else 'Sin analizar' }}</td><td>{{ aporte[field] or 'Sin analizar' }}{% if aporte[field ~ '_uncertain'] %} <strong>(con duda)</strong>{% endif %}</td></tr>
+{% endfor %}
+</table>
+<p><strong>Nota del analista:</strong> {{ aporte['note'] or 'Sin nota.' }}</p>
+{% if aporte['status'] != 'pending' and aporte['review_note'] %}<p><strong>Respuesta del revisor:</strong> {{ aporte['review_note'] }}</p>{% endif %}
+{% if uncertainty.any %}<p><strong>La propuesta contiene al menos un campo marcado con duda.</strong> El Revisor/Master debe resolverla y responder la nota del analista antes de aceptar.</p>{% endif %}
+{% if aporte['status']=='pending' %}
+<form class="grammar-review-decision" method="post" action="{{ url_for('submissions.decidir_aporte',submission_id=aporte['submission_id']) }}" data-has-uncertainty="{{ 1 if uncertainty.any else 0 }}">
+<h2>DECISIÓN DEL REVISOR</h2>
+<p>Los valores parten de la propuesta del analista. Las marcas <strong>con duda</strong> son parte de la propuesta original y no son editables en la revisión.</p>
+<fieldset>
+<legend>Valores gramaticales que quedarán como resultado canónico</legend>
+{% for field,label in grammar_fields %}
+<p><label>{{ label }}
+<select name="reviewed_{{ field }}" class="grammar-reviewed-value" data-field="{{ field }}" data-label="{{ label }}" data-original="{{ aporte[field] or '' }}">
+<option value="">Sin analizar</option>
+{% if aporte[field] and aporte[field] not in grammar_vocabularies[field] %}<option value="{{ aporte[field] }}" selected>{{ aporte[field] }} (legacy)</option>{% endif %}
+{% for value in grammar_vocabularies[field] %}<option value="{{ value }}"{% if aporte[field] == value %} selected{% endif %}>{{ value }}</option>{% endfor %}
+</select>
+</label></p>
+{% endfor %}
+<button type="button" class="restore-grammar-proposal">Restablecer propuesta del analista</button>
+</fieldset>
+<div class="grammar-change-alert" role="alert" hidden>
+<p><strong>Has modificado la propuesta original del analista.</strong></p>
+<ul class="grammar-change-list"></ul>
+<p>Para aceptar estos cambios debes explicarlos en la respuesta del revisor.</p>
+</div>
+<p><label>Respuesta del revisor
+<textarea name="review_note" aria-label="Respuesta del revisor"{% if uncertainty.any %} required{% endif %}></textarea>
+</label></p>
+{% if uncertainty.any %}<p><small>La respuesta es obligatoria porque el analista marcó al menos un campo con duda.</small></p>{% endif %}
+<button name="decision" value="accepted">Aceptar</button>
+<button name="decision" value="rejected">Rechazar</button>
+</form>
+{% endif %}
 {% else %}
 <h2>Propuesta del analista</h2><p><strong>Concepto:</strong> {{ aporte['display_concept'] or 'Pendiente de resolver' }}</p><p><strong>Clasificación propuesta:</strong> {% if aporte['proposal_kind']=='NEW' %}Nueva alternativa{% elif aporte['proposal_kind']=='EXISTING' %}{{ aporte['proposed_concept_label'] | alternative_display_label(aporte['proposed_working_label']) }}{% else %}No está seguro{% endif %}</p>{% if aporte['analysis_note'] %}<p>{{ aporte['analysis_note'] }}</p>{% endif %}
 {% if ctx['proposed_morphology'] %}{% set morphology=ctx['proposed_morphology'][0] %}<h3>Morfología propuesta por el analista</h3><p>Componentes: {{ 'N/A' if morphology['component_count_not_applicable'] else morphology['component_count'] or 'Sin analizar' }} · Permutación libre: {{ morphology['free_permutation'] or 'Sin analizar' }}</p>{% if morphology['note'] %}<p>{{ morphology['note'] }}</p>{% endif %}<ol>{% for component in ctx['proposed_morphology'][1] %}<li value="{{ component['position'] }}">{% if component['component_alternative_id'] %}Alternativa existente: {{ component['display_label'] or 'Etiqueta no disponible' }} (ID {{ component['component_alternative_id'] }}){% else %}Componente por revisar{% endif %}{% if component['note'] %} &mdash; {{ component['note'] }}{% endif %}</li>{% endfor %}</ol>{% endif %}
@@ -26,4 +73,58 @@
 <!-- Compatibilidad de auditoría: TEST — [PENDIENTE # · Contexto al crear el aporte · Resolución final · Clasificación vigente actual · Preview de nomenclatura · Referencia temporal · Morfología propuesta originalmente · Crear alternativa sin aprobar morfología -->
 {% endif %}</details></section>{% else %}<p>No hay aportes pendientes.</p>{% endfor %}
 <script>document.querySelectorAll('.review-decision').forEach(form=>{const existing=form.querySelector('.existing-decision-controls'),creation=form.querySelector('.new-decision-controls'),mode=form.querySelector('[name=nomenclature_mode]'),labels=form.querySelectorAll('.nomenclature-label'),reason=form.querySelector('[name=nomenclature_reason]');function reveal(){const selected=form.querySelector('[name=decision]:checked'),value=selected&&selected.value;existing.hidden=value!=='existing';creation.hidden=value!=='new'}function nomenclatureMode(){const editable=mode&&mode.value!=='automatic';labels.forEach(input=>input.readOnly=!editable);if(reason)reason.readOnly=!editable}form.querySelectorAll('[name=decision]').forEach(input=>input.addEventListener('change',reveal));mode?.addEventListener('change',nomenclatureMode);reveal();nomenclatureMode()});</script>
+<script>
+document.querySelectorAll('.grammar-review-decision').forEach(form=>{
+    const selects=[...form.querySelectorAll('.grammar-reviewed-value')],
+          alertBox=form.querySelector('.grammar-change-alert'),
+          list=form.querySelector('.grammar-change-list'),
+          restore=form.querySelector('.restore-grammar-proposal'),
+          reviewNote=form.querySelector('[name=review_note]'),
+          hasUncertainty=form.dataset.hasUncertainty==='1';
+
+    function displayValue(value){
+        return value || 'Sin analizar';
+    }
+
+    function changes(){
+        return selects.filter(select=>select.value!==select.dataset.original);
+    }
+
+    function refresh(){
+        const changed=changes();
+        alertBox.hidden=changed.length===0;
+        list.replaceChildren();
+        changed.forEach(select=>{
+            const item=document.createElement('li');
+            item.textContent=select.dataset.label+': '+displayValue(select.dataset.original)+' → '+displayValue(select.value);
+            list.appendChild(item);
+        });
+        reviewNote.required=hasUncertainty||changed.length>0;
+    }
+
+    selects.forEach(select=>select.addEventListener('change',refresh));
+
+    restore.addEventListener('click',()=>{
+        selects.forEach(select=>{select.value=select.dataset.original;});
+        refresh();
+    });
+
+    form.querySelectorAll('button[name=decision]').forEach(button=>{
+        button.addEventListener('click',()=>{
+            reviewNote.required=hasUncertainty||changes().length>0||button.value==='rejected';
+        });
+    });
+
+    form.addEventListener('submit',event=>{
+        const rejecting=event.submitter&&event.submitter.value==='rejected';
+        reviewNote.required=hasUncertainty||changes().length>0||rejecting;
+        if(!form.checkValidity()){
+            event.preventDefault();
+            form.reportValidity();
+        }
+    });
+
+    refresh();
+});
+</script>
 </body></html>

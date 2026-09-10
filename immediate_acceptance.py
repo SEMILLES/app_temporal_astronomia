@@ -53,13 +53,56 @@ def confirm_operation(connection,operation):
         connection.rollback();raise
 
 
-def grammar_operation(occurrence_id,values,*,actor_context,reviewed_by=None,review_note=None,expected_edit_token=_INTERNAL):
+def grammar_operation(
+    occurrence_id,
+    values,
+    *,
+    actor_context,
+    reviewed_by=None,
+    review_note=None,
+    expected_edit_token=_INTERNAL,
+):
     def operation(connection):
+        uncertainty_fields = (
+            "gender_uncertain",
+            "plural_uncertain",
+            "agentive_uncertain",
+            "conjugated_form_uncertain",
+            "negation_uncertain",
+        )
+
+        if any(
+            str(values.get(field, "")).lower() in ("1", "true", "on", "yes")
+            for field in uncertainty_fields
+        ):
+            raise ImmediateAcceptanceError(
+                "La aceptación inmediata exige resolver todas las dudas antes de confirmar el análisis."
+            )
+
         if expected_edit_token is not _INTERNAL:
             check_edit(connection, "grammar", occurrence_id, expected_edit_token)
-        submission_id=create_grammar_submission(connection,occurrence_id,values,submitted_by=reviewed_by,collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
-        resolve_grammar_submission(connection,submission_id,"accepted",reviewed_by=reviewed_by,review_note=review_note,collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
+
+        submission_id = create_grammar_submission(
+            connection,
+            occurrence_id,
+            values,
+            submitted_by=reviewed_by,
+            collaborator_id=actor_context.get("collaborator_id"),
+            access_role=actor_context.get("access_role"),
+        )
+
+        resolve_grammar_submission(
+            connection,
+            submission_id,
+            "accepted",
+            reviewed_by=reviewed_by,
+            review_note=review_note,
+            collaborator_id=actor_context.get("collaborator_id"),
+            access_role=actor_context.get("access_role"),
+        )
+
         return submission_id
+
     return operation
 
 

@@ -46,6 +46,9 @@ def create_grammar_submission(connection, occurrence_id, values, *, submitted_by
         if marks[field] is None and flag:
             raise GrammarWorkflowError("Un campo sin analizar no puede marcarse con duda.")
         flags[field] = flag
+    note=(values.get("note") or "").strip() or None
+    if any(flags.values()) and note is None:
+        raise GrammarWorkflowError("Si marca un campo con duda, debe explicar la duda en la nota del analista.")
     name="create_grammar_submission";owns=_transaction(connection,name)
     try:
         cursor = connection.execute(
@@ -59,7 +62,7 @@ def create_grammar_submission(connection, occurrence_id, values, *, submitted_by
             columns.extend((field, field + "_uncertain"))
             params.extend((marks[field], flags[field]))
         columns.append("note")
-        params.append((values.get("note") or "").strip() or None)
+        params.append(note)
         connection.execute(
             f"INSERT INTO grammar_submission (submission_id, {', '.join(columns)}) "
             f"VALUES (?, {', '.join('?' for _ in params)})",
@@ -76,8 +79,8 @@ def create_grammar_submission(connection, occurrence_id, values, *, submitted_by
         raise
 
 
-def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_by=None,
-                               review_note=None, collaborator_id=None, access_role=None):
+def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_values=None,
+                               reviewed_by=None, review_note=None, collaborator_id=None, access_role=None):
     if decision not in ("accepted", "rejected"):
         raise GrammarWorkflowError("Decisión no válida.")
     name="resolve_grammar_submission";owns=_transaction(connection,name)
@@ -89,9 +92,28 @@ def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_
         ).fetchone()
         if row is None:
             raise GrammarWorkflowError("La propuesta gramatical no está pendiente.")
-        if decision == "accepted":
-            kwargs = {field: row[field] for field in FIELDS}
-            kwargs.update({field + "_uncertain": row[field + "_uncertain"] for field in FIELDS})
+        review_note=(review_note or "").strip() or None
+        original_values={field:row[field] for field in FIELDS}
+        has_uncertainty=any(bool(row[field+"_uncertain"]) for field in FIELDS)
+        if decision == "rejected":
+            if review_note is None:
+                raise GrammarWorkflowError("Debe explicar el rechazo en la respuesta del revisor.")
+        else:
+            if reviewed_values is None:
+                final_values=dict(original_values)
+            else:
+                final_values=validate_grammatical_marks(reviewed_values,original_values)
+            if not any(final_values.values()):
+                raise GrammarWorkflowError("El análisis gramatical aceptado debe contener al menos un dato.")
+            changed_fields=[field for field in FIELDS if final_values[field] != original_values[field]]
+            if (has_uncertainty or changed_fields) and review_note is None:
+                if has_uncertainty and changed_fields:
+                    raise GrammarWorkflowError("Debe responder la duda del analista y explicar los cambios realizados antes de aceptar.")
+                if has_uncertainty:
+                    raise GrammarWorkflowError("La propuesta contiene campos marcados con duda. Debe responder la nota del analista antes de aceptar.")
+                raise GrammarWorkflowError("Ha modificado la propuesta del analista. Debe explicar los cambios antes de aceptar.")
+            kwargs=dict(final_values)
+            kwargs.update({field+"_uncertain":0 for field in FIELDS})
             create_or_replace_occurrence_grammar(
                 connection, row["occurrence_id"], **kwargs,
                 grammar_note=row["note"], created_by=reviewed_by,
@@ -102,7 +124,7 @@ def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_
             "UPDATE submission SET status = 'resolved', resolution = ?, "
             "resolved_at = CURRENT_TIMESTAMP, reviewed_by = ?, review_note = ? "
             "WHERE submission_id = ?",
-            (decision, reviewed_by, (review_note or "").strip() or None, submission_id),
+            (decision, reviewed_by, review_note, submission_id),
         )
         if access_role:
             record_activity(connection,

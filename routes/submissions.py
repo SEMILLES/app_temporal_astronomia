@@ -4,6 +4,7 @@ from flask import Blueprint, redirect, render_template, request, url_for, g
 
 from database import conectar
 from grammar_workflow import GrammarWorkflowError, resolve_grammar_submission
+from grammatical_marks import GRAMMATICAL_MARK_VOCABULARIES
 from occurrence_registration import RegistrationError, complete_registration, save_draft
 from alternative_workflow import (
     AlternativeWorkflowError, reject_alternative_submission,
@@ -45,6 +46,13 @@ def _reference(form):
         concept_proposal_id=form.get("reference_concept_proposal_id") if kind == "proposal" else None,
         proposed_label=form.get("proposed_label") if kind == "new" else None,
     )
+
+
+def _grammar_review_values(form):
+    fields = tuple(GRAMMATICAL_MARK_VOCABULARIES)
+    if not any(f"reviewed_{field}" in form for field in fields):
+        return None
+    return {field: form.get(f"reviewed_{field}") for field in fields}
 
 
 @submissions_bp.route("/aportes/nuevo")
@@ -234,7 +242,7 @@ def revisar_aportes():
         alternative_context = _alternative_review_context(db, rows)
     finally:
         db.close()
-    return render_template("revision_aportes.html", aportes=rows, current_by_occurrence=current, alternative_context=alternative_context)
+    return render_template("revision_aportes.html", aportes=rows, current_by_occurrence=current, alternative_context=alternative_context, grammar_vocabularies=GRAMMATICAL_MARK_VOCABULARIES)
 
 
 def _alternative_review_context(db, rows):
@@ -298,7 +306,7 @@ def detalle_aporte(submission_id):
         current={rows[0]["occurrence_id"]:db.execute("SELECT * FROM occurrence_grammar WHERE occurrence_id=? AND is_current=1",(rows[0]["occurrence_id"],)).fetchone()}
         context=_alternative_review_context(db,rows)
     finally: db.close()
-    return render_template("revision_aportes.html",aportes=rows,current_by_occurrence=current,alternative_context=context,detail=True)
+    return render_template("revision_aportes.html",aportes=rows,current_by_occurrence=current,alternative_context=context,grammar_vocabularies=GRAMMATICAL_MARK_VOCABULARIES,detail=True)
 
 
 @submissions_bp.route("/aportes/<int:submission_id>/decidir", methods=["POST"])
@@ -310,7 +318,15 @@ def decidir_aporte(submission_id):
         if row is None:
             return "El aporte no existe.", 404
         if row[0] == "GRAMMAR":
-            operation=lambda connection: resolve_grammar_submission(connection, submission_id, decision, reviewed_by=request.form.get("reviewed_by"), review_note=request.form.get("review_note"), collaborator_id=request.form.get("collaborator_id"), access_role=getattr(g, "current_access_role", None))
+            reviewed_values = _grammar_review_values(request.form)
+            operation=lambda connection: resolve_grammar_submission(
+                connection, submission_id, decision,
+                reviewed_values=reviewed_values if decision == "accepted" else None,
+                reviewed_by=request.form.get("reviewed_by"),
+                review_note=request.form.get("review_note"),
+                collaborator_id=request.form.get("collaborator_id"),
+                access_role=getattr(g, "current_access_role", None),
+            )
             if decision=="accepted":run_normal_review(db,operation,request.form.get("review_note"))
             else:operation(db)
         elif decision == "rejected":

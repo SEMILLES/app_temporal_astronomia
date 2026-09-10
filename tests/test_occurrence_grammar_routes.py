@@ -52,6 +52,13 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
     def test_empty_structured_proposal_and_null_uncertain_are_rejected(self):
         self.assertEqual(self.client.post("/ocurrencias/1/gramatica",data={"note":"Note only"}).status_code,400)
         self.assertEqual(self.client.post("/ocurrencias/1/gramatica",data={"gender":"","gender_uncertain":"on"}).status_code,400)
+        self.assertEqual(
+            self.client.post(
+                "/ocurrencias/1/gramatica",
+                data={"gender":"FEM-A","gender_uncertain":"on"},
+            ).status_code,
+            400,
+        )
 
     def test_second_pending_is_prevented_and_displayed(self):
         self.client.post("/ocurrencias/1/gramatica",data={"plural":"REDUP."})
@@ -60,11 +67,167 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
         self.assertEqual(self.client.post("/ocurrencias/1/gramatica",data={"gender":"FEM-A"}).status_code,400)
         db=self.connect(); self.assertEqual(db.execute("SELECT count(*) FROM submission").fetchone()[0],1); db.close()
 
-    def test_accept_creates_current_provenance_and_resolves(self):
-        db=self.connect(); sid=create_grammar_submission(db,1,{"gender":"MASC-O","gender_uncertain":1,"note":"Full"}); resolve_grammar_submission(db,sid,"accepted",reviewed_by="reviewer",review_note="OK")
-        grammar=db.execute("SELECT * FROM occurrence_grammar WHERE is_current=1").fetchone(); submission=db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()
-        self.assertEqual((grammar["gender"],grammar["gender_uncertain"],grammar["created_from_submission_id"]),("MASC-O",1,sid))
-        self.assertEqual((submission["status"],submission["resolution"],submission["reviewed_by"],submission["review_note"]),("resolved","accepted","reviewer","OK")); self.assertIsNotNone(submission["resolved_at"]); db.close()
+    def test_accept_creates_current_provenance_and_resolves_uncertainty(self):
+        db=self.connect()
+        sid=create_grammar_submission(
+            db,1,{"gender":"MASC-O","gender_uncertain":1,"note":"Full"}
+        )
+        resolve_grammar_submission(
+            db,sid,"accepted",reviewed_by="reviewer",review_note="OK"
+        )
+        grammar=db.execute(
+            "SELECT * FROM occurrence_grammar WHERE is_current=1"
+        ).fetchone()
+        submission=db.execute(
+            "SELECT * FROM submission WHERE submission_id=?",(sid,)
+        ).fetchone()
+        proposal=db.execute(
+            "SELECT gender,gender_uncertain,note FROM grammar_submission "
+            "WHERE submission_id=?",(sid,)
+        ).fetchone()
+        self.assertEqual(
+            (
+                grammar["gender"],
+                grammar["gender_uncertain"],
+                grammar["created_from_submission_id"],
+            ),
+            ("MASC-O",0,sid),
+        )
+        self.assertEqual(tuple(proposal),("MASC-O",1,"Full"))
+        self.assertEqual(
+            (
+                submission["status"],
+                submission["resolution"],
+                submission["reviewed_by"],
+                submission["review_note"],
+            ),
+            ("resolved","accepted","reviewer","OK"),
+        )
+        self.assertIsNotNone(submission["resolved_at"])
+        db.close()
+
+    def test_accept_with_reviewer_correction_preserves_original_submission(self):
+        db=self.connect()
+        sid=create_grammar_submission(db,1,{"gender":"MASC-O"})
+        resolve_grammar_submission(
+            db,
+            sid,
+            "accepted",
+            reviewed_values={
+                "gender":"FEM-A",
+                "plural":"",
+                "agentive":"",
+                "conjugated_form":"",
+                "negation":"",
+            },
+            reviewed_by="reviewer",
+            review_note="Se corrige el género tras revisar la evidencia.",
+        )
+        proposal=db.execute(
+            "SELECT gender,gender_uncertain FROM grammar_submission "
+            "WHERE submission_id=?",(sid,)
+        ).fetchone()
+        grammar=db.execute(
+            "SELECT gender,gender_uncertain,change_note,"
+            "created_from_submission_id FROM occurrence_grammar "
+            "WHERE is_current=1"
+        ).fetchone()
+        self.assertEqual(tuple(proposal),("MASC-O",0))
+        self.assertEqual(
+            tuple(grammar),
+            (
+                "FEM-A",
+                0,
+                "Se corrige el género tras revisar la evidencia.",
+                sid,
+            ),
+        )
+        db.close()
+
+    def test_reviewer_change_requires_response_and_keeps_submission_pending(self):
+        db=self.connect()
+        sid=create_grammar_submission(db,1,{"gender":"MASC-O"})
+        with self.assertRaises(GrammarWorkflowError):
+            resolve_grammar_submission(
+                db,
+                sid,
+                "accepted",
+                reviewed_values={
+                    "gender":"FEM-A",
+                    "plural":"",
+                    "agentive":"",
+                    "conjugated_form":"",
+                    "negation":"",
+                },
+            )
+        self.assertEqual(
+            db.execute(
+                "SELECT status FROM submission WHERE submission_id=?",(sid,)
+            ).fetchone()[0],
+            "pending",
+        )
+        self.assertEqual(
+            db.execute("SELECT count(*) FROM occurrence_grammar").fetchone()[0],
+            0,
+        )
+        db.close()
+
+    def test_uncertain_proposal_requires_reviewer_response_before_acceptance(self):
+        db=self.connect()
+        sid=create_grammar_submission(
+            db,
+            1,
+            {
+                "gender":"MASC-O",
+                "gender_uncertain":1,
+                "note":"No estoy seguro por la calidad del video.",
+            },
+        )
+        with self.assertRaises(GrammarWorkflowError):
+            resolve_grammar_submission(db,sid,"accepted")
+        self.assertEqual(
+            db.execute(
+                "SELECT status FROM submission WHERE submission_id=?",(sid,)
+            ).fetchone()[0],
+            "pending",
+        )
+        self.assertEqual(
+            db.execute("SELECT count(*) FROM occurrence_grammar").fetchone()[0],
+            0,
+        )
+        db.close()
+
+    def test_reject_requires_reviewer_response(self):
+        db=self.connect()
+        sid=create_grammar_submission(db,1,{"negation":"CON-NEG"})
+        with self.assertRaises(GrammarWorkflowError):
+            resolve_grammar_submission(db,sid,"rejected")
+        self.assertEqual(
+            db.execute(
+                "SELECT status FROM submission WHERE submission_id=?",(sid,)
+            ).fetchone()[0],
+            "pending",
+        )
+        resolve_grammar_submission(
+            db,
+            sid,
+            "rejected",
+            review_note="La evidencia no permite sostener la propuesta.",
+        )
+        self.assertEqual(
+            tuple(
+                db.execute(
+                    "SELECT status,resolution,review_note FROM submission "
+                    "WHERE submission_id=?",(sid,)
+                ).fetchone()
+            ),
+            (
+                "resolved",
+                "rejected",
+                "La evidencia no permite sostener la propuesta.",
+            ),
+        )
+        db.close()
 
     def test_accept_versions_complete_block_and_can_clear_field(self):
         db=self.connect(); old,_=create_or_replace_occurrence_grammar(db,1,gender="FEM-A",plural="REDUP.",gender_uncertain=1)
@@ -111,11 +274,106 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
         db=self.connect(); row=db.execute("SELECT status,resolution FROM submission WHERE submission_id=?",(sid,)).fetchone(); canonical_after=tuple(db.execute("SELECT count(*) FROM alternative").fetchone())+tuple(db.execute("SELECT count(*) FROM assignment").fetchone()); db.close()
         self.assertEqual(tuple(row),("resolved","rejected")); self.assertEqual(canonical_after,canonical_before)
 
-    def test_review_route_accept_and_reject(self):
-        db=self.connect(); accepted=create_grammar_submission(db,1,{"gender":"FEM-A"}); db.close()
-        self.assertEqual(self.client.post(f"/aportes/{accepted}/decidir",data={"decision":"accepted"}).status_code,302)
-        db=self.connect(); rejected=create_grammar_submission(db,1,{"plural":"REDUP."}); db.close()
-        self.assertEqual(self.client.post(f"/aportes/{rejected}/decidir",data={"decision":"rejected"}).status_code,302)
+    def test_review_ui_prefills_values_and_keeps_uncertainty_read_only(self):
+        db=self.connect()
+        create_grammar_submission(
+            db,
+            1,
+            {
+                "gender":"MASC-O",
+                "gender_uncertain":1,
+                "note":"Duda documentada.",
+            },
+        )
+        db.close()
+        page=self.client.get("/aportes/pendientes").get_data(as_text=True)
+        self.assertIn("DECISIÓN DEL REVISOR",page)
+        self.assertIn("Restablecer propuesta del analista",page)
+        self.assertIn("Has modificado la propuesta original del analista.",page)
+        self.assertIn('name="reviewed_gender"',page)
+        self.assertIn('value="MASC-O" selected',page)
+        self.assertIn('data-has-uncertainty="1"',page)
+        self.assertIn("Respuesta del revisor",page)
+        self.assertNotIn('name="reviewed_gender_uncertain"',page)
+
+    def test_review_route_accepts_reviewer_correction(self):
+        db=self.connect()
+        sid=create_grammar_submission(db,1,{"gender":"MASC-O"})
+        db.close()
+        response=self.client.post(
+            f"/aportes/{sid}/decidir",
+            data={
+                "decision":"accepted",
+                "reviewed_gender":"FEM-A",
+                "reviewed_plural":"",
+                "reviewed_agentive":"",
+                "reviewed_conjugated_form":"",
+                "reviewed_negation":"",
+                "review_note":"Se corrige el género.",
+            },
+        )
+        self.assertEqual(response.status_code,302)
+        db=self.connect()
+        self.assertEqual(
+            tuple(
+                db.execute(
+                    "SELECT gender,gender_uncertain FROM grammar_submission "
+                    "WHERE submission_id=?",(sid,)
+                ).fetchone()
+            ),
+            ("MASC-O",0),
+        )
+        self.assertEqual(
+            tuple(
+                db.execute(
+                    "SELECT gender,gender_uncertain,change_note "
+                    "FROM occurrence_grammar WHERE is_current=1"
+                ).fetchone()
+            ),
+            ("FEM-A",0,"Se corrige el género."),
+        )
+        db.close()
+
+    def test_review_route_reject_requires_response(self):
+        db=self.connect()
+        sid=create_grammar_submission(db,1,{"plural":"REDUP."})
+        db.close()
+        self.assertEqual(
+            self.client.post(
+                f"/aportes/{sid}/decidir",
+                data={"decision":"rejected"},
+            ).status_code,
+            400,
+        )
+        self.assertEqual(
+            self.client.post(
+                f"/aportes/{sid}/decidir",
+                data={
+                    "decision":"rejected",
+                    "review_note":"No se confirma en la evidencia.",
+                },
+            ).status_code,
+            302,
+        )
+
+    def test_review_route_accept_without_changes_and_without_doubt_needs_no_note(self):
+        db=self.connect()
+        sid=create_grammar_submission(db,1,{"gender":"FEM-A"})
+        db.close()
+        self.assertEqual(
+            self.client.post(
+                f"/aportes/{sid}/decidir",
+                data={
+                    "decision":"accepted",
+                    "reviewed_gender":"FEM-A",
+                    "reviewed_plural":"",
+                    "reviewed_agentive":"",
+                    "reviewed_conjugated_form":"",
+                    "reviewed_negation":"",
+                },
+            ).status_code,
+            302,
+        )
 
 
 if __name__ == "__main__": unittest.main()
