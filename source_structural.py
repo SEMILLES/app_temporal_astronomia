@@ -215,7 +215,7 @@ def preview_distribution(db, spec):
         if set(new_sources) - used:
             raise SourceStructuralError("Asigne occurrences a cada Source nueva o quite ese destino.")
         if mode == "keep" and not (used - {original_key}):
-            raise SourceStructuralError("Debe mover al menos una occurrence.")
+            raise SourceStructuralError("La operación requiere mover al menos una ocurrencia.")
         if mode == "replace" and (original_key in used or len(used) < 2):
             raise SourceStructuralError("Reemplazar exige distribuir todas las occurrences entre al menos dos destinos distintos del origen.")
     groups = []

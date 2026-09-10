@@ -115,7 +115,7 @@ def alternative_operation(occurrence_id,proposal,decision,*,actor_context,review
             alternative_id=review_as_existing(connection,submission_id,decision.get("alternative_id"),concept_resolution=concept_resolution,relation_policy=decision.get("relation_policy","preserve"),reviewed_by=reviewed_by,review_note=review_note,collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
         elif canonical=="new":
             alternative_id=review_as_new(connection,submission_id,concept_resolution=concept_resolution,approve_relations=decision.get("approve_relations",False),nomenclature_mode=decision.get("nomenclature_mode","automatic"),labels=decision.get("labels"),reason=decision.get("nomenclature_reason"),reviewed_by=reviewed_by,review_note=review_note,approve_morphology=decision.get("approve_morphology",False),collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
-        else:raise ImmediateAcceptanceError("Debe decidir si resuelve como alternative existente o nueva.")
+        else:raise ImmediateAcceptanceError("Es necesario definir si la propuesta se resuelve como alternativa existente o nueva.")
         return {"submission_id":submission_id,"alternative_id":alternative_id}
     return operation
 
@@ -133,7 +133,7 @@ def concept_registration_operation(evidence,proposed_label,decision,*,actor_cont
             label=normalize_concept_label(decision.get("label") or proposal["proposed_label"])
             if connection.execute("SELECT 1 FROM concept WHERE UPPER(preferred_label)=UPPER(?)",(label,)).fetchone():raise ImmediateAcceptanceError("Ese concept ya existe; resuelva hacia el existente.")
             concept_id=connection.execute("INSERT INTO concept(preferred_label) VALUES(?)",(label,)).lastrowid
-        else:raise ImmediateAcceptanceError("Debe resolver la propuesta hacia un concept existente o crear uno nuevo.")
+        else:raise ImmediateAcceptanceError("Para resolver la propuesta, es necesario asociarla con un concepto existente o crear uno nuevo.")
         connection.execute("UPDATE concept_proposal SET status='resolved',resolved_concept_id=?,resolved_at=CURRENT_TIMESTAMP WHERE concept_proposal_id=?",(concept_id,proposal["concept_proposal_id"]))
         role=actor_context.get("access_role")
         if role:record_activity(connection,"concept_proposal_resolved",entity_type="concept_proposal",entity_id=proposal["concept_proposal_id"],collaborator_id=actor_context.get("collaborator_id"),access_role=role)
@@ -148,6 +148,6 @@ def run_normal_review(connection,operation,review_note):
     try:
         result=operation(connection);blocking=[dict(row) for row in connection.execute("SELECT * FROM conflict WHERE conflict_id>? AND severity='blocking'",(before,)).fetchall()]
         if blocking and not (review_note or "").strip():
-            raise ImmediateAcceptanceError("Esta aprobación generaría conflictos bloqueantes. Debe explicar por qué desea aprobarla.")
+            raise ImmediateAcceptanceError("Esta aprobación generaría conflictos bloqueantes. Para continuar, es necesario justificar la aprobación en la nota de revisión.")
         connection.commit();return result
     except Exception:connection.rollback();raise

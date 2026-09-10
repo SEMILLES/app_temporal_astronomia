@@ -443,7 +443,7 @@ def preview_grammar_immediate(occurrence_id):
 @occurrences_bp.post("/ocurrencias/<int:occurrence_id>/gramatica/aceptacion-inmediata/confirmar")
 @requires_reviewer
 def confirm_grammar_immediate(occurrence_id):
-    if request.form.get("confirm_immediate")!="yes":return "Debe confirmar explícitamente la aceptación inmediata.",400
+    if request.form.get("confirm_immediate")!="yes":return "Se requiere confirmación explícita de la aceptación inmediata.",400
     db=conectar();operation=grammar_operation(occurrence_id,_grammar_values(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"), expected_edit_token=request.form.get("edit_token"))
     try:confirm_operation(db,operation)
     except StaleEdit as error:return str(error),409
@@ -686,7 +686,7 @@ def preview_alternative_immediate(occurrence_id):
 @occurrences_bp.post("/ocurrencias/<int:occurrence_id>/clasificar/aceptacion-inmediata/confirmar")
 @requires_reviewer
 def confirm_alternative_immediate(occurrence_id):
-    if request.form.get("confirm_immediate")!="yes":return "Debe confirmar explícitamente la aceptación inmediata.",400
+    if request.form.get("confirm_immediate")!="yes":return "Se requiere confirmación explícita de la aceptación inmediata.",400
     db=conectar()
     try:operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
     except ValueError as error:db.close();return str(error),400

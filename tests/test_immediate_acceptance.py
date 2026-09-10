@@ -52,7 +52,7 @@ class ImmediateAcceptanceTests(unittest.TestCase):
         result=confirm_operation(self.db,alternative_operation(2,proposal,{"decision":"new","approve_morphology":True,"nomenclature_mode":"automatic"},actor_context=self.actor))["result"]
         self.assertEqual(result["submission_id"],self.db.execute("SELECT created_from_submission_id FROM alternative_morphology").fetchone()[0])
         unsure={"proposal_kind":"UNSURE","analysis_note":"Revisar"}
-        with self.assertRaisesRegex(ImmediateAcceptanceError,"Debe decidir"):preview_operation(self.db,alternative_operation(1,unsure,{"decision":""},actor_context=self.actor))
+        with self.assertRaisesRegex(ImmediateAcceptanceError,"Es necesario definir si la propuesta se resuelve como alternativa existente o nueva"):preview_operation(self.db,alternative_operation(1,unsure,{"decision":""},actor_context=self.actor))
         self.assertEqual(1,self.db.execute("SELECT count(*) FROM submission").fetchone()[0])
 
     def test_blocking_preflight_and_confirm_rollback_everything(self):
@@ -74,7 +74,7 @@ class ImmediateAcceptanceTests(unittest.TestCase):
         self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2')");self.db.commit()
         def invalid(connection):
             connection.execute("UPDATE alternative SET working_label='1' WHERE alternative_id=2");detect_conflicts_after_change(connection,"alternative",2);return 2
-        with self.assertRaisesRegex(ImmediateAcceptanceError,"Debe explicar"):run_normal_review(self.db,invalid,"")
+        with self.assertRaisesRegex(ImmediateAcceptanceError,"Para continuar, es necesario justificar la aprobación en la nota de revisión"):run_normal_review(self.db,invalid,"")
         self.assertEqual("2",self.db.execute("SELECT working_label FROM alternative WHERE alternative_id=2").fetchone()[0])
         run_normal_review(self.db,invalid,"Aceptación temporal documentada");self.assertEqual(1,self.db.execute("SELECT count(*) FROM conflict WHERE severity='blocking'").fetchone()[0])
 

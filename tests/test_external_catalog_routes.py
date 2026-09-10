@@ -29,7 +29,7 @@ class ExternalCatalogRouteTests(unittest.TestCase):
         self.assertNotIn("VIVO",self.client.get("/catalogo").get_data(as_text=True))
         self.publish("v2")
         self.assertIn("VIVO",self.client.get("/catalogo").get_data(as_text=True))
-        old=self.client.get("/catalogo/v1").get_data(as_text=True); self.assertIn("versión histórica: v1",old); self.assertNotIn("VIVO",old)
+        old=self.client.get("/catalogo/v1").get_data(as_text=True); self.assertIn("Versión histórica del catálogo: v1.",old); self.assertNotIn("VIVO",old)
         self.assertEqual(self.client.get("/catalogo/v99").status_code,404)
     def test_master_admin_only_and_crafted_role_ignored(self):
         self.assertEqual(self.client.get("/mas/actualizar-catalogo").status_code,200)

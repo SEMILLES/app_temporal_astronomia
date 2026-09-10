@@ -107,7 +107,7 @@ def preview_concept_immediate():
 @submissions_bp.post("/aportes/concepto/aceptacion-inmediata/confirmar")
 @requires_reviewer
 def confirm_concept_immediate():
-    if request.form.get("confirm_immediate")!="yes":return "Debe confirmar explícitamente la aceptación inmediata.",400
+    if request.form.get("confirm_immediate")!="yes":return "Se requiere confirmación explícita de la aceptación inmediata.",400
     db=conectar()
     try:result=confirm_operation(db,_concept_immediate_operation(request.form))
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400

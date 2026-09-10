@@ -35,7 +35,7 @@ def resolve_concept_reference(connection, concept_id=None,
         concept_id, concept_proposal_id, proposed_label
     ))
     if choices != 1:
-        raise RegistrationError("Debe indicar exactamente un concepto de referencia.")
+        raise RegistrationError("Se requiere exactamente un concepto de referencia.")
     if concept_id not in (None, ""):
         row = connection.execute(
             "SELECT concept_id FROM concept WHERE concept_id = ?", (concept_id,)

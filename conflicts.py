@@ -88,7 +88,7 @@ def attempt_conflict_resolution(connection,conflict_id,*,comment,actor_context,m
         if conflict is None:raise ConflictError("El conflicto no existe.")
         if conflict["status"]!="open":raise ConflictError("El conflicto ya está resuelto.")
         if conflict["origin_kind"]=="manual":
-            if not manual_confirmed:raise ConflictError("Debe confirmar que se cumplió el criterio de resolución.")
+            if not manual_confirmed:raise ConflictError("Se requiere confirmación de que se cumplió el criterio de resolución.")
             resolved=True;failure=None
         else:resolved,failure=validate_finding_resolved(connection,conflict)
         outcome="succeeded" if resolved else "failed"

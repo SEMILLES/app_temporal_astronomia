@@ -9,7 +9,7 @@
     <p>El concepto de la alternativa no puede cambiarse.</p>
     <form method="post" action="{{ url_for('alternatives.actualizar_alternativa', alternative_id=alternativa['alternative_id']) }}">
         {% if working_label_is_unstructured %}
-            <p>Esta etiqueta no tiene formato número + letra. Se conservará salvo que elijas una combinación nueva.</p>
+            <p>Esta etiqueta no tiene formato número + letra. Se conservará salvo que se seleccione una combinación nueva.</p>
             <label>Etiqueta existente:</label>
             <input type="text" name="working_label_fallback" value="{{ alternativa['working_label'] or '' }}">
         {% else %}

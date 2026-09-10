@@ -106,9 +106,9 @@ Restablecer propuesta del analista
 </fieldset>
 
 <div class="grammar-change-alert" role="alert" hidden>
-<p><strong>Has modificado la propuesta original del analista.</strong></p>
+<p><strong>Se ha modificado la propuesta original del analista.</strong></p>
 <ul class="grammar-change-list"></ul>
-<p>Para aceptar estos cambios debes explicarlos en la respuesta del revisor.</p>
+<p>Para aceptar estos cambios, es necesario explicarlos en la respuesta del revisor.</p>
 </div>
 
 <p>
@@ -309,13 +309,13 @@ document.querySelectorAll('.grammar-review-decision').forEach(form=>{
         let message='';
 
         if(rejecting){
-            message='Debe explicar por qué rechaza la propuesta.';
+            message='El rechazo de la propuesta requiere una explicación en la respuesta del revisor.';
         }else if(hasUncertainty&&changed.length){
-            message='Debe responder la nota del analista y explicar los cambios realizados antes de aceptar.';
+            message='Para aceptar la propuesta, es necesario responder la nota del analista y explicar los cambios realizados.';
         }else if(hasUncertainty){
-            message='Debe responder la nota del analista para resolver la duda antes de aceptar.';
+            message='Para aceptar la propuesta, es necesario responder la nota del analista y resolver la duda.';
         }else if(changed.length){
-            message='Debe explicar los cambios realizados a la propuesta del analista antes de aceptar.';
+            message='Para aceptar la propuesta, es necesario explicar los cambios realizados a la propuesta del analista.';
         }
 
         if(message){

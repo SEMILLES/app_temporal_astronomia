@@ -23,7 +23,7 @@ class ConflictServiceTests(unittest.TestCase):
         self.assertEqual(["failed","succeeded"],[r[0] for r in self.db.execute("SELECT outcome FROM conflict_resolution_attempt WHERE conflict_id=? ORDER BY conflict_resolution_attempt_id",(cid,))])
     def test_manual_requires_confirmation_and_global_without_actor_has_no_activity(self):
         cid=create_manual_conflict(self.db,description="Revisar",subjects=[ConflictSubject("alternative",1,"subject")],severity="non_blocking",justification="No bloquea catálogo",resolution_criteria="Verificación humana",actor_context=self.actor)
-        with self.assertRaisesRegex(ConflictError,"confirmar"):attempt_conflict_resolution(self.db,cid,comment="Hecho",actor_context=self.actor)
+        with self.assertRaisesRegex(ConflictError,"Se requiere confirmación de que se cumplió el criterio de resolución"):attempt_conflict_resolution(self.db,cid,comment="Hecho",actor_context=self.actor)
         self.assertTrue(attempt_conflict_resolution(self.db,cid,comment="Hecho",manual_confirmed=True,actor_context=self.actor)[0])
         before=self.db.execute("SELECT count(*) FROM activity_event").fetchone()[0]
         result=run_global_conflict_validation(self.db);self.assertTrue(result["created_conflict_ids"])

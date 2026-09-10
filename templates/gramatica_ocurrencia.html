@@ -88,7 +88,7 @@ Nota
 </p>
 
 <p class="grammar-note-validation" role="alert" hidden>
-<strong>Debe explicar en la nota por qué marcó uno o más campos con duda.</strong>
+<strong>Cuando se marcan uno o más campos con duda, la nota del analista debe explicar el motivo.</strong>
 </p>
 
 <p>
@@ -144,7 +144,7 @@ Aceptar inmediatamente
 
         if(!note.value.trim()){
             event.preventDefault();
-            errorBox.innerHTML='<strong>Debe explicar en la nota por qué marcó uno o más campos con duda.</strong>';
+            errorBox.innerHTML='<strong>Cuando se marcan uno o más campos con duda, la nota del analista debe explicar el motivo.</strong>';
             errorBox.hidden=false;
             note.focus();
         }

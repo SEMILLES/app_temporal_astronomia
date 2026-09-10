@@ -22,7 +22,7 @@ def normalize_detail(status, value, *, applicable=True, kind=None, allow_incompl
     status = (status or "").strip().upper() or None
     if not applicable: return "NA", None
     if allow_incomplete and status is None: return None, value
-    if status not in DETAIL_STATUSES: raise ValueError("Debe indicar Dato, N/A o Desconocido para cada detalle aplicable.")
+    if status not in DETAIL_STATUSES: raise ValueError("Seleccione Dato, N/A o Desconocido para cada detalle aplicable.")
     if status == "VALUE":
         if value is None: raise ValueError("Un detalle marcado como Dato requiere un valor.")
         if kind == "page" and not value.isdigit(): raise ValueError("La página debe contener únicamente números.")

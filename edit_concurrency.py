@@ -5,7 +5,7 @@ import json
 
 from itsdangerous import BadData
 
-STALE_EDIT = "Este registro cambió desde que lo abriste. Recarga para revisar los cambios antes de guardar."
+STALE_EDIT = "El registro cambió después de abrir esta página. Es necesario recargarla para revisar los cambios antes de guardar."
 STALE_PREVIEW = "Los datos cambiaron desde la previsualización. Revise nuevamente antes de confirmar."
 
 

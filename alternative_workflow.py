@@ -114,14 +114,14 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
     note = (analysis_note or "").strip() or None
     if proposal_kind == "EXISTING":
         if proposed_existing_alternative_id is None:
-            raise AlternativeWorkflowError("Debe seleccionar una alternative existente.")
+            raise AlternativeWorkflowError("Seleccione una alternativa existente.")
         if resolved_concept is None or not _valid_alternative(connection, int(proposed_existing_alternative_id), resolved_concept):
             raise AlternativeWorkflowError("La alternative no pertenece al contexto conceptual vigente.")
     elif proposed_existing_alternative_id is not None:
         raise AlternativeWorkflowError("Solo EXISTING puede proponer una alternative existente.")
     answer = (phonological_relation_answer or "").upper() or None
     if proposal_kind == "NEW" and answer not in ("YES", "NO", "UNSURE"):
-        raise AlternativeWorkflowError("Debe responder sobre la relación fonológica.")
+        raise AlternativeWorkflowError("La respuesta sobre la relación fonológica es obligatoria.")
     if proposal_kind == "UNSURE" and note is None:
         raise AlternativeWorkflowError("Una propuesta incierta exige una nota de análisis.")
     if proposal_kind == "NEW" and morphology is None:
@@ -241,11 +241,11 @@ def _resolve_concept(connection, submission, resolution):
     elif action == "reject":
         concept_id = (resolution or {}).get("concept_id")
         if connection.execute("SELECT 1 FROM concept WHERE concept_id=?", (concept_id,)).fetchone() is None:
-            raise AlternativeWorkflowError("Al rechazar la proposal debe elegir un concept canónico para aceptar el análisis.")
+            raise AlternativeWorkflowError("Para aceptar el análisis tras rechazar la propuesta conceptual, es necesario seleccionar un concepto canónico.")
         connection.execute("UPDATE concept_proposal SET status='rejected',resolved_concept_id=NULL,resolved_at=CURRENT_TIMESTAMP WHERE concept_proposal_id=? AND status='pending'", (proposal_id,))
         return int(concept_id)
     else:
-        raise AlternativeWorkflowError("Debe resolver la concept proposal antes de aceptar.")
+        raise AlternativeWorkflowError("La propuesta de concepto debe estar resuelta antes de aceptar el análisis.")
     connection.execute("UPDATE concept_proposal SET status='resolved',resolved_concept_id=?,resolved_at=CURRENT_TIMESTAMP WHERE concept_proposal_id=? AND status='pending'", (concept_id, proposal_id))
     return int(concept_id)
 

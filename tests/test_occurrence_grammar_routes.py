@@ -289,7 +289,7 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
         page=self.client.get("/aportes/pendientes").get_data(as_text=True)
         self.assertIn("DECISIÓN DEL REVISOR",page)
         self.assertIn("Restablecer propuesta del analista",page)
-        self.assertIn("Has modificado la propuesta original del analista.",page)
+        self.assertIn("Se ha modificado la propuesta original del analista.",page)
         self.assertIn('name="reviewed_gender"',page)
         self.assertIn('value="MASC-O" selected',page)
         self.assertIn('data-has-uncertainty="1"',page)
@@ -379,7 +379,7 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
     def test_grammar_forms_include_spanish_validation_messages(self):
         page=self.client.get("/ocurrencias/1/gramatica").get_data(as_text=True)
         self.assertIn(
-            "Debe explicar en la nota por qué marcó uno o más campos con duda.",
+            "Cuando se marcan uno o más campos con duda, la nota del analista debe explicar el motivo.",
             page,
         )
 
@@ -397,7 +397,7 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
 
         page=self.client.get("/aportes/pendientes").get_data(as_text=True)
         self.assertIn(
-            "Debe responder la nota del analista para resolver la duda antes de aceptar.",
+            "Para aceptar la propuesta, es necesario responder la nota del analista y resolver la duda.",
             page,
         )
         self.assertNotIn(

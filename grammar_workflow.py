@@ -39,7 +39,7 @@ def create_grammar_submission(connection, occurrence_id, values, *, submitted_by
     legacy = {field: current[field] for field in FIELDS} if current else {}
     marks = validate_grammatical_marks(values, legacy)
     if not any(marks.values()):
-        raise GrammarWorkflowError("Debe proponer al menos un campo gramatical.")
+        raise GrammarWorkflowError("La propuesta debe incluir al menos un campo gramatical.")
     flags = {}
     for field in FIELDS:
         flag = 1 if str(values.get(field + "_uncertain", "")).lower() in ("1", "true", "on", "yes") else 0
@@ -48,7 +48,7 @@ def create_grammar_submission(connection, occurrence_id, values, *, submitted_by
         flags[field] = flag
     note=(values.get("note") or "").strip() or None
     if any(flags.values()) and note is None:
-        raise GrammarWorkflowError("Si marca un campo con duda, debe explicar la duda en la nota del analista.")
+        raise GrammarWorkflowError("Cuando se marcan uno o más campos con duda, la nota del analista debe explicar el motivo.")
     name="create_grammar_submission";owns=_transaction(connection,name)
     try:
         cursor = connection.execute(
@@ -97,7 +97,7 @@ def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_
         has_uncertainty=any(bool(row[field+"_uncertain"]) for field in FIELDS)
         if decision == "rejected":
             if review_note is None:
-                raise GrammarWorkflowError("Debe explicar el rechazo en la respuesta del revisor.")
+                raise GrammarWorkflowError("La respuesta del revisor debe explicar el rechazo.")
         else:
             if reviewed_values is None:
                 final_values=dict(original_values)
@@ -108,10 +108,10 @@ def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_
             changed_fields=[field for field in FIELDS if final_values[field] != original_values[field]]
             if (has_uncertainty or changed_fields) and review_note is None:
                 if has_uncertainty and changed_fields:
-                    raise GrammarWorkflowError("Debe responder la duda del analista y explicar los cambios realizados antes de aceptar.")
+                    raise GrammarWorkflowError("Para aceptar la propuesta, es necesario responder la duda del analista y explicar los cambios realizados.")
                 if has_uncertainty:
-                    raise GrammarWorkflowError("La propuesta contiene campos marcados con duda. Debe responder la nota del analista antes de aceptar.")
-                raise GrammarWorkflowError("Ha modificado la propuesta del analista. Debe explicar los cambios antes de aceptar.")
+                    raise GrammarWorkflowError("La propuesta contiene campos marcados con duda. Para aceptarla, es necesario responder la nota del analista.")
+                raise GrammarWorkflowError("El resultado de la revisión difiere de la propuesta del analista. Para aceptarlo, es necesario explicar los cambios.")
             kwargs=dict(final_values)
             kwargs.update({field+"_uncertain":0 for field in FIELDS})
             create_or_replace_occurrence_grammar(

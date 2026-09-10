@@ -131,7 +131,7 @@ def retire_preview(connection, alternative_id, resolutions=None):
     source = _active(connection, alternative_id); occurrences = _occurrences(connection, alternative_id)
     resolutions = {int(k): (None if v in (None, "", "unassigned") else int(v)) for k, v in (resolutions or {}).items()}
     if occurrences and {row["occurrence_id"] for row in occurrences} != set(resolutions):
-        raise StructuralAlternativeError("Debe indicar un destino para cada ocurrencia.")
+        raise StructuralAlternativeError("Indique un destino para cada ocurrencia.")
     for destination in (item for item in resolutions.values() if item is not None):
         row = _active(connection, destination)
         if row["concept_id"] != source["concept_id"] or destination == alternative_id:
@@ -177,7 +177,7 @@ def apply_retire(connection, alternative_id, resolutions, *, reason, actor, expe
 def merge_preview(connection, source_id, target_id, relation_mode):
     source=_active(connection,source_id); target=_active(connection,target_id)
     if source_id==target_id or source["concept_id"]!=target["concept_id"]: raise StructuralAlternativeError("La fusiÃ³n exige dos alternativas distintas y vigentes del mismo concepto.")
-    if relation_mode not in ("keep_target","union"): raise StructuralAlternativeError("Debe elegir cÃ³mo resolver las relaciones.")
+    if relation_mode not in ("keep_target","union"): raise StructuralAlternativeError("Seleccione cómo resolver las relaciones.")
     occurrences=_occurrences(connection,source_id); source_relations=_relations(connection,source_id)
     def operation():
         for row in occurrences:create_or_replace_assignment(connection,row["occurrence_id"],target_id)
