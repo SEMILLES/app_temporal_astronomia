@@ -80,14 +80,15 @@ class AlternativeRouteTests(unittest.TestCase):
         db=self.connect();self.assertEqual(db.execute("SELECT count(*) FROM alternative").fetchone()[0],1);self.assertEqual(db.execute("SELECT count(*) FROM concept_proposal").fetchone()[0],0)
         self.assertEqual(tuple(db.execute("SELECT component_alternative_id,note FROM alternative_submission_component").fetchone()),(None,"Forma dudosa por revisar"));db.close()
 
-    def test_new_reviewer_progressive_decision_morphology_default_and_nomenclature_copy(self):
+    def test_new_reviewer_explicit_morphology_and_nomenclature_copy(self):
         db=self.connect();db.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=1");db.commit();db.close()
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"})
         self.resolve_pending_concepts()
         page=self.client.get("/aportes/pendientes").get_data(as_text=True)
         self.assertIn("Aceptar la propuesta del analista: crear nueva alternativa",page)
         self.assertIn('class="new-decision-controls" hidden',page);self.assertIn('class="existing-decision-controls" hidden',page)
-        self.assertIn('name="approve_morphology" value="yes" checked',page)
+        self.assertIn('name="morphology_resolution" value="pending" checked',page)
+        self.assertNotIn('name="approve_morphology"',page)
         self.assertIn("Las etiquetas de las alternativas existentes no cambian. La nueva alternativa se creará como TEST-2a.",page)
         self.assertIn("TEST-1a — 1 ocurrencia",page);self.assertNotIn("1 ocurrencias",page)
         for text in ("Estado","= Sin cambio","+ Nueva","0 alternativas existentes cambian. Se creará 1 alternativa nueva."):
@@ -129,7 +130,7 @@ class AlternativeRouteTests(unittest.TestCase):
         response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","record_morphology":"yes","morphology_component_count":"2","free_permutation":"SIN INFORMACIÓN","morphology_note":"Synthetic morphology","record_components":"yes","component_position":["1","2"],"component_type":["existing","unapproved"],"component_alternative_id":["1",""],"component_note":["Known","FREE"]});self.assertEqual(response.status_code,302)
         db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];self.assertEqual(db.execute("SELECT component_count FROM alternative_submission_morphology WHERE submission_id=?",(sid,)).fetchone()[0],2);db.close()
         self.resolve_pending_concepts()
-        review=self.client.get("/aportes/pendientes").get_data(as_text=True);self.assertIn("Morfología propuesta por el analista",review);self.assertIn("Crear la alternativa y revisar la morfología después",review);self.assertIn("Usar la morfología propuesta",review)
+        review=self.client.get("/aportes/pendientes").get_data(as_text=True);self.assertIn("Morfología propuesta por el analista",review);self.assertIn("Rechazar morfología propuesta",review);self.assertIn("Aceptar morfología propuesta",review)
         response=self.review_post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","approve_morphology":"yes","nomenclature_mode":"automatic"});self.assertEqual(response.status_code,302)
         db=self.connect();row=db.execute("SELECT m.created_from_submission_id,count(c.alternative_component_id) FROM alternative_morphology m LEFT JOIN alternative_component c USING(alternative_morphology_id) WHERE m.is_current=1 GROUP BY m.alternative_morphology_id").fetchone();self.assertEqual(tuple(row),(sid,2));db.close()
 

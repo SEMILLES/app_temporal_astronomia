@@ -1,0 +1,53 @@
+<script>
+document.querySelectorAll('.review-decision').forEach(form=>{
+    const existing=form.querySelector('.existing-decision-controls'),
+          creation=form.querySelector('.new-decision-controls'),
+          target=form.querySelector('[name=alternative_id]'),
+          mode=form.querySelector('[name=nomenclature_mode]'),
+          note=form.querySelector('[name=review_note]'),
+          validation=form.querySelector('.lexical-validation'),
+          groups=[...form.querySelectorAll('.group-decision')];
+    const selected=name=>form.querySelector('[name="'+name+'"]:checked')?.value;
+    function refresh(){
+        const action=selected('decision'), isNew=action==='new',
+              isExisting=['existing','existing_proposed'].includes(action);
+        existing.hidden=action!=='existing';
+        target.disabled=existing.hidden; target.required=!existing.hidden;
+        creation.hidden=!isNew; creation.querySelector('fieldset').disabled=!isNew;
+        groups.forEach(group=>{
+            group.hidden=!(isNew||isExisting); group.disabled=group.hidden;
+            const accept=group.querySelector('.accept-group'), radio=accept.querySelector('input');
+            accept.hidden=!isNew; radio.disabled=!isNew;
+            if(!isNew&&radio.checked) group.querySelector('[value=pending]').checked=true;
+            group.querySelector('.existing-group-warning').hidden=!isExisting;
+        });
+        const relations=selected('relations_resolution')||'NOT_PROPOSED';
+        let visible=false;
+        form.querySelectorAll('.lexical-preview').forEach(preview=>{
+            preview.hidden=!isNew||preview.dataset.resolution!==relations;
+            visible=visible||!preview.hidden;
+        });
+        form.querySelector('.preview-pending').hidden=visible;
+        const editable=mode.value!=='automatic';
+        form.querySelectorAll('.nomenclature-label').forEach(input=>input.readOnly=!editable);
+        const destination=action==='existing_proposed'?form.dataset.proposed:target.value;
+        const rejectedGroup=groups.some(group=>!group.disabled&&group.querySelector('[value=REJECTED]').checked);
+        note.required=!!action&&action!=='pending'&&(action==='rejected'||form.dataset.kind==='UNSURE'||
+            (form.dataset.kind==='NEW'&&isExisting)||
+            (form.dataset.kind==='EXISTING'&&(isNew||(isExisting&&destination!==form.dataset.proposed)))||
+            rejectedGroup||(isNew&&editable)||
+            (form.dataset.assignment&&(isNew||(isExisting&&destination!==form.dataset.assignment))));
+        form.querySelector('.lexical-note-help').textContent=note.required?
+            'Nota de revisión obligatoria: explique el cambio o rechazo. El backend también valida los conflictos actuales.':
+            'Nota opcional al aceptar sin cambios; los conflictos actuales pueden exigir una explicación al cerrar.';
+        validation.hidden=true;
+    }
+    form.addEventListener('change',refresh);
+    form.addEventListener('submit',event=>{
+        if(groups.some(group=>!group.disabled&&group.querySelector('[value=pending]').checked)){
+            event.preventDefault(); validation.textContent='Resuelva cada grupo propuesto o elija Dejar pendiente como decisión principal. No se ha aplicado ningún cambio.'; validation.hidden=false;
+        }
+    });
+    refresh();
+});
+</script>

@@ -96,7 +96,7 @@ class ComponentAndConceptUXTests(unittest.TestCase):
 
         for path in ('/aportes/pendientes', '/aportes/1'):
             html = self.client.get(path).get_data(as_text=True)
-            self.assertIn('Alternativa existente: TEST-1a (ID 1)', html)
+            self.assertIn('Referencia actual de alternativa existente: TEST-1a (ID 1)', html)
             self.assertIn(
                 'Componente por revisar &mdash; DUDA &lt;test&gt;',
                 html,

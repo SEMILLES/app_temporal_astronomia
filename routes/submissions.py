@@ -1,3 +1,4 @@
+from submission_lexical_decision import get_decision
 from submission_concept_resolution import save_resolution, current_resolution, resolution_history
 from edit_concurrency import edit_token, StaleEdit
 import sqlite3
@@ -295,16 +296,27 @@ def _alternative_review_context(db, rows):
         """,(row["submission_id"],)).fetchall()
         assignment=db.execute("""SELECT a.alternative_id,al.working_label,c.preferred_label FROM assignment a JOIN alternative al USING(alternative_id) JOIN concept c USING(concept_id) WHERE a.occurrence_id=? AND a.is_current=1""",(row["occurrence_id"],)).fetchone()
         pending=db.execute("""SELECT s.submission_id,o.original_gloss FROM submission s JOIN alternative_submission a USING(submission_id) JOIN occurrence o USING(occurrence_id) WHERE s.status='pending' AND s.submission_type='ALTERNATIVE' AND a.proposal_kind='NEW' AND s.submission_id!=? AND (a.reference_concept_id=? OR a.reference_concept_proposal_id=?)""",(row["submission_id"],row["reference_concept_id"],row["reference_concept_proposal_id"])).fetchall()
-        preview=None
-        if concept_id:
+        previews={}
+        if concept_id and row['status']=='pending':
+            previews['REJECTED' if relations else 'NOT_PROPOSED']=calculate_nomenclature_preview(
+                db,concept_id,virtual_occurrences={'new':row['occurrence_id']})
             edges=[]
             for relation in relations:
                 target=relation["target_alternative_id"] or relation["target_resolved_alternative_id"]
-                if target: edges.append(("new",target))
-            preview=calculate_nomenclature_preview(
-                db,concept_id,extra_edges=edges,
-                virtual_occurrences={"new":row["occurrence_id"]},
-            )
+                valid=db.execute('SELECT 1 FROM alternative WHERE alternative_id=? AND concept_id=? AND retired_at IS NULL',(target,concept_id)).fetchone()
+                if not valid or (relation['target_submission_id'] and relation['target_submission_status']!='resolved'):
+                    break
+                edges.append(('new',target))
+            else:
+                if relations:
+                    previews['ACCEPTED']=calculate_nomenclature_preview(
+                        db,concept_id,extra_edges=edges,virtual_occurrences={'new':row['occurrence_id']})
+        lexical_decision=get_decision(db,row['submission_id'])
+        result_current=None
+        morphology_result=None
+        if lexical_decision:
+            result_current=db.execute('SELECT a.*,c.preferred_label FROM alternative a JOIN concept c USING(concept_id) WHERE alternative_id=?',(lexical_decision['resolved_alternative_id'],)).fetchone()
+            morphology_result=db.execute('SELECT * FROM alternative_morphology WHERE alternative_morphology_id=?',(lexical_decision['morphology_result_id'],)).fetchone()
         morphology=submission_morphology(db,row["submission_id"])
         if morphology:
             components = []
@@ -314,7 +326,7 @@ def _alternative_review_context(db, rows):
                 item["display_label"] = alternative_display_label(label["preferred_label"], label["working_label"]) if label else None
                 components.append(item)
             morphology = morphology[0], components
-        result[row["submission_id"]]=dict(proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),concept_edit_token=edit_token(db,"submission_concept",row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_preview=preview,proposed_morphology=morphology)
+        result[row["submission_id"]]=dict(proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),concept_edit_token=edit_token(db,"submission_concept",row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_previews=previews,lexical_decision=lexical_decision,result_current=result_current,morphology_result=morphology_result,proposed_morphology=morphology)
     return result
 
 
@@ -369,6 +381,8 @@ def decidir_aporte(submission_id):
             )
             if decision=="accepted":run_normal_review(db,operation,request.form.get("review_note"))
             else:operation(db)
+        elif decision == "pending":
+            return redirect(url_for('submissions.detalle_aporte',submission_id=submission_id))
         elif decision == "rejected":
             reject_alternative_submission(db,submission_id,reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
         else:
@@ -383,7 +397,7 @@ def decidir_aporte(submission_id):
             elif decision == "new":
                 labels={key[6:]:value for key,value in request.form.items() if key.startswith("label_")}
                 before_events=db.execute("SELECT count(*) FROM renumber_change").fetchone()[0]
-                new_id=run_normal_review(db,lambda connection: review_as_new(connection,submission_id,concept_resolution=concept_resolution,approve_relations=(request.form.get("approve_relations")=="yes" if "approve_relations" in request.form else None),relations_resolution=request.form.get("relations_resolution"),morphology_resolution=request.form.get("morphology_resolution"),nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=(request.form.get("approve_morphology")=="yes" if "approve_morphology" in request.form else None),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
+                new_id=run_normal_review(db,lambda connection: review_as_new(connection,submission_id,concept_resolution=concept_resolution,approve_relations=(request.form.get("approve_relations")=="yes" if "approve_relations" in request.form else None),relations_resolution=request.form.get("relations_resolution"),morphology_resolution=request.form.get("morphology_resolution"),nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason") or request.form.get("review_note"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=(request.form.get("approve_morphology")=="yes" if "approve_morphology" in request.form else None),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
                 created=db.execute("SELECT c.preferred_label,a.working_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.alternative_id=?",(new_id,)).fetchone()
                 changes=db.execute("SELECT count(*) FROM renumber_change").fetchone()[0]-before_events
                 created_message=f"Nueva alternativa creada como {alternative_display_label(created['preferred_label'],created['working_label'])}. Se actualizaron {changes} etiquetas del concepto {created['preferred_label']}."

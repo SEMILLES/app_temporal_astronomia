@@ -114,15 +114,19 @@ class Phase9UIPolishTests(unittest.TestCase):
     def test_human_grammar_versions_and_aportes_context_labels(self):
         grammar = (ROOT / "templates" / "gramatica_ocurrencia.html").read_text(encoding="utf-8")
         detail = (ROOT / "templates" / "revision_aportes.html").read_text(encoding="utf-8")
+        detail += ''.join((ROOT / 'templates' / name).read_text(encoding='utf-8') for name in (
+            '_submission_lexical_proposal.html', '_submission_concept_resolution.html',
+            '_submission_lexical_review.html', '_submission_lexical_history.html',
+        ))
         listing = (ROOT / "templates" / "aportes.html").read_text(encoding="utf-8")
         self.assertIn("Versión vigente", grammar)
         self.assertIn("history|length - loop.index0", grammar)
         self.assertNotIn("occurrence_grammar_id", grammar)
         for label in (
-            "Contexto al crear el aporte", "Propuesta del analista",
-            "Resolución final", "Clasificación vigente actual",
+            "Propuesta del analista", "RESOLUCIÓN DEL CONCEPTO",
+            "RESULTADO HISTÓRICO AL DECIDIR", "CLASIFICACIÓN VIGENTE ACTUAL",
         ):
-            self.assertIn(label, detail)
+            self.assertIn(f'<h2>{label}</h2>', detail)
         for heading in ("Concepto", "Alternativa", "Resolución"):
             self.assertIn(f"<th>{heading}</th>", listing)
 
