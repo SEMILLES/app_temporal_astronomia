@@ -360,5 +360,49 @@ class ImmediateAcceptanceRouteTests(unittest.TestCase):
         db.close()
 
 
+    def test_explicit_lexical_groups_preview_confirm_and_omission(self):
+        self.role = 'reviewer'
+        data = {'proposal_kind': 'NEW', 'phonological_relation_answer': 'YES',
+                'relation_target_type': 'alternative', 'relation_target_id': '1',
+                'relation_parameter': 'CM_1', 'morphology_component_count': 'N/A',
+                'canonical_decision': 'new', 'collaborator_id': '1',
+                'review_note': 'Reviewed', 'confirm_immediate': 'yes'}
+        base = '/ocurrencias/1/clasificar/aceptacion-inmediata/'
+        for endpoint in ('preview', 'confirmar'):
+            for groups in ({}, {'relations_resolution': 'ACCEPTED'},
+                           {'morphology_resolution': 'ACCEPTED'}):
+                with self.subTest(endpoint=endpoint, groups=groups):
+                    response = self.client.post(base + endpoint, data=dict(data, **groups))
+                    self.assertEqual(400, response.status_code)
+                    db = self.connect()
+                    self.assertEqual(0, db.execute('SELECT count(*) FROM submission').fetchone()[0])
+                    db.close()
+        data.update(relations_resolution='ACCEPTED', morphology_resolution='ACCEPTED')
+        self.assertEqual(200, self.client.post(base + 'preview', data=data).status_code)
+        db = self.connect()
+        self.assertEqual(0, db.execute('SELECT count(*) FROM submission').fetchone()[0])
+        db.close()
+        self.assertEqual(302, self.client.post(base + 'confirmar', data=data).status_code)
+        db = self.connect()
+        self.assertEqual(('CREATE_NEW', 'ACCEPTED', 'ACCEPTED', 'CREATED'), tuple(db.execute(
+            'SELECT decision_action,relations_resolution,morphology_resolution,assignment_effect FROM submission_lexical_decision').fetchone()))
+        db.close()
+
+    def test_new_to_existing_requires_explicit_rejection_and_note(self):
+        self.role = 'master'
+        data = {'proposal_kind': 'NEW', 'phonological_relation_answer': 'NO',
+                'morphology_component_count': 'N/A', 'canonical_decision': 'existing',
+                'canonical_alternative_id': '1', 'collaborator_id': '1',
+                'morphology_resolution': 'REJECTED', 'confirm_immediate': 'yes'}
+        url = '/ocurrencias/1/clasificar/aceptacion-inmediata/confirmar'
+        self.assertEqual(400, self.client.post(url, data=data).status_code)
+        self.assertEqual(302, self.client.post(url, data=dict(data, review_note='Use shared form')).status_code)
+        db = self.connect()
+        self.assertEqual(('USE_EXISTING', 'NOT_PROPOSED', 'REJECTED'), tuple(db.execute(
+            'SELECT decision_action,relations_resolution,morphology_resolution FROM submission_lexical_decision').fetchone()))
+        self.assertEqual(0, db.execute('SELECT count(*) FROM alternative_morphology').fetchone()[0])
+        db.close()
+
+
 if __name__ == "__main__":
     unittest.main()

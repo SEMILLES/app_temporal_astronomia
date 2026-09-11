@@ -97,7 +97,7 @@ def _alternative_payload(form):
 
 def _alternative_decision(form):
     action=form.get("concept_resolution_action");concept_resolution={"action":action,"concept_id":form.get("resolved_concept_id") or None,"label":form.get("new_concept_label") or None} if action else None
-    return {"decision":form.get("canonical_decision"),"alternative_id":form.get("canonical_alternative_id") or form.get("proposed_existing_alternative_id"),"relation_policy":form.get("relation_policy","preserve"),"concept_resolution":concept_resolution,"approve_relations":form.get("approve_relations")=="yes","approve_morphology":form.get("approve_morphology")=="yes","nomenclature_mode":form.get("nomenclature_mode","automatic"),"labels":{key[6:]:value for key,value in form.items() if key.startswith("label_")},"nomenclature_reason":form.get("nomenclature_reason")}
+    return {"decision":form.get("canonical_decision"),"alternative_id":form.get("canonical_alternative_id") or form.get("proposed_existing_alternative_id"),"relation_policy":form.get("relation_policy","preserve"),"concept_resolution":concept_resolution,"relations_resolution":form.get("relations_resolution"),"morphology_resolution":form.get("morphology_resolution"),"approve_relations":(form.get("approve_relations")=="yes" if "approve_relations" in form else None),"approve_morphology":(form.get("approve_morphology")=="yes" if "approve_morphology" in form else None),"nomenclature_mode":form.get("nomenclature_mode","automatic"),"labels":{key[6:]:value for key,value in form.items() if key.startswith("label_")},"nomenclature_reason":form.get("nomenclature_reason")}
 
 
 def _actor(form):return {"collaborator_id":form.get("collaborator_id"),"access_role":getattr(g,"current_access_role",None)}
