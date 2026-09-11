@@ -255,6 +255,16 @@ class FinalLexicalWorkflowTests(unittest.TestCase):
         self.assertEqual(1,row['assignment_before_id'])
         self.assertNotEqual(1,row['assignment_result_id'])
 
+    def test_existing_proposal_can_replace_current_assignment_without_note(self):
+        sid=self.create(occurrence=2,kind='EXISTING',proposed_existing_alternative_id=1)
+        review_as_existing(self.db,sid,1,access_role='reviewer')
+        row=self.decision(sid)
+        self.assertEqual('REPLACED',row['assignment_effect'])
+        self.assertEqual((2,1),tuple(self.db.execute(
+            'SELECT assignment_before_id,alternative_id FROM assignment '
+            'JOIN submission_lexical_decision ON assignment_id=assignment_result_id '
+            'WHERE submission_id=?',(sid,)).fetchone()))
+
     def test_new_and_unsure_require_note(self):
         for kind,oid in [('NEW',5),('UNSURE',1)]:
             sid=self.create(occurrence=oid,kind=kind,phonological_relation_answer='NO',analysis_note='Duda')

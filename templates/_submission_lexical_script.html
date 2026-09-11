@@ -35,8 +35,7 @@ document.querySelectorAll('.review-decision').forEach(form=>{
         note.required=!!action&&action!=='pending'&&(action==='rejected'||form.dataset.kind==='UNSURE'||
             (form.dataset.kind==='NEW'&&isExisting)||
             (form.dataset.kind==='EXISTING'&&(isNew||(isExisting&&destination!==form.dataset.proposed)))||
-            rejectedGroup||(isNew&&editable)||
-            (form.dataset.assignment&&(isNew||(isExisting&&destination!==form.dataset.assignment))));
+            rejectedGroup||(isNew&&editable));
         form.querySelector('.lexical-note-help').textContent=note.required?
             'Nota de revisión obligatoria: explique el cambio o rechazo. El backend también valida los conflictos actuales.':
             'Nota opcional al aceptar sin cambios; los conflictos actuales pueden exigir una explicación al cerrar.';
