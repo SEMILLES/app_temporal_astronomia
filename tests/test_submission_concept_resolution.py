@@ -132,6 +132,35 @@ class LocalConceptTests(unittest.TestCase):
         self.assertEqual('NUEVO-CONCEPTO',current_resolution(self.db,self.a)['preferred_label'])
         self.assertEqual('pending',self.db.execute('SELECT status FROM concept_proposal').fetchone()[0])
 
+    def test_accept_proposal_creates_or_reuses_normalized_concept_locally(self):
+        for label, action in [('nuevo concepto', 'CREATE_NEW'), (' Nuevo--Concepto ', 'USE_EXISTING')]:
+            with self.subTest(action=action):
+                self.db.execute('UPDATE concept_proposal SET proposed_label=?', (label,))
+                self.db.commit()
+                proposal = tuple(self.db.execute('SELECT * FROM concept_proposal').fetchone())
+                assignments = [tuple(r) for r in self.db.execute('SELECT * FROM assignment')]
+                self.save(action='ACCEPT_PROPOSAL', concept_id=2, label='IGNORADO')
+                resolution = current_resolution(self.db, self.a)
+                self.assertEqual(action, resolution['resolution_action'])
+                self.assertEqual('NUEVO-CONCEPTO', resolution['preferred_label'])
+                self.assertIsNone(resolution['resolution_note'])
+                self.assertEqual(3, self.db.execute('SELECT count(*) FROM concept').fetchone()[0])
+                self.assertEqual(proposal, tuple(self.db.execute('SELECT * FROM concept_proposal').fetchone()))
+                self.assertEqual(assignments, [tuple(r) for r in self.db.execute('SELECT * FROM assignment')])
+                self.assertIsNone(current_resolution(self.db, self.b))
+                self.assertEqual('pending', self.db.execute('SELECT status FROM submission WHERE submission_id=?', (self.a,)).fetchone()[0])
+        self.assertEqual([1,0], [r['is_current'] for r in resolution_history(self.db,self.a)])
+
+    def test_accept_proposal_requires_proposal_and_preserves_change_note_rule(self):
+        self.save(concept_id=2,note='Corrección')
+        before=self.snapshot()
+        with self.assertRaises(ConceptResolutionError): self.save(action='ACCEPT_PROPOSAL')
+        self.assertEqual(before,self.snapshot())
+        self.save(action='ACCEPT_PROPOSAL',note='Volver a la propuesta original')
+        self.db.execute('UPDATE alternative_submission SET reference_concept_proposal_id=NULL,reference_concept_id=1 WHERE submission_id=?',(self.a,))
+        self.db.commit()
+        with self.assertRaises(ConceptResolutionError): self.save(action='ACCEPT_PROPOSAL')
+
     def test_direct_confirmation_and_future_submission_not_approved(self):
         self.save(concept_id=1)
         reject_alternative_submission(self.db,self.a)
@@ -195,13 +224,29 @@ class LocalConceptTests(unittest.TestCase):
         client=app.test_client()
         with patch('routes.submissions.conectar',lambda: self.connect()):
             page=client.get(f'/aportes/{self.a}').get_data(as_text=True)
+            self.assertIn('Aceptar el concepto propuesto por el analista',page)
+            self.assertIn('value="ACCEPT_PROPOSAL" selected',page)
+            self.assertIn('data-concept-action="USE_EXISTING" hidden',page)
+            self.assertIn('data-concept-action="CREATE_NEW" hidden',page)
+            self.assertIn('<fieldset disabled><legend>Resolución del resto del análisis',page)
             token=hidden(page,'concept_edit_token')
-            form={'concept_edit_token':token,'concept_action':'USE_EXISTING','concept_id':'1'}
+            form={'concept_edit_token':token,'concept_action':'ACCEPT_PROPOSAL'}
             role[0]='analyst'
             self.assertEqual(404,client.post(f'/aportes/{self.a}/concepto',data=form).status_code)
             role[0]='reviewer'
             self.assertEqual(302,client.post(f'/aportes/{self.a}/concepto',data=form).status_code)
             self.assertEqual(409,client.post(f'/aportes/{self.a}/concepto',data=form).status_code)
+            page=client.get(f'/aportes/{self.a}').get_data(as_text=True)
+            self.assertIn('Estado: Resuelto',page)
+            self.assertIn('<details class="concept-resolution-editor"><summary>Modificar resolución</summary>',page)
+            self.assertIn('value="USE_EXISTING" selected',page)
+            self.assertIn('<option value="1" selected>X</option>',page)
+            self.assertIn('Concepto resuelto. Ya es posible continuar con la decisión sobre la alternativa.',page)
+            self.assertIn('<fieldset><legend>Resolución del resto del análisis',page)
+            form={'concept_edit_token':hidden(page,'concept_edit_token'),'concept_action':'USE_EXISTING','concept_id':'2','concept_note':'Corrección'}
+            self.assertEqual(302,client.post(f'/aportes/{self.a}/concepto',data=form).status_code)
+            self.assertEqual([1,0],[r['is_current'] for r in resolution_history(self.db,self.a)])
+            self.assertEqual(2,current_resolution(self.db,self.a)['concept_id'])
             self.assertEqual(302,client.post(f'/aportes/{self.a}/decidir',data={'decision':'rejected'}).status_code)
             page=client.get(f'/aportes/{self.a}').get_data(as_text=True)
             self.assertIn('Concepto resuelto para esta revisión',page)

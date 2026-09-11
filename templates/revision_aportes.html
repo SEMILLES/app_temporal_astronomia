@@ -235,7 +235,7 @@ automáticamente la propuesta original con el resultado de la revisión.
 {% if aporte['resolved_alternative_id'] %}<p>Alternativa resultante: ID {{ aporte['resolved_alternative_id'] }}. Denominación actual: {{ aporte['resolved_concept_label'] | alternative_display_label(aporte['resolved_working_label']) }}.</p>{% endif %}
 {% if aporte['review_note'] %}<p>Nota de revisión: {{ aporte['review_note'] }}</p>{% endif %}
 {% if aporte['status']=='pending' %}<form class="review-decision" method="post" action="{{ url_for('submissions.decidir_aporte',submission_id=aporte['submission_id']) }}"><h2>DECISIÓN DEL REVISOR</h2>
-{% if not ctx['concept_resolution'] %}<p>Es necesario guardar la resolución del concepto antes de resolver el resto del análisis.</p>{% endif %}
+{% if not ctx['concept_resolution'] %}<p>Concepto pendiente. Es necesario guardar la resolución del concepto antes de resolver el resto del análisis.</p>{% else %}<p>Concepto resuelto. Ya es posible continuar con la decisión sobre la alternativa.</p>{% endif %}
 <fieldset{% if not ctx['concept_resolution'] %} disabled{% endif %}><legend>Resolución del resto del análisis</legend>
 <fieldset><legend>Decisión principal</legend>
 {% if aporte['proposal_kind']=='NEW' %}<label><input type="radio" name="decision" value="new" required> Aceptar la propuesta del analista: crear nueva alternativa</label>

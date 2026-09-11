@@ -2,7 +2,7 @@
 import json
 
 from activity import record_activity, resolve_collaborator
-from concept_labels import normalize_concept_label
+from concept_labels import InvalidConceptLabel, normalize_concept_label
 from edit_concurrency import check_edit
 
 
@@ -59,6 +59,21 @@ def require_concept(connection, submission_id):
     return row['concept_id']
 
 
+def proposed_concept_decision(connection, submission):
+    """Translate proposal acceptance within the caller's resolution transaction."""
+    if not submission['reference_concept_proposal_id']:
+        raise ConceptResolutionError('La propuesta original no contiene una propuesta conceptual.')
+    label = normalize_concept_label(submission['proposed_label'])
+    for concept in connection.execute('SELECT concept_id,preferred_label FROM concept ORDER BY concept_id'):
+        try:
+            equivalent = normalize_concept_label(concept['preferred_label']) == label
+        except InvalidConceptLabel:
+            continue
+        if equivalent:
+            return 'USE_EXISTING', concept['concept_id'], label
+    return 'CREATE_NEW', None, label
+
+
 def save_resolution(connection, submission_id, action, *, concept_id=None,
                     label=None, note=None, collaborator_id=None,
                     access_role, expected_edit_token=None):
@@ -79,6 +94,8 @@ def save_resolution(connection, submission_id, action, *, concept_id=None,
             raise ConceptResolutionError('El aporte léxico debe estar pendiente.')
         previous = current_resolution(connection, submission_id)
         note = (note or '').strip() or None
+        if action == 'ACCEPT_PROPOSAL':
+            action, concept_id, label = proposed_concept_decision(connection, submission)
         if action == 'CONFIRM_REFERENCE':
             concept_id = submission['reference_concept_id']
             if concept_id is None:

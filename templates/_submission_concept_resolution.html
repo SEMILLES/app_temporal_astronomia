@@ -6,21 +6,45 @@
 {% else %}Sin referencia conceptual original registrada.{% endif %}</p>
 {% if ctx['concept_resolution'] %}
 <p><strong>Concepto resuelto para esta revisión:</strong> {{ ctx['concept_resolution']['preferred_label'] }}</p>
+<p><strong>Estado: Resuelto</strong></p>
 <p>Nota de resolución: {{ ctx['concept_resolution']['resolution_note'] or 'Sin nota adicional.' }}</p>
 <details><summary>Historial de resoluciones conceptuales</summary>
 <ul>{% for resolution in ctx['concept_history'] %}<li>#{{ resolution['submission_concept_resolution_id'] }} · {{ resolution['preferred_label'] }} · {{ 'Vigente' if resolution['is_current'] else 'Histórica' }} · {{ resolution['created_at'] }} · {{ resolution['collaborator_name_snapshot'] or 'Sin colaborador identificado' }} · {{ resolution['resolution_note'] or 'Sin nota adicional.' }}</li>{% endfor %}</ul></details>
-{% elif aporte['status']=='pending' %}<p>Concepto pendiente para este aporte.</p>
+{% elif aporte['status']=='pending' %}<p>Concepto pendiente.</p>
 {% else %}<p>No existe resolución conceptual local registrada para este aporte histórico.</p>{% endif %}
 {% if aporte['status']=='pending' %}
-<form method="post" action="{{ url_for('submissions.resolver_concepto_aporte',submission_id=aporte['submission_id']) }}">
+{% set resolution = ctx['concept_resolution'] %}
+{% set selected_action = ('CONFIRM_REFERENCE' if resolution['resolution_action']=='CONFIRM_REFERENCE' else 'USE_EXISTING') if resolution else ('ACCEPT_PROPOSAL' if aporte['reference_concept_proposal_id'] else 'CONFIRM_REFERENCE' if aporte['reference_concept_id'] else 'USE_EXISTING') %}
+{% if resolution %}<details class="concept-resolution-editor"><summary>Modificar resolución</summary>{% endif %}
+<form class="concept-resolution-form" method="post" action="{{ url_for('submissions.resolver_concepto_aporte',submission_id=aporte['submission_id']) }}">
 <input type="hidden" name="concept_edit_token" value="{{ ctx['concept_edit_token'] }}">
 <label>Acción <select name="concept_action" required>
-{% if aporte['reference_concept_id'] %}<option value="CONFIRM_REFERENCE">Confirmar el concepto de referencia original</option>{% endif %}
-<option value="USE_EXISTING">Usar un concepto existente</option><option value="CREATE_NEW">Crear un concepto nuevo</option></select></label>
-<label>Concepto existente <select name="concept_id"><option value="">Seleccione</option>{% for concept in ctx['concepts'] %}<option value="{{ concept['concept_id'] }}">{{ concept['preferred_label'] }}</option>{% endfor %}</select></label>
-<label>Nombre del nuevo concepto <input name="concept_label"></label>
-<label>Nota de resolución conceptual <textarea name="concept_note"></textarea></label>
+{% if aporte['reference_concept_proposal_id'] %}<option value="ACCEPT_PROPOSAL"{% if selected_action=='ACCEPT_PROPOSAL' %} selected{% endif %}>Aceptar el concepto propuesto por el analista</option>{% endif %}
+{% if aporte['reference_concept_id'] %}<option value="CONFIRM_REFERENCE"{% if selected_action=='CONFIRM_REFERENCE' %} selected{% endif %}>Confirmar el concepto de referencia original</option>{% endif %}
+<option value="USE_EXISTING"{% if selected_action=='USE_EXISTING' %} selected{% endif %}>Asociar a un concepto existente</option><option value="CREATE_NEW">Crear otro concepto</option></select></label>
+<label data-concept-action="USE_EXISTING"{% if selected_action!='USE_EXISTING' %} hidden{% endif %}>Concepto existente <select name="concept_id"{% if selected_action!='USE_EXISTING' %} disabled{% else %} required{% endif %}><option value="">Seleccione</option>{% for concept in ctx['concepts'] %}<option value="{{ concept['concept_id'] }}"{% if resolution and resolution['concept_id']==concept['concept_id'] %} selected{% endif %}>{{ concept['preferred_label'] }}</option>{% endfor %}</select></label>
+<label data-concept-action="CREATE_NEW" hidden>Nombre del nuevo concepto <input name="concept_label" disabled></label>
+<label>Nota de resolución conceptual <textarea name="concept_note">{{ (resolution['resolution_note'] or '') if resolution else '' }}</textarea></label>
 <p>Cuando la resolución difiere de la referencia o propuesta original, se requiere una explicación. Guardar esta resolución mantiene el aporte pendiente y conserva la clasificación vigente.</p>
 <button type="submit">Guardar resolución del concepto</button>
-</form>{% endif %}
+</form>
+{% if resolution %}</details>{% endif %}
+<script>
+(function () {
+    const previous = document.currentScript.previousElementSibling;
+    const form = previous.matches('form') ? previous : previous.querySelector('form');
+    const action = form.elements.concept_action;
+    function updateFields() {
+        form.querySelectorAll('[data-concept-action]').forEach(function (field) {
+            const active = field.dataset.conceptAction === action.value;
+            field.hidden = !active;
+            const input = field.querySelector('select, input');
+            input.disabled = !active;
+            input.required = active;
+        });
+    }
+    action.addEventListener('change', updateFields);
+    updateFields();
+})();
+</script>{% endif %}
 </section>
