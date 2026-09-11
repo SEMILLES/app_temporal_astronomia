@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, g
 
 import database
 from concept_labels import alternative_display_label, human_concept_label
@@ -22,6 +22,9 @@ class AlternativeRouteTests(unittest.TestCase):
             oid=db.execute("INSERT INTO occurrence(source_id,original_gloss,occurrence_year) VALUES(1,?,?)",(gloss,year)).lastrowid; db.execute("INSERT INTO occurrence_concept_reference(occurrence_id,concept_id) VALUES(?,1)",(oid,))
         db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1')"); db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,1)"); db.commit(); db.close()
         app=Flask(__name__,template_folder=str(ROOT/"templates")); app.testing=True; app.jinja_env.filters.update(human_concept_label=human_concept_label,alternative_display_label=alternative_display_label); app.register_blueprint(occurrences_bp); app.register_blueprint(submissions_bp); self.client=app.test_client()
+        @app.before_request
+        def reviewer_context():
+            g.current_access_role='reviewer'
     def tearDown(self): database.BASE_DATOS=self.old; self.tmp.cleanup()
     def connect(self): db=sqlite3.connect(self.path);db.row_factory=sqlite3.Row;db.execute("PRAGMA foreign_keys=ON");return db
 
@@ -111,14 +114,14 @@ class AlternativeRouteTests(unittest.TestCase):
 
     def test_route_review_existing_materializes_assignment(self):
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"UNSURE","analysis_note":"Revisar"}); db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];db.close()
-        response=self.review_post(f"/aportes/{sid}/decidir",data={"decision":"existing","alternative_id":"1","relation_policy":"preserve"}); self.assertEqual(response.status_code,302)
+        response=self.review_post(f"/aportes/{sid}/decidir",data={"decision":"existing","alternative_id":"1","relation_policy":"preserve","review_note":"Resolver la incertidumbre"}); self.assertEqual(response.status_code,302)
         db=self.connect();self.assertEqual(db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0],1);db.close()
 
     def test_route_review_new_auto_and_legacy_detail_read_only(self):
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"});db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];db.close()
         self.resolve_pending_concepts()
         review=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("Propuesta: nueva alternativa",review); self.assertIn("PREVIEW DE CAMBIOS",review); self.assertIn("DECISIÓN DEL REVISOR",review)
-        self.assertEqual(self.review_post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","nomenclature_mode":"automatic"}).status_code,302)
+        self.assertEqual(self.review_post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","approve_morphology":"yes","nomenclature_mode":"automatic"}).status_code,302)
         db=self.connect();self.assertEqual(db.execute("SELECT count(*) FROM alternative").fetchone()[0],2);snapshot=tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone());db.close()
         self.assertEqual(self.client.get(f"/aportes/{sid}").status_code,200);db=self.connect();self.assertEqual(tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()),snapshot);db.close()
 
@@ -129,6 +132,31 @@ class AlternativeRouteTests(unittest.TestCase):
         review=self.client.get("/aportes/pendientes").get_data(as_text=True);self.assertIn("Morfología propuesta por el analista",review);self.assertIn("Crear la alternativa y revisar la morfología después",review);self.assertIn("Usar la morfología propuesta",review)
         response=self.review_post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","approve_morphology":"yes","nomenclature_mode":"automatic"});self.assertEqual(response.status_code,302)
         db=self.connect();row=db.execute("SELECT m.created_from_submission_id,count(c.alternative_component_id) FROM alternative_morphology m LEFT JOIN alternative_component c USING(alternative_morphology_id) WHERE m.is_current=1 GROUP BY m.alternative_morphology_id").fetchone();self.assertEqual(tuple(row),(sid,2));db.close()
+
+    def test_existing_requires_and_forwards_explicit_group_decision(self):
+        self.client.post('/ocurrencias/2/clasificar',data={'proposal_kind':'NEW','phonological_relation_answer':'NO','morphology_component_count':'N/A'})
+        db=self.connect();sid=db.execute('SELECT submission_id FROM submission').fetchone()[0];db.close()
+        form={'decision':'existing','alternative_id':'1','review_note':'Conservar morfolog?a del destino'}
+        self.assertEqual(400,self.review_post(f'/aportes/{sid}/decidir',data=form).status_code)
+        db=self.connect()
+        self.assertEqual('pending',db.execute('SELECT status FROM submission WHERE submission_id=?',(sid,)).fetchone()[0])
+        self.assertEqual(0,db.execute('SELECT count(*) FROM assignment WHERE occurrence_id=2').fetchone()[0]);db.close()
+        form['morphology_resolution']='REJECTED'
+        self.assertEqual(302,self.review_post(f'/aportes/{sid}/decidir',data=form).status_code)
+        db=self.connect()
+        self.assertEqual('REJECTED',db.execute('SELECT morphology_resolution FROM submission_lexical_decision WHERE submission_id=?',(sid,)).fetchone()[0]);db.close()
+
+    def test_new_group_decisions_are_explicit_through_normal_route(self):
+        self.client.post('/ocurrencias/2/clasificar',data={'proposal_kind':'NEW','phonological_relation_answer':'NO','morphology_component_count':'N/A'})
+        db=self.connect();sid=db.execute('SELECT submission_id FROM submission').fetchone()[0];db.close()
+        path=f'/aportes/{sid}/decidir'
+        self.assertEqual(400,self.review_post(path,data={'decision':'new'}).status_code)
+        db=self.connect()
+        self.assertEqual(1,db.execute('SELECT count(*) FROM alternative').fetchone()[0])
+        self.assertEqual('pending',db.execute('SELECT status FROM submission').fetchone()[0]);db.close()
+        self.assertEqual(302,self.review_post(path,data={'decision':'new','morphology_resolution':'ACCEPTED'}).status_code)
+        db=self.connect()
+        self.assertEqual(('CREATE_NEW','ACCEPTED'),tuple(db.execute('SELECT decision_action,morphology_resolution FROM submission_lexical_decision').fetchone()));db.close()
 
 
 if __name__=="__main__": unittest.main()

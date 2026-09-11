@@ -17,6 +17,8 @@ from phonological_parameters import validate_phonological_parameter
 from alternative_morphology import store_submission_morphology,materialize_submission_morphology
 from activity import record_activity
 from conflicts import detect_conflicts_after_change
+from submission_concept_resolution import current_resolution
+from submission_lexical_decision import save_decision, LexicalDecisionError
 
 
 class AlternativeWorkflowError(ValueError):
@@ -268,36 +270,102 @@ def _resolve_submission(connection, submission_id, alternative_id, reviewer, not
     connection.execute("""UPDATE submission SET status='resolved',resolution='accepted',resolved_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE submission_id=?""", (reviewer, (note or "").strip() or None, submission_id))
 
 
+def _current_assignment_id(connection, occurrence_id):
+    row = connection.execute(
+        'SELECT assignment_id FROM assignment WHERE occurrence_id=? AND is_current=1',
+        (occurrence_id,)).fetchone()
+    return row[0] if row else None
+
+
+def _rejected_group(connection, submission_id, table, decision=None, *, reject_rest=False):
+    proposed = connection.execute(
+        f'SELECT 1 FROM {table} WHERE submission_id=?', (submission_id,)).fetchone()
+    expected = 'REJECTED' if proposed else 'NOT_PROPOSED'
+    if reject_rest or (not proposed and decision is None):
+        return expected
+    if decision != expected:
+        raise AlternativeWorkflowError(
+            'Resuelva explícitamente los grupos propuestos como REJECTED antes de aceptar una alternativa existente.')
+    return expected
+
+
 def review_as_existing(connection, submission_id, alternative_id, *,
                        concept_resolution=None, relation_policy="preserve",
                        reviewed_by=None, review_note=None, collaborator_id=None,
-                       access_role=None):
+                       access_role=None, relations_resolution=None, morphology_resolution=None):
     name="review_alternative_existing"; owns=_transaction(connection,name)
     try:
         submission=_submission(connection,submission_id); concept_id=_resolve_concept(connection,submission,concept_resolution)
         if not _valid_alternative(connection,int(alternative_id),concept_id):
             raise AlternativeWorkflowError("La alternative seleccionada no pertenece al concept resuelto o está retirada.")
-        if relation_policy not in ("preserve","union"):
-            raise AlternativeWorkflowError("Política de relaciones no válida.")
-        if relation_policy == "union": _materialize_relations(connection,int(alternative_id),submission_id)
-        create_or_replace_assignment(connection,submission["occurrence_id"],int(alternative_id),created_by=reviewed_by,created_from_submission_id=submission_id)
+        if relation_policy != "preserve":
+            raise AlternativeWorkflowError("USE_EXISTING no permite union ni modificar relaciones del destino.")
+        relations_resolution = _rejected_group(connection, submission_id,
+            'alternative_submission_relation', relations_resolution)
+        morphology_resolution = _rejected_group(connection, submission_id,
+            'alternative_submission_morphology', morphology_resolution)
+        before = _current_assignment_id(connection, submission['occurrence_id'])
+        conflict_before = connection.execute('SELECT coalesce(max(conflict_id),0) FROM conflict').fetchone()[0]
+        result, changed = create_or_replace_assignment(connection,submission["occurrence_id"],int(alternative_id),created_by=reviewed_by,created_from_submission_id=submission_id)
+        save_decision(connection, submission_id, 'USE_EXISTING',
+            concept_resolution_id=current_resolution(connection, submission_id)['submission_concept_resolution_id'],
+            resolved_alternative_id=int(alternative_id), assignment_before_id=before,
+            assignment_result_id=result,
+            assignment_effect='CREATED' if before is None else ('REPLACED' if changed else 'REUSED'),
+            relations_resolution=relations_resolution, morphology_resolution=morphology_resolution,
+            collaborator_id=collaborator_id, access_role=access_role, review_note=review_note)
         _resolve_submission(connection,submission_id,int(alternative_id),reviewed_by,review_note)
         if access_role:
             record_activity(connection,"assignment_created_or_replaced",entity_type="occurrence",entity_id=submission["occurrence_id"],collaborator_id=collaborator_id,access_role=access_role)
             record_activity(connection,"alternative_submission_accepted",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)
         detect_conflicts_after_change(connection,"submission",submission_id,
             actor_context={"collaborator_id":collaborator_id,"access_role":access_role})
+        if not (review_note or '').strip() and connection.execute(
+                "SELECT 1 FROM conflict WHERE conflict_id>? AND severity='blocking'", (conflict_before,)).fetchone():
+            raise AlternativeWorkflowError('La aprobación genera conflictos bloqueantes; explique la decisión en la nota de revisión.')
         _finish(connection,name,owns); return int(alternative_id)
+    except LexicalDecisionError as error:
+        _rollback(connection,name,owns)
+        raise AlternativeWorkflowError(str(error)) from error
     except Exception: _rollback(connection,name,owns); raise
 
 
+def _new_group_resolution(connection, submission_id, table, decision, approval):
+    """Keep explicit boolean callers compatible; omission never rejects a group."""
+    proposed = connection.execute(
+        f'SELECT 1 FROM {table} WHERE submission_id=?', (submission_id,)).fetchone()
+    if approval is not None and not isinstance(approval, bool):
+        raise AlternativeWorkflowError('La aprobación del grupo no es válida.')
+    if not proposed:
+        if decision not in (None, 'NOT_PROPOSED') or approval is True:
+            raise AlternativeWorkflowError('No existe propuesta para ese grupo.')
+        return 'NOT_PROPOSED'
+    boolean_decision = None if approval is None else ('ACCEPTED' if approval else 'REJECTED')
+    if decision is None:
+        decision = boolean_decision
+    elif boolean_decision is not None and decision != boolean_decision:
+        raise AlternativeWorkflowError('Las decisiones del grupo son contradictorias.')
+    if decision not in ('ACCEPTED', 'REJECTED'):
+        raise AlternativeWorkflowError('Resuelva explícitamente cada grupo propuesto como ACCEPTED o REJECTED.')
+    return decision
+
+
 def review_as_new(connection, submission_id, *, concept_resolution=None,
-                  approve_relations=False, nomenclature_mode="automatic",
+                  approve_relations=None, nomenclature_mode="automatic",
                   labels=None, reason=None, reviewed_by=None, review_note=None,
-                  approve_morphology=False, collaborator_id=None, access_role=None):
+                  approve_morphology=None, collaborator_id=None, access_role=None,
+                  relations_resolution=None, morphology_resolution=None):
     name="review_alternative_new"; owns=_transaction(connection,name)
     try:
         submission=_submission(connection,submission_id); concept_id=_resolve_concept(connection,submission,concept_resolution)
+        relations_resolution = _new_group_resolution(connection, submission_id,
+            'alternative_submission_relation', relations_resolution, approve_relations)
+        morphology_resolution = _new_group_resolution(connection, submission_id,
+            'alternative_submission_morphology', morphology_resolution, approve_morphology)
+        approve_relations = relations_resolution == 'ACCEPTED'
+        approve_morphology = morphology_resolution == 'ACCEPTED'
+        before = _current_assignment_id(connection, submission['occurrence_id'])
+        conflict_before = connection.execute('SELECT coalesce(max(conflict_id),0) FROM conflict').fetchone()[0]
         new_id=connection.execute("INSERT INTO alternative(concept_id,working_label) VALUES(?,NULL)",(concept_id,)).lastrowid
         targets=_relation_targets(connection,submission_id) if approve_relations else []
         edges=[(new_id,target) for target,_ in targets if target != new_id]
@@ -317,11 +385,19 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
         else: raise InvalidNomenclatureError("Modo de nomenclatura no válido.")
         renumber_id=apply_nomenclature(connection,concept_id,final,origin=origin,reason=event_reason,submission_id=submission_id,created_by=reviewed_by,required_edges=edges)
         if approve_relations: _materialize_relations(connection,new_id,submission_id)
-        create_or_replace_assignment(connection,submission["occurrence_id"],new_id,created_by=reviewed_by,created_from_submission_id=submission_id)
+        result, _ = create_or_replace_assignment(connection,submission["occurrence_id"],new_id,created_by=reviewed_by,created_from_submission_id=submission_id)
+        morphology_id = None
         if approve_morphology:
-            materialize_submission_morphology(
+            morphology_id, _ = materialize_submission_morphology(
                 connection, submission_id, new_id, created_by=reviewed_by
             )
+        save_decision(connection, submission_id, 'CREATE_NEW',
+            concept_resolution_id=current_resolution(connection, submission_id)['submission_concept_resolution_id'],
+            resolved_alternative_id=new_id, assignment_before_id=before,
+            assignment_result_id=result, assignment_effect='CREATED' if before is None else 'REPLACED',
+            relations_resolution=relations_resolution, morphology_resolution=morphology_resolution,
+            morphology_result_id=morphology_id, collaborator_id=collaborator_id,
+            access_role=access_role, review_note=review_note)
         _resolve_submission(connection,submission_id,new_id,reviewed_by,review_note)
         if access_role:
             record_activity(connection,"alternative_created",entity_type="alternative",entity_id=new_id,collaborator_id=collaborator_id,access_role=access_role)
@@ -335,7 +411,13 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
             actor_context={"collaborator_id":collaborator_id,"access_role":access_role})
         detect_conflicts_after_change(connection,"alternative",new_id,
             actor_context={"collaborator_id":collaborator_id,"access_role":access_role})
+        if not (review_note or '').strip() and connection.execute(
+                "SELECT 1 FROM conflict WHERE conflict_id>? AND severity='blocking'", (conflict_before,)).fetchone():
+            raise AlternativeWorkflowError('La aprobación genera conflictos bloqueantes; explique la decisión en la nota de revisión.')
         _finish(connection,name,owns); return new_id
+    except LexicalDecisionError as error:
+        _rollback(connection,name,owns)
+        raise AlternativeWorkflowError(str(error)) from error
     except Exception: _rollback(connection,name,owns); raise
 
 
@@ -345,7 +427,18 @@ def reject_alternative_submission(connection, submission_id, *, reviewed_by=None
     try:
         submission = _submission(connection,submission_id)
         _resolve_concept(connection, submission)
+        before = _current_assignment_id(connection, submission['occurrence_id'])
+        save_decision(connection, submission_id, 'REJECT_REST',
+            concept_resolution_id=current_resolution(connection, submission_id)['submission_concept_resolution_id'],
+            assignment_before_id=before, assignment_result_id=before, assignment_effect='UNCHANGED',
+            relations_resolution=_rejected_group(connection, submission_id, 'alternative_submission_relation', reject_rest=True),
+            morphology_resolution=_rejected_group(connection, submission_id, 'alternative_submission_morphology', reject_rest=True),
+            collaborator_id=collaborator_id, access_role=access_role, review_note=review_note)
+        connection.execute('UPDATE alternative_submission SET resolved_alternative_id=NULL WHERE submission_id=?', (submission_id,))
         connection.execute("UPDATE submission SET status='resolved',resolution='rejected',resolved_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE submission_id=?",(reviewed_by,(review_note or "").strip() or None,submission_id))
         if access_role: record_activity(connection,"alternative_submission_rejected",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)
         _finish(connection,name,owns)
+    except LexicalDecisionError as error:
+        _rollback(connection,name,owns)
+        raise AlternativeWorkflowError(str(error)) from error
     except Exception: _rollback(connection,name,owns); raise

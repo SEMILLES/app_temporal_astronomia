@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from flask import Flask
+from flask import Flask, g
 
 import database
 from concept_labels import alternative_display_label, human_concept_label
@@ -31,6 +31,9 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
         app = Flask(__name__, template_folder=str(ROOT/"templates")); app.testing=True
         app.jinja_env.filters.update(human_concept_label=human_concept_label, alternative_display_label=alternative_display_label)
         app.register_blueprint(occurrences_bp); app.register_blueprint(submissions_bp)
+        @app.before_request
+        def reviewer_context():
+            g.current_access_role="reviewer"
         self.client=app.test_client()
 
     def tearDown(self): database.BASE_DATOS=self.previous; self.tmp.cleanup()
@@ -272,7 +275,7 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
         page=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("Propuesta del analista",page); self.assertIn("DECISIÓN DEL REVISOR",page)
         db=self.connect(); canonical_before=tuple(db.execute("SELECT count(*) FROM alternative").fetchone())+tuple(db.execute("SELECT count(*) FROM assignment").fetchone()); db.close()
         db=self.connect(); save_resolution(db,sid,"CONFIRM_REFERENCE",access_role="reviewer"); db.close()
-        self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"rejected"}).status_code,302)
+        self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"rejected","review_note":"Resto rechazado"}).status_code,302)
         db=self.connect(); row=db.execute("SELECT status,resolution FROM submission WHERE submission_id=?",(sid,)).fetchone(); canonical_after=tuple(db.execute("SELECT count(*) FROM alternative").fetchone())+tuple(db.execute("SELECT count(*) FROM assignment").fetchone()); db.close()
         self.assertEqual(tuple(row),("resolved","rejected")); self.assertEqual(canonical_after,canonical_before)
 

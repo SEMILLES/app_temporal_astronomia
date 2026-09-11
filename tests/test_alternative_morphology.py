@@ -121,15 +121,15 @@ class MorphologyReviewTests(unittest.TestCase):
         sid=self.proposal();row,components=submission_morphology(self.db,sid);self.assertEqual(row["component_count"],2);self.assertEqual(len(components),2)
 
     def test_review_new_explicit_approve_creates_canonical_with_provenance(self):
-        sid=self.proposal();new=review_as_new(self.db,sid,approve_morphology=True,nomenclature_mode="automatic");row=self.db.execute("SELECT * FROM alternative_morphology WHERE alternative_id=? AND is_current=1",(new,)).fetchone();self.assertEqual((row["component_count"],row["created_from_submission_id"]),(2,sid));self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_component WHERE alternative_morphology_id=?",(row["alternative_morphology_id"],)).fetchone()[0],2)
+        sid=self.proposal();new=review_as_new(self.db,sid,approve_morphology=True,nomenclature_mode="automatic", access_role="reviewer", review_note="Revision documentada");row=self.db.execute("SELECT * FROM alternative_morphology WHERE alternative_id=? AND is_current=1",(new,)).fetchone();self.assertEqual((row["component_count"],row["created_from_submission_id"]),(2,sid));self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_component WHERE alternative_morphology_id=?",(row["alternative_morphology_id"],)).fetchone()[0],2)
 
-    def test_review_new_default_does_not_approve_but_history_remains(self):
-        sid=self.proposal();new=review_as_new(self.db,sid,nomenclature_mode="automatic");self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology WHERE alternative_id=?",(new,)).fetchone()[0],0);self.assertIsNotNone(submission_morphology(self.db,sid))
+    def test_review_new_explicit_rejection_does_not_materialize_but_history_remains(self):
+        sid=self.proposal();new=review_as_new(self.db,sid,nomenclature_mode="automatic", access_role="reviewer", morphology_resolution="REJECTED", review_note="Revision documentada");self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology WHERE alternative_id=?",(new,)).fetchone()[0],0);self.assertIsNotNone(submission_morphology(self.db,sid))
 
     def test_resolve_existing_and_reject_never_apply_proposal(self):
         existing,_=create_or_replace_alternative_morphology(self.db,1,component_count=1,note="Stable")
-        sid=self.proposal();review_as_existing(self.db,sid,1);self.assertEqual(self.db.execute("SELECT alternative_morphology_id FROM alternative_morphology WHERE alternative_id=1 AND is_current=1").fetchone()[0],existing);self.assertIsNotNone(submission_morphology(self.db,sid))
-        sid=self.proposal();reject_alternative_submission(self.db,sid);self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology").fetchone()[0],1);self.assertIsNotNone(submission_morphology(self.db,sid))
+        sid=self.proposal();review_as_existing(self.db,sid,1, access_role="reviewer", review_note="Revision documentada", morphology_resolution="REJECTED");self.assertEqual(self.db.execute("SELECT alternative_morphology_id FROM alternative_morphology WHERE alternative_id=1 AND is_current=1").fetchone()[0],existing);self.assertIsNotNone(submission_morphology(self.db,sid))
+        sid=self.proposal();reject_alternative_submission(self.db,sid, access_role="reviewer", review_note="Revision documentada");self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology").fetchone()[0],1);self.assertIsNotNone(submission_morphology(self.db,sid))
 
     def test_morphology_failure_rolls_back_lexical_review_but_preserves_concept_resolution(self):
         sid=create_alternative_submission(
@@ -183,7 +183,7 @@ class MorphologyReviewTests(unittest.TestCase):
                 approve_relations=True,
                 approve_morphology=True,
                 nomenclature_mode="automatic"
-            )
+            , access_role="reviewer", review_note="Revision documentada")
 
         self.assertEqual(
             {

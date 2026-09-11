@@ -34,7 +34,13 @@ class ImmediateAcceptanceTests(unittest.TestCase):
             confirm_operation(self.db,alternative_operation(2,proposal,decision,actor_context=self.actor))
         self.assertEqual(before,'\n'.join(self.db.iterdump()))
         decision['concept_resolution']={"action":"USE_EXISTING","concept_id":1}
-        result=confirm_operation(self.db,alternative_operation(2,proposal,decision,actor_context=self.actor))['result']
+        from alternative_workflow import AlternativeWorkflowError
+        with self.assertRaises(AlternativeWorkflowError):
+            confirm_operation(self.db,alternative_operation(2,proposal,decision,actor_context=self.actor))
+        self.assertEqual(before,'\n'.join(self.db.iterdump()))
+        # The unchanged immediate adapter cannot discard a proposed group implicitly.
+        proposal={'proposal_kind':'UNSURE','analysis_note':'Needs review'}
+        result=confirm_operation(self.db,alternative_operation(2,proposal,decision,actor_context=self.actor,review_note='Existing form confirmed'))['result']
         self.assertEqual(('rejected',None),tuple(self.db.execute('SELECT status,resolved_concept_id FROM concept_proposal').fetchone()))
         self.assertEqual(1,self.db.execute('SELECT concept_id FROM submission_concept_resolution WHERE submission_id=?',(result['submission_id'],)).fetchone()[0])
         self.assertEqual(1,self.db.execute('SELECT concept_proposal_id FROM occurrence_concept_reference WHERE occurrence_id=1 AND is_current=1').fetchone()[0])
@@ -57,11 +63,20 @@ class ImmediateAcceptanceTests(unittest.TestCase):
         result=confirm_operation(self.db,operation)["result"];sid=result["submission_id"]
         self.assertEqual(1,self.db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0]);self.assertEqual(1,self.db.execute("SELECT resolved_alternative_id FROM alternative_submission WHERE submission_id=?",(sid,)).fetchone()[0])
 
-    def test_new_nonblocking_pending_morphology_is_allowed(self):
+    def test_explicit_morphology_rejection_requires_note_and_is_not_pending(self):
+        from alternative_workflow import AlternativeWorkflowError
         proposal={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology":{"component_count":None,"component_count_not_applicable":True,"free_permutation":"N/A","components":[]}}
-        operation=alternative_operation(2,proposal,{"decision":"new","approve_morphology":False,"nomenclature_mode":"automatic"},actor_context=self.actor)
-        preview=preview_operation(self.db,operation);self.assertEqual([],preview["blocking"]);self.assertEqual(["PENDING_MORPHOLOGY"],[c["rule_code"] for c in preview["non_blocking"]]);self.assertEqual(0,self.db.execute("SELECT count(*) FROM submission").fetchone()[0])
-        result=confirm_operation(self.db,operation);self.assertEqual(["PENDING_MORPHOLOGY"],[c["rule_code"] for c in result["non_blocking"]]);self.assertEqual(1,self.db.execute("SELECT count(*) FROM conflict WHERE status='open'").fetchone()[0])
+        decision={"decision":"new","approve_morphology":False,"nomenclature_mode":"automatic"}
+        operation=alternative_operation(2,proposal,decision,actor_context=self.actor)
+        before='\n'.join(self.db.iterdump())
+        with self.assertRaises(AlternativeWorkflowError):preview_operation(self.db,operation)
+        self.assertEqual(before,'\n'.join(self.db.iterdump()))
+        operation=alternative_operation(2,proposal,decision,actor_context=self.actor,review_note='Morphology rejected')
+        preview=preview_operation(self.db,operation)
+        self.assertEqual([],preview['non_blocking']);self.assertEqual(before,'\n'.join(self.db.iterdump()))
+        result=confirm_operation(self.db,operation)
+        self.assertEqual([],result['non_blocking'])
+        self.assertEqual('REJECTED',self.db.execute('SELECT morphology_resolution FROM submission_lexical_decision').fetchone()[0])
 
     def test_new_can_materialize_morphology_and_unsure_requires_decision(self):
         proposal={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology":{"component_count":None,"component_count_not_applicable":True,"free_permutation":"N/A","components":[]}}

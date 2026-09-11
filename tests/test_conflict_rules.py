@@ -30,3 +30,8 @@ class ConflictRuleTests(unittest.TestCase):
         self.db.execute("INSERT INTO alternative_submission_morphology(submission_id,component_count,component_count_not_applicable,free_permutation) VALUES(1,NULL,1,'N/A')")
         self.assertIn("PENDING_MORPHOLOGY",self.codes())
         self.assertEqual("non_blocking",RULES["PENDING_MORPHOLOGY"].severity)
+
+    def test_historical_pending_morphology_without_021_table(self):
+        self.test_invalid_group_and_narrow_pending_morphology()
+        self.db.execute('DROP TABLE submission_lexical_decision')
+        self.assertIn('PENDING_MORPHOLOGY',self.codes())

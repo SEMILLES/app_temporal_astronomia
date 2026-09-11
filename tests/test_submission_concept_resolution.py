@@ -59,7 +59,7 @@ class LocalConceptTests(unittest.TestCase):
         self.assertEqual(proposal,tuple(self.db.execute('SELECT * FROM concept_proposal').fetchone()))
         self.assertEqual(original,[tuple(r) for r in self.db.execute('SELECT * FROM alternative_submission')])
         self.assertEqual(assignment,[tuple(r) for r in self.db.execute('SELECT * FROM assignment')])
-        review_as_existing(self.db,self.b,2)
+        review_as_existing(self.db,self.b,2, access_role="reviewer", review_note="Revision documentada", morphology_resolution="REJECTED")
         self.assertEqual(2,self.db.execute('SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1').fetchone()[0])
         self.assertEqual(1,self.db.execute('SELECT alternative_id FROM assignment WHERE occurrence_id=1 AND is_current=1').fetchone()[0])
 
@@ -82,14 +82,14 @@ class LocalConceptTests(unittest.TestCase):
     def test_reject_rest_retains_concept_and_assignment(self):
         self.save(concept_id=2,note='Corrección')
         assignments=[tuple(r) for r in self.db.execute('SELECT * FROM assignment')]
-        reject_alternative_submission(self.db,self.a)
+        reject_alternative_submission(self.db,self.a, access_role="reviewer", review_note="Revision documentada")
         self.assertEqual(2,current_resolution(self.db,self.a)['concept_id'])
         self.assertEqual(assignments,[tuple(r) for r in self.db.execute('SELECT * FROM assignment')])
         self.assertEqual(('resolved','rejected'),tuple(self.db.execute('SELECT status,resolution FROM submission WHERE submission_id=?',(self.a,)).fetchone()))
         with self.assertRaises(ConceptResolutionError): self.save(concept_id=1)
 
     def test_no_closure_or_inline_resolution_without_local_concept(self):
-        for operation in (lambda:review_as_existing(self.db,self.a,1),lambda:review_as_new(self.db,self.a),lambda:reject_alternative_submission(self.db,self.a),lambda:review_as_new(self.db,self.a,concept_resolution={'action':'new','label':'Z'})):
+        for operation in (lambda:review_as_existing(self.db,self.a,1, access_role="reviewer", review_note="Revision documentada", morphology_resolution="REJECTED"),lambda:review_as_new(self.db,self.a, access_role="reviewer", morphology_resolution="ACCEPTED", review_note="Revision documentada"),lambda:reject_alternative_submission(self.db,self.a, access_role="reviewer", review_note="Revision documentada"),lambda:review_as_new(self.db,self.a,concept_resolution={'action':'new','label':'Z'}, access_role="reviewer", morphology_resolution="ACCEPTED", review_note="Revision documentada")):
             before=self.snapshot()
             with self.assertRaises(ValueError): operation()
             self.assertEqual(before,self.snapshot())
@@ -100,8 +100,8 @@ class LocalConceptTests(unittest.TestCase):
         before=tuple(self.db.execute('SELECT * FROM concept_proposal').fetchone())
         self.save(action='CREATE_NEW',label='Z',note='Concepto distinto')
         cid=current_resolution(self.db,self.a)['concept_id']
-        with self.assertRaises(ValueError): review_as_existing(self.db,self.a,1)
-        aid=review_as_new(self.db,self.a)
+        with self.assertRaises(ValueError): review_as_existing(self.db,self.a,1, access_role="reviewer", review_note="Revision documentada", morphology_resolution="REJECTED")
+        aid=review_as_new(self.db,self.a, access_role="reviewer", morphology_resolution="ACCEPTED", review_note="Revision documentada")
         self.assertEqual(cid,self.db.execute('SELECT concept_id FROM alternative WHERE alternative_id=?',(aid,)).fetchone()[0])
         self.assertEqual(before,tuple(self.db.execute('SELECT * FROM concept_proposal').fetchone()))
 
@@ -109,7 +109,7 @@ class LocalConceptTests(unittest.TestCase):
         self.db.execute("UPDATE concept_proposal SET status='resolved',resolved_concept_id=1")
         self.db.commit()
         self.save(concept_id=2,note='Otro significado en esta ocurrencia')
-        review_as_existing(self.db,self.a,2)
+        review_as_existing(self.db,self.a,2, access_role="reviewer", review_note="Revision documentada", morphology_resolution="REJECTED")
         self.assertEqual(('resolved',1),tuple(self.db.execute('SELECT status,resolved_concept_id FROM concept_proposal').fetchone()))
         self.assertEqual(2,current_resolution(self.db,self.a)['concept_id'])
         self.assertIsNone(current_resolution(self.db,self.b))
@@ -212,7 +212,7 @@ class LocalConceptTests(unittest.TestCase):
 
     def test_direct_confirmation_and_future_submission_not_approved(self):
         self.save(concept_id=1)
-        reject_alternative_submission(self.db,self.a)
+        reject_alternative_submission(self.db,self.a, access_role="reviewer", review_note="Revision documentada")
         sid=self.create(1)
         self.assertIsNone(current_resolution(self.db,sid))
         original=tuple(self.db.execute('SELECT * FROM alternative_submission WHERE submission_id=?',(sid,)).fetchone())
@@ -224,7 +224,7 @@ class LocalConceptTests(unittest.TestCase):
         self.db.execute('UPDATE alternative_submission SET is_legacy=1,reference_concept_proposal_id=NULL WHERE submission_id=?',(self.a,))
         self.db.commit()
         self.save(concept_id=2,note='Identificación explícita')
-        review_as_existing(self.db,self.a,2)
+        review_as_existing(self.db,self.a,2, access_role="reviewer", review_note="Revision documentada", morphology_resolution="REJECTED")
         self.assertIsNone(self.db.execute('SELECT reference_concept_id FROM alternative_submission WHERE submission_id=?',(self.a,)).fetchone()[0])
 
     def test_atomic_rollback_outer_transaction_and_activity_failure(self):
@@ -296,7 +296,7 @@ class LocalConceptTests(unittest.TestCase):
             self.assertEqual(302,client.post(f'/aportes/{self.a}/concepto',data=form).status_code)
             self.assertEqual([1,0],[r['is_current'] for r in resolution_history(self.db,self.a)])
             self.assertEqual(2,current_resolution(self.db,self.a)['concept_id'])
-            self.assertEqual(302,client.post(f'/aportes/{self.a}/decidir',data={'decision':'rejected'}).status_code)
+            self.assertEqual(302,client.post(f'/aportes/{self.a}/decidir',data={'decision':'rejected','review_note':'Resto rechazado'}).status_code)
             page=client.get(f'/aportes/{self.a}').get_data(as_text=True)
             self.assertIn('Concepto resuelto para esta revisión',page)
             self.db.execute("UPDATE submission SET status='resolved',resolution='rejected' WHERE submission_id=?",(self.b,));self.db.commit()

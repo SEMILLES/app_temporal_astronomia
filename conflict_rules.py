@@ -106,6 +106,11 @@ def detect_invalid_phonological_group_labeling(connection, **scope):
 
 def detect_pending_morphology(connection, **scope):
     where="s.submission_type='ALTERNATIVE' AND s.status='resolved' AND s.resolution='accepted' AND aus.proposal_kind='NEW' AND asm.submission_id IS NOT NULL AND aus.resolved_alternative_id IS NOT NULL AND am.alternative_morphology_id IS NULL";params=[]
+    if connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='submission_lexical_decision'").fetchone():
+        where += """ AND NOT EXISTS (
+            SELECT 1 FROM submission_lexical_decision ld
+            WHERE ld.submission_id=s.submission_id
+              AND ld.morphology_resolution IN ('REJECTED','NOT_PROPOSED'))"""
     if scope.get("submission_id") is not None: where+=" AND s.submission_id=?";params.append(scope["submission_id"])
     if scope.get("alternative_id") is not None: where+=" AND aus.resolved_alternative_id=?";params.append(scope["alternative_id"])
     rows=connection.execute(f"""SELECT s.submission_id,aus.resolved_alternative_id FROM submission s

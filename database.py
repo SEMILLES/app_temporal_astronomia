@@ -34,6 +34,7 @@ REQUIRED_APPLICATION_TABLES = frozenset({
     "submission",
     "concept_proposal",
     "submission_concept_resolution",
+    "submission_lexical_decision",
     "occurrence_draft",
     "occurrence_concept_reference",
     "alternative_submission",
@@ -870,3 +871,5 @@ def crear_esquema(conexion):
     install(conexion)
     from submission_concept_resolution import install as install_concept_resolution
     install_concept_resolution(conexion)
+    from submission_lexical_decision import install as install_lexical_decision
+    install_lexical_decision(conexion)
