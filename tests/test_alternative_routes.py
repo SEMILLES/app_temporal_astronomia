@@ -1,3 +1,4 @@
+from submission_concept_resolution import save_resolution
 import sqlite3
 import tempfile
 import unittest
@@ -23,6 +24,19 @@ class AlternativeRouteTests(unittest.TestCase):
         app=Flask(__name__,template_folder=str(ROOT/"templates")); app.testing=True; app.jinja_env.filters.update(human_concept_label=human_concept_label,alternative_display_label=alternative_display_label); app.register_blueprint(occurrences_bp); app.register_blueprint(submissions_bp); self.client=app.test_client()
     def tearDown(self): database.BASE_DATOS=self.old; self.tmp.cleanup()
     def connect(self): db=sqlite3.connect(self.path);db.row_factory=sqlite3.Row;db.execute("PRAGMA foreign_keys=ON");return db
+
+    def resolve_pending_concepts(self):
+        db=self.connect()
+        for row in db.execute("SELECT s.submission_id FROM submission s LEFT JOIN submission_concept_resolution r ON r.submission_id=s.submission_id AND r.is_current=1 WHERE s.submission_type='ALTERNATIVE' AND s.status='pending' AND r.submission_id IS NULL").fetchall():
+            save_resolution(db,row[0],'CONFIRM_REFERENCE',access_role='reviewer')
+        db.close()
+
+    def review_post(self, path, **kwargs):
+        sid=int(path.split('/')[-2])
+        db=self.connect()
+        save_resolution(db,sid,'CONFIRM_REFERENCE',access_role='reviewer')
+        db.close()
+        return self.client.post(path,**kwargs)
 
     def test_analysis_page_shows_context_canonical_and_pending_proposals(self):
         self.client.post("/ocurrencias/3/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"})
@@ -66,6 +80,7 @@ class AlternativeRouteTests(unittest.TestCase):
     def test_new_reviewer_progressive_decision_morphology_default_and_nomenclature_copy(self):
         db=self.connect();db.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=1");db.commit();db.close()
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"})
+        self.resolve_pending_concepts()
         page=self.client.get("/aportes/pendientes").get_data(as_text=True)
         self.assertIn("Aceptar la propuesta del analista: crear nueva alternativa",page)
         self.assertIn('class="new-decision-controls" hidden',page);self.assertIn('class="existing-decision-controls" hidden',page)
@@ -81,12 +96,13 @@ class AlternativeRouteTests(unittest.TestCase):
     def test_existing_reviewer_decisions_and_changed_nomenclature_warning(self):
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"EXISTING","proposed_existing_alternative_id":"1"})
         db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];db.close()
+        self.resolve_pending_concepts()
         page=self.client.get("/aportes/pendientes").get_data(as_text=True)
-        for text in ("Aceptar la alternativa propuesta por el analista","Asignar a otra alternativa existente","Crear una nueva alternativa","Rechazar el aporte"):
+        for text in ("Aceptar la alternativa propuesta por el analista","Asignar a otra alternativa existente","Crear una nueva alternativa","Rechazar el resto del análisis"):
             self.assertIn(text,page)
         self.assertIn("Esta operación modificará la nomenclatura de 1 alternativa existente.",page)
         self.assertIn("↺ Cambia",page);self.assertIn("1 alternativa existente cambia. Se creará 1 alternativa nueva.",page)
-        self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"existing_proposed"}).status_code,302)
+        self.assertEqual(self.review_post(f"/aportes/{sid}/decidir",data={"decision":"existing_proposed"}).status_code,302)
         db=self.connect();self.assertEqual(db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0],1);db.close()
 
     def test_route_creates_existing_submission_not_assignment(self):
@@ -95,21 +111,23 @@ class AlternativeRouteTests(unittest.TestCase):
 
     def test_route_review_existing_materializes_assignment(self):
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"UNSURE","analysis_note":"Revisar"}); db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];db.close()
-        response=self.client.post(f"/aportes/{sid}/decidir",data={"decision":"existing","alternative_id":"1","relation_policy":"preserve"}); self.assertEqual(response.status_code,302)
+        response=self.review_post(f"/aportes/{sid}/decidir",data={"decision":"existing","alternative_id":"1","relation_policy":"preserve"}); self.assertEqual(response.status_code,302)
         db=self.connect();self.assertEqual(db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0],1);db.close()
 
     def test_route_review_new_auto_and_legacy_detail_read_only(self):
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"});db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];db.close()
+        self.resolve_pending_concepts()
         review=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("Propuesta: nueva alternativa",review); self.assertIn("PREVIEW DE CAMBIOS",review); self.assertIn("DECISIÓN DEL REVISOR",review)
-        self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","nomenclature_mode":"automatic"}).status_code,302)
+        self.assertEqual(self.review_post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","nomenclature_mode":"automatic"}).status_code,302)
         db=self.connect();self.assertEqual(db.execute("SELECT count(*) FROM alternative").fetchone()[0],2);snapshot=tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone());db.close()
         self.assertEqual(self.client.get(f"/aportes/{sid}").status_code,200);db=self.connect();self.assertEqual(tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()),snapshot);db.close()
 
     def test_route_captures_and_explicitly_approves_morphology(self):
         response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","record_morphology":"yes","morphology_component_count":"2","free_permutation":"SIN INFORMACIÓN","morphology_note":"Synthetic morphology","record_components":"yes","component_position":["1","2"],"component_type":["existing","unapproved"],"component_alternative_id":["1",""],"component_note":["Known","FREE"]});self.assertEqual(response.status_code,302)
         db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];self.assertEqual(db.execute("SELECT component_count FROM alternative_submission_morphology WHERE submission_id=?",(sid,)).fetchone()[0],2);db.close()
+        self.resolve_pending_concepts()
         review=self.client.get("/aportes/pendientes").get_data(as_text=True);self.assertIn("Morfología propuesta por el analista",review);self.assertIn("Crear la alternativa y revisar la morfología después",review);self.assertIn("Usar la morfología propuesta",review)
-        response=self.client.post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","approve_morphology":"yes","nomenclature_mode":"automatic"});self.assertEqual(response.status_code,302)
+        response=self.review_post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","approve_morphology":"yes","nomenclature_mode":"automatic"});self.assertEqual(response.status_code,302)
         db=self.connect();row=db.execute("SELECT m.created_from_submission_id,count(c.alternative_component_id) FROM alternative_morphology m LEFT JOIN alternative_component c USING(alternative_morphology_id) WHERE m.is_current=1 GROUP BY m.alternative_morphology_id").fetchone();self.assertEqual(tuple(row),(sid,2));db.close()
 
 

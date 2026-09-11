@@ -1,3 +1,4 @@
+from submission_concept_resolution import save_resolution
 from edit_concurrency import check_edit
 
 from alternative_workflow import (create_alternative_submission,
@@ -111,6 +112,16 @@ def alternative_operation(occurrence_id,proposal,decision,*,actor_context,review
         submission_id=create_alternative_submission(connection,occurrence_id,proposal["proposal_kind"],proposed_existing_alternative_id=proposal.get("proposed_existing_alternative_id"),phonological_relation_answer=proposal.get("phonological_relation_answer"),relations=proposal.get("relations",()),analysis_note=proposal.get("analysis_note"),submitted_by=reviewed_by,morphology=proposal.get("morphology"),collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
         canonical=decision.get("decision")
         concept_resolution=decision.get("concept_resolution")
+        reference = connection.execute("SELECT reference_concept_id FROM alternative_submission WHERE submission_id=?", (submission_id,)).fetchone()[0]
+        resolution = concept_resolution or ({"action":"CONFIRM_REFERENCE"} if reference is not None else {})
+        if not resolution:
+            raise ImmediateAcceptanceError("La propuesta conceptual requiere una resolución local explícita. Envíe el aporte a revisión.")
+        action = {"existing":"USE_EXISTING", "new":"CREATE_NEW"}.get(resolution.get("action"), resolution.get("action"))
+        save_resolution(connection, submission_id, action,
+            concept_id=resolution.get("concept_id"), label=resolution.get("label"),
+            note=resolution.get("note") or review_note,
+            collaborator_id=actor_context.get("collaborator_id"), access_role=actor_context.get("access_role"))
+        concept_resolution=None
         if canonical=="existing":
             alternative_id=review_as_existing(connection,submission_id,decision.get("alternative_id"),concept_resolution=concept_resolution,relation_policy=decision.get("relation_policy","preserve"),reviewed_by=reviewed_by,review_note=review_note,collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
         elif canonical=="new":

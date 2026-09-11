@@ -23,6 +23,22 @@ class ImmediateAcceptanceTests(unittest.TestCase):
         self.actor={"collaborator_id":1,"access_role":"reviewer"}
     def tearDown(self):self.db.close()
 
+    def test_shared_proposal_requires_local_decision_and_never_changes_global_state(self):
+        self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('C','rejected')")
+        self.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1")
+        self.db.commit()
+        proposal={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology":{"component_count_not_applicable":True}}
+        decision={"decision":"existing","alternative_id":1}
+        before='\n'.join(self.db.iterdump())
+        with self.assertRaises(ImmediateAcceptanceError):
+            confirm_operation(self.db,alternative_operation(2,proposal,decision,actor_context=self.actor))
+        self.assertEqual(before,'\n'.join(self.db.iterdump()))
+        decision['concept_resolution']={"action":"USE_EXISTING","concept_id":1}
+        result=confirm_operation(self.db,alternative_operation(2,proposal,decision,actor_context=self.actor))['result']
+        self.assertEqual(('rejected',None),tuple(self.db.execute('SELECT status,resolved_concept_id FROM concept_proposal').fetchone()))
+        self.assertEqual(1,self.db.execute('SELECT concept_id FROM submission_concept_resolution WHERE submission_id=?',(result['submission_id'],)).fetchone()[0])
+        self.assertEqual(1,self.db.execute('SELECT concept_proposal_id FROM occurrence_concept_reference WHERE occurrence_id=1 AND is_current=1').fetchone()[0])
+
     def counts(self):
         return tuple(self.db.execute(f"SELECT count(*) FROM {table}").fetchone()[0] for table in ("submission","occurrence_grammar","activity_event","conflict"))
 

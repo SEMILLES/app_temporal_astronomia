@@ -1,3 +1,4 @@
+from submission_concept_resolution import save_resolution
 from tests.form_client import FormClient
 import json
 import shutil
@@ -69,6 +70,7 @@ class WorkflowIntegrityTests(unittest.TestCase):
                     [1] + [None] * (count - 1),
                 )
 
+                save_resolution(db,sid,'CONFIRM_REFERENCE',access_role='reviewer')
                 db.close()
 
                 page = self.client.get(

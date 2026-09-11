@@ -13,7 +13,6 @@ from alternative_relations import (
     current_relation,
 )
 from assignments import create_or_replace_assignment
-from concept_labels import normalize_concept_label
 from phonological_parameters import validate_phonological_parameter
 from alternative_morphology import store_submission_morphology,materialize_submission_morphology
 from activity import record_activity
@@ -216,38 +215,14 @@ def _submission(connection, submission_id):
     return row
 
 
-def _resolve_concept(connection, submission, resolution):
-    direct = submission["reference_concept_id"]
-    proposal_id = submission["reference_concept_proposal_id"]
-    if direct is not None: return direct
-    if proposal_id is None:
-        selected = (resolution or {}).get("concept_id")
-        if selected is None or connection.execute("SELECT 1 FROM concept WHERE concept_id=?", (selected,)).fetchone() is None:
-            raise AlternativeWorkflowError("La submission legacy requiere un concept canónico explícito.")
-        connection.execute("UPDATE alternative_submission SET reference_concept_id=? WHERE submission_id=?", (selected, submission["submission_id"]))
-        return int(selected)
-    proposal = connection.execute("SELECT * FROM concept_proposal WHERE concept_proposal_id=?", (proposal_id,)).fetchone()
-    if proposal["status"] == "resolved": return proposal["resolved_concept_id"]
-    action = (resolution or {}).get("action")
-    if action == "existing":
-        concept_id = (resolution or {}).get("concept_id")
-        if connection.execute("SELECT 1 FROM concept WHERE concept_id=?", (concept_id,)).fetchone() is None:
-            raise AlternativeWorkflowError("El concept seleccionado no existe.")
-    elif action == "new":
-        label = normalize_concept_label((resolution or {}).get("label") or proposal["proposed_label"])
-        if connection.execute("SELECT 1 FROM concept WHERE preferred_label=?", (label,)).fetchone():
-            raise AlternativeWorkflowError("Ese concept ya existe; resuelva contra el existente.")
-        concept_id = connection.execute("INSERT INTO concept(preferred_label) VALUES(?)", (label,)).lastrowid
-    elif action == "reject":
-        concept_id = (resolution or {}).get("concept_id")
-        if connection.execute("SELECT 1 FROM concept WHERE concept_id=?", (concept_id,)).fetchone() is None:
-            raise AlternativeWorkflowError("Para aceptar el análisis tras rechazar la propuesta conceptual, es necesario seleccionar un concepto canónico.")
-        connection.execute("UPDATE concept_proposal SET status='rejected',resolved_concept_id=NULL,resolved_at=CURRENT_TIMESTAMP WHERE concept_proposal_id=? AND status='pending'", (proposal_id,))
-        return int(concept_id)
-    else:
-        raise AlternativeWorkflowError("La propuesta de concepto debe estar resuelta antes de aceptar el análisis.")
-    connection.execute("UPDATE concept_proposal SET status='resolved',resolved_concept_id=?,resolved_at=CURRENT_TIMESTAMP WHERE concept_proposal_id=? AND status='pending'", (concept_id, proposal_id))
-    return int(concept_id)
+def _resolve_concept(connection, submission, resolution=None):
+    from submission_concept_resolution import require_concept, ConceptResolutionError
+    if resolution:
+        raise AlternativeWorkflowError("Guarde la resolución del concepto mediante su acción independiente.")
+    try:
+        return require_concept(connection, submission["submission_id"])
+    except ConceptResolutionError as error:
+        raise AlternativeWorkflowError(str(error)) from error
 
 
 def _proposed_relations(connection, submission_id):
@@ -293,34 +268,13 @@ def _resolve_submission(connection, submission_id, alternative_id, reviewer, not
     connection.execute("""UPDATE submission SET status='resolved',resolution='accepted',resolved_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE submission_id=?""", (reviewer, (note or "").strip() or None, submission_id))
 
 
-def _proposal_is_pending(connection, submission):
-    proposal_id = submission["reference_concept_proposal_id"]
-    if proposal_id is None: return False
-    row = connection.execute("SELECT status FROM concept_proposal WHERE concept_proposal_id=?",(proposal_id,)).fetchone()
-    return row is not None and row[0] == "pending"
-
-
-def _record_concept_resolution(connection, submission, was_pending,
-                               collaborator_id, access_role):
-    proposal_id = submission["reference_concept_proposal_id"]
-    if access_role and was_pending and proposal_id is not None:
-        row = connection.execute(
-            "SELECT status FROM concept_proposal WHERE concept_proposal_id=?",
-            (proposal_id,),
-        ).fetchone()
-        if row is not None and row[0] != "pending":
-            record_activity(connection,"concept_proposal_resolved",
-                            entity_type="concept_proposal",entity_id=proposal_id,
-                            collaborator_id=collaborator_id,access_role=access_role)
-
-
 def review_as_existing(connection, submission_id, alternative_id, *,
                        concept_resolution=None, relation_policy="preserve",
                        reviewed_by=None, review_note=None, collaborator_id=None,
                        access_role=None):
     name="review_alternative_existing"; owns=_transaction(connection,name)
     try:
-        submission=_submission(connection,submission_id); proposal_was_pending=_proposal_is_pending(connection,submission); concept_id=_resolve_concept(connection,submission,concept_resolution)
+        submission=_submission(connection,submission_id); concept_id=_resolve_concept(connection,submission,concept_resolution)
         if not _valid_alternative(connection,int(alternative_id),concept_id):
             raise AlternativeWorkflowError("La alternative seleccionada no pertenece al concept resuelto o está retirada.")
         if relation_policy not in ("preserve","union"):
@@ -329,7 +283,6 @@ def review_as_existing(connection, submission_id, alternative_id, *,
         create_or_replace_assignment(connection,submission["occurrence_id"],int(alternative_id),created_by=reviewed_by,created_from_submission_id=submission_id)
         _resolve_submission(connection,submission_id,int(alternative_id),reviewed_by,review_note)
         if access_role:
-            _record_concept_resolution(connection,submission,proposal_was_pending,collaborator_id,access_role)
             record_activity(connection,"assignment_created_or_replaced",entity_type="occurrence",entity_id=submission["occurrence_id"],collaborator_id=collaborator_id,access_role=access_role)
             record_activity(connection,"alternative_submission_accepted",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)
         detect_conflicts_after_change(connection,"submission",submission_id,
@@ -344,7 +297,7 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
                   approve_morphology=False, collaborator_id=None, access_role=None):
     name="review_alternative_new"; owns=_transaction(connection,name)
     try:
-        submission=_submission(connection,submission_id); proposal_was_pending=_proposal_is_pending(connection,submission); concept_id=_resolve_concept(connection,submission,concept_resolution)
+        submission=_submission(connection,submission_id); concept_id=_resolve_concept(connection,submission,concept_resolution)
         new_id=connection.execute("INSERT INTO alternative(concept_id,working_label) VALUES(?,NULL)",(concept_id,)).lastrowid
         targets=_relation_targets(connection,submission_id) if approve_relations else []
         edges=[(new_id,target) for target,_ in targets if target != new_id]
@@ -371,7 +324,6 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
             )
         _resolve_submission(connection,submission_id,new_id,reviewed_by,review_note)
         if access_role:
-            _record_concept_resolution(connection,submission,proposal_was_pending,collaborator_id,access_role)
             record_activity(connection,"alternative_created",entity_type="alternative",entity_id=new_id,collaborator_id=collaborator_id,access_role=access_role)
             record_activity(connection,"renumber_event_created",entity_type="renumber_event",entity_id=renumber_id,collaborator_id=collaborator_id,access_role=access_role)
             for target_id, _ in targets:
@@ -391,7 +343,8 @@ def reject_alternative_submission(connection, submission_id, *, reviewed_by=None
                                   review_note=None, collaborator_id=None, access_role=None):
     name="reject_alternative"; owns=_transaction(connection,name)
     try:
-        _submission(connection,submission_id)
+        submission = _submission(connection,submission_id)
+        _resolve_concept(connection, submission)
         connection.execute("UPDATE submission SET status='resolved',resolution='rejected',resolved_at=CURRENT_TIMESTAMP,reviewed_by=?,review_note=? WHERE submission_id=?",(reviewed_by,(review_note or "").strip() or None,submission_id))
         if access_role: record_activity(connection,"alternative_submission_rejected",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)
         _finish(connection,name,owns)

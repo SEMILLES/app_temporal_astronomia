@@ -33,6 +33,7 @@ REQUIRED_APPLICATION_TABLES = frozenset({
     "alternative_media",
     "submission",
     "concept_proposal",
+    "submission_concept_resolution",
     "occurrence_draft",
     "occurrence_concept_reference",
     "alternative_submission",
@@ -867,3 +868,5 @@ def crear_esquema(conexion):
 
     from source_retirement_schema import install
     install(conexion)
+    from submission_concept_resolution import install as install_concept_resolution
+    install_concept_resolution(conexion)

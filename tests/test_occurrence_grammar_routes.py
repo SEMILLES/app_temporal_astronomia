@@ -1,3 +1,4 @@
+from submission_concept_resolution import save_resolution
 import sqlite3
 import tempfile
 import unittest
@@ -270,6 +271,7 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
         db.execute("INSERT INTO alternative_submission(submission_id,proposal_kind,reference_concept_id,is_legacy) VALUES(?,'UNSURE',1,1)",(sid,)); db.commit(); before=tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()); db.close()
         page=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("Propuesta del analista",page); self.assertIn("DECISIÓN DEL REVISOR",page)
         db=self.connect(); canonical_before=tuple(db.execute("SELECT count(*) FROM alternative").fetchone())+tuple(db.execute("SELECT count(*) FROM assignment").fetchone()); db.close()
+        db=self.connect(); save_resolution(db,sid,"CONFIRM_REFERENCE",access_role="reviewer"); db.close()
         self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"rejected"}).status_code,302)
         db=self.connect(); row=db.execute("SELECT status,resolution FROM submission WHERE submission_id=?",(sid,)).fetchone(); canonical_after=tuple(db.execute("SELECT count(*) FROM alternative").fetchone())+tuple(db.execute("SELECT count(*) FROM assignment").fetchone()); db.close()
         self.assertEqual(tuple(row),("resolved","rejected")); self.assertEqual(canonical_after,canonical_before)

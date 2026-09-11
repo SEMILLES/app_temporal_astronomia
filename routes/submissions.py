@@ -1,3 +1,5 @@
+from submission_concept_resolution import save_resolution, current_resolution, resolution_history
+from edit_concurrency import edit_token, StaleEdit
 import sqlite3
 
 from flask import Blueprint, redirect, render_template, request, url_for, g
@@ -188,6 +190,7 @@ def _rows(db, pending=False):
         gs.gender, gs.gender_uncertain, gs.plural, gs.plural_uncertain,
         gs.agentive, gs.agentive_uncertain, gs.conjugated_form,
         gs.conjugated_form_uncertain, gs.negation, gs.negation_uncertain, gs.note,
+        local.concept_id AS local_concept_id,local_concept.preferred_label AS local_concept_label,
         als.proposal_kind, als.analysis_note,als.reference_concept_id,
         als.reference_concept_proposal_id,als.proposed_existing_alternative_id,
         als.phonological_relation_answer,als.resolved_alternative_id,als.is_legacy,
@@ -220,6 +223,8 @@ def _rows(db, pending=False):
         JOIN source src ON src.source_id=o.source_id
         LEFT JOIN grammar_submission gs USING(submission_id)
         LEFT JOIN alternative_submission als USING(submission_id)
+        LEFT JOIN submission_concept_resolution local ON local.submission_id=s.submission_id AND local.is_current=1
+        LEFT JOIN concept local_concept ON local_concept.concept_id=local.concept_id
         LEFT JOIN concept context ON context.concept_id=als.reference_concept_id
         LEFT JOIN concept_proposal cp ON cp.concept_proposal_id=als.reference_concept_proposal_id
         LEFT JOIN concept cp_resolved ON cp_resolved.concept_id=cp.resolved_concept_id
@@ -266,7 +271,7 @@ def _alternative_review_context(db, rows):
     concepts=db.execute("SELECT concept_id,preferred_label FROM concept ORDER BY preferred_label").fetchall()
     for row in rows:
         if row["submission_type"] != "ALTERNATIVE": continue
-        concept_id=row["reference_concept_id"] or row["resolved_concept_id"]
+        concept_id=row["local_concept_id"]
         alternatives=[dict(item) for item in db.execute("SELECT a.alternative_id,a.working_label,c.preferred_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.concept_id=? AND a.retired_at IS NULL ORDER BY a.working_label",(concept_id,)).fetchall()] if concept_id else []
         for alternative in alternatives:
             alternative["display_label"]=alternative_display_label(
@@ -309,7 +314,7 @@ def _alternative_review_context(db, rows):
                 item["display_label"] = alternative_display_label(label["preferred_label"], label["working_label"]) if label else None
                 components.append(item)
             morphology = morphology[0], components
-        result[row["submission_id"]]=dict(alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_preview=preview,proposed_morphology=morphology)
+        result[row["submission_id"]]=dict(proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),concept_edit_token=edit_token(db,"submission_concept",row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_preview=preview,proposed_morphology=morphology)
     return result
 
 
@@ -323,6 +328,25 @@ def detalle_aporte(submission_id):
         context=_alternative_review_context(db,rows)
     finally: db.close()
     return render_template("revision_aportes.html",aportes=rows,current_by_occurrence=current,alternative_context=context,grammar_vocabularies=GRAMMATICAL_MARK_VOCABULARIES,detail=True)
+
+
+@submissions_bp.post("/aportes/<int:submission_id>/concepto")
+@requires_reviewer
+def resolver_concepto_aporte(submission_id):
+    db = conectar()
+    try:
+        save_resolution(db, submission_id, request.form.get("concept_action"),
+            concept_id=request.form.get("concept_id") or None,
+            label=request.form.get("concept_label"), note=request.form.get("concept_note"),
+            collaborator_id=request.form.get("collaborator_id"), access_role=g.current_access_role,
+            expected_edit_token=request.form.get("concept_edit_token", ""))
+    except StaleEdit as error:
+        return str(error), 409
+    except (ValueError, sqlite3.IntegrityError) as error:
+        return str(error), 400
+    finally:
+        db.close()
+    return redirect(url_for("submissions.detalle_aporte", submission_id=submission_id))
 
 
 @submissions_bp.route("/aportes/<int:submission_id>/decidir", methods=["POST"])

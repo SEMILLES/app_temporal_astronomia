@@ -46,6 +46,11 @@ def edit_state(db, kind, identifier):
             state["revision"] = db.execute(
                 "SELECT max(activity_event_id) FROM activity_event WHERE entity_type='concept' AND entity_id=? AND event_type='concept_renamed'", (identifier,)).fetchone()[0]
         return state
+    if kind == "submission_concept":
+        return {"submission": rows(db, "SELECT * FROM submission WHERE submission_id=?", (identifier,)),
+                "resolution": rows(db, "SELECT * FROM submission_concept_resolution WHERE submission_id=? AND is_current=1", (identifier,)),
+                "reference": rows(db, "SELECT r.* FROM occurrence_concept_reference r JOIN submission s USING(occurrence_id) WHERE s.submission_id=? AND r.is_current=1", (identifier,)),
+                "concepts": rows(db, "SELECT concept_id,preferred_label FROM concept ORDER BY concept_id")}
     if kind == "video":
         return rows(db, "SELECT * FROM alternative_media WHERE alternative_id=? AND role='catalog_video' AND is_current=1", (identifier,))
     if kind == "grammar":

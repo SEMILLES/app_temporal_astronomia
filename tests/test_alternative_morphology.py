@@ -1,3 +1,4 @@
+from submission_concept_resolution import save_resolution
 import importlib.util
 import sqlite3
 import tempfile
@@ -107,7 +108,10 @@ class MorphologyReviewTests(unittest.TestCase):
         self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1')");self.db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,1)");self.db.commit()
         self.morphology={"component_count":2,"free_permutation":"SIN INFORMACIÓN","note":"Proposal","components":[{"position":1,"component_alternative_id":1},{"position":2,"component_label":"DESCRIPTIVE"}]}
     def tearDown(self):self.db.close()
-    def proposal(self,morphology=True):return create_alternative_submission(self.db,2,"NEW",phonological_relation_answer="NO",morphology=self.morphology if morphology else None)
+    def proposal(self,morphology=True):
+        sid=create_alternative_submission(self.db,2,"NEW",phonological_relation_answer="NO",morphology=self.morphology if morphology else None)
+        save_resolution(self.db,sid,"CONFIRM_REFERENCE",access_role="reviewer")
+        return sid
 
     def test_new_requires_morphology_and_existing_rejects_morphology_input(self):
         with self.assertRaises(AlternativeWorkflowError): self.proposal(False)
@@ -127,10 +131,89 @@ class MorphologyReviewTests(unittest.TestCase):
         sid=self.proposal();review_as_existing(self.db,sid,1);self.assertEqual(self.db.execute("SELECT alternative_morphology_id FROM alternative_morphology WHERE alternative_id=1 AND is_current=1").fetchone()[0],existing);self.assertIsNotNone(submission_morphology(self.db,sid))
         sid=self.proposal();reject_alternative_submission(self.db,sid);self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology").fetchone()[0],1);self.assertIsNotNone(submission_morphology(self.db,sid))
 
-    def test_morphology_failure_rolls_back_whole_review(self):
-        sid=create_alternative_submission(self.db,2,"NEW",phonological_relation_answer="YES",relations=[{"target_alternative_id":1,"phonological_parameter":"CM_1"}],morphology=self.morphology);self.db.execute("CREATE TRIGGER fail_canonical_component BEFORE INSERT ON alternative_component BEGIN SELECT RAISE(ABORT,'synthetic');END");self.db.commit();before={t:self.db.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in ("alternative","assignment","alternative_relation","renumber_event","alternative_morphology")}
-        with self.assertRaises(sqlite3.IntegrityError):review_as_new(self.db,sid,approve_relations=True,approve_morphology=True,nomenclature_mode="automatic")
-        self.assertEqual({t:self.db.execute(f"SELECT count(*) FROM {t}").fetchone()[0] for t in before},before);self.assertEqual(self.db.execute("SELECT status FROM submission WHERE submission_id=?",(sid,)).fetchone()[0],"pending")
+    def test_morphology_failure_rolls_back_lexical_review_but_preserves_concept_resolution(self):
+        sid=create_alternative_submission(
+            self.db,2,"NEW",
+            phonological_relation_answer="YES",
+            relations=[{"target_alternative_id":1,"phonological_parameter":"CM_1"}],
+            morphology=self.morphology
+        )
+        save_resolution(
+            self.db,sid,"CONFIRM_REFERENCE",
+            access_role="reviewer"
+        )
+
+        resolution_before=self.db.execute(
+            """SELECT submission_concept_resolution_id,concept_id
+               FROM submission_concept_resolution
+               WHERE submission_id=? AND is_current=1""",
+            (sid,)
+        ).fetchone()
+        reference_before=self.db.execute(
+            """SELECT occurrence_concept_reference_id,concept_id
+               FROM occurrence_concept_reference
+               WHERE occurrence_id=2 AND is_current=1"""
+        ).fetchone()
+
+        self.db.execute(
+            """CREATE TRIGGER fail_canonical_component
+               BEFORE INSERT ON alternative_component
+               BEGIN
+                   SELECT RAISE(ABORT,'synthetic');
+               END"""
+        )
+        self.db.commit()
+
+        before={
+            t:self.db.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+            for t in (
+                "alternative",
+                "assignment",
+                "alternative_relation",
+                "renumber_event",
+                "alternative_morphology",
+                "submission_concept_resolution",
+                "occurrence_concept_reference",
+            )
+        }
+
+        with self.assertRaises(sqlite3.IntegrityError):
+            review_as_new(
+                self.db,sid,
+                approve_relations=True,
+                approve_morphology=True,
+                nomenclature_mode="automatic"
+            )
+
+        self.assertEqual(
+            {
+                t:self.db.execute(f"SELECT count(*) FROM {t}").fetchone()[0]
+                for t in before
+            },
+            before
+        )
+        self.assertEqual(
+            self.db.execute(
+                "SELECT status FROM submission WHERE submission_id=?",
+                (sid,)
+            ).fetchone()[0],
+            "pending"
+        )
+
+        resolution_after=self.db.execute(
+            """SELECT submission_concept_resolution_id,concept_id
+               FROM submission_concept_resolution
+               WHERE submission_id=? AND is_current=1""",
+            (sid,)
+        ).fetchone()
+        reference_after=self.db.execute(
+            """SELECT occurrence_concept_reference_id,concept_id
+               FROM occurrence_concept_reference
+               WHERE occurrence_id=2 AND is_current=1"""
+        ).fetchone()
+
+        self.assertEqual(tuple(resolution_after),tuple(resolution_before))
+        self.assertEqual(tuple(reference_after),tuple(reference_before))
 
 
 if __name__=="__main__":unittest.main()

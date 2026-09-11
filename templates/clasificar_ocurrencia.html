@@ -166,6 +166,8 @@
 <summary>Aceptar inmediatamente como revisor</summary>
 
 <p>Esta sección avanzada aplica la decisión sin enviarla a la cola de revisión.</p>
+{% if occurrence['reference_concept_id'] %}<p>La aceptación inmediata confirma el concepto de referencia para este aporte y registra su resolución local.</p>
+{% else %}<p>La referencia es una propuesta conceptual. Envíe el aporte a revisión para guardar primero su resolución conceptual local.</p>{% endif %}
 
 <label>Decisión
 <select name="canonical_decision">
@@ -190,7 +192,7 @@
 
 <input type="hidden" name="nomenclature_mode" value="automatic">
 
-<button formaction="{{ url_for('occurrences.preview_alternative_immediate',occurrence_id=occurrence['occurrence_id']) }}">Aceptar inmediatamente</button>
+<button{% if not occurrence['reference_concept_id'] %} disabled{% endif %} formaction="{{ url_for('occurrences.preview_alternative_immediate',occurrence_id=occurrence['occurrence_id']) }}">Aceptar inmediatamente</button>
 
 </details>
 {% endif %}

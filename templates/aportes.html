@@ -31,10 +31,9 @@
 <td>{{ aporte.source_name }}</td>
 
 <td>
-{{ aporte.display_concept or '—' }}
-{% if aporte.reference_concept_proposal_id and aporte.concept_proposal_status=='resolved' %}
-<small>(propuesta resuelta)</small>
-{% endif %}
+{% if aporte.submission_type=='ALTERNATIVE' %}
+{{ aporte.local_concept_label or ('Concepto pendiente' if aporte.status=='pending' else 'Sin resolución conceptual local registrada') }}
+{% else %}{{ aporte.display_concept or '—' }}{% endif %}
 </td>
 
 <td>
