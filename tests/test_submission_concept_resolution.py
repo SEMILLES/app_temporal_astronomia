@@ -141,7 +141,7 @@ class LocalConceptTests(unittest.TestCase):
                 assignments = [tuple(r) for r in self.db.execute('SELECT * FROM assignment')]
                 self.save(action='ACCEPT_PROPOSAL', concept_id=2, label='IGNORADO')
                 resolution = current_resolution(self.db, self.a)
-                self.assertEqual(action, resolution['resolution_action'])
+                self.assertEqual('CREATE_NEW', resolution['resolution_action'])
                 self.assertEqual('NUEVO-CONCEPTO', resolution['preferred_label'])
                 self.assertIsNone(resolution['resolution_note'])
                 self.assertEqual(3, self.db.execute('SELECT count(*) FROM concept').fetchone()[0])
@@ -149,7 +149,56 @@ class LocalConceptTests(unittest.TestCase):
                 self.assertEqual(assignments, [tuple(r) for r in self.db.execute('SELECT * FROM assignment')])
                 self.assertIsNone(current_resolution(self.db, self.b))
                 self.assertEqual('pending', self.db.execute('SELECT status FROM submission WHERE submission_id=?', (self.a,)).fetchone()[0])
-        self.assertEqual([1,0], [r['is_current'] for r in resolution_history(self.db,self.a)])
+        self.assertEqual([1], [r['is_current'] for r in resolution_history(self.db,self.a)])
+
+    def test_identical_resolution_is_noop_with_normalized_note(self):
+        first = self.save(concept_id=1)
+        for note in (None, '', ' \t\n'):
+            with self.subTest(note=note):
+                before = self.snapshot()
+                self.assertEqual(first, self.save(concept_id='1', note=note))
+                self.assertEqual(before, self.snapshot())
+                self.assertFalse(self.db.in_transaction)
+        self.assertEqual(1, len(resolution_history(self.db, self.a)))
+
+    def test_repeated_proposal_acceptance_has_no_side_effects(self):
+        self.db.execute("UPDATE concept_proposal SET proposed_label='Nuevo concepto'")
+        self.db.commit()
+        first = self.save(action='ACCEPT_PROPOSAL')
+        before = self.snapshot()
+        references = self.db.execute('SELECT count(*) FROM occurrence_concept_reference').fetchone()[0]
+        events = self.db.execute('SELECT count(*) FROM activity_event').fetchone()[0]
+        self.assertEqual(first, self.save(action='ACCEPT_PROPOSAL', note=''))
+        self.assertEqual(before, self.snapshot())
+        self.assertEqual(references, self.db.execute('SELECT count(*) FROM occurrence_concept_reference').fetchone()[0])
+        self.assertEqual(events, self.db.execute('SELECT count(*) FROM activity_event').fetchone()[0])
+        self.assertEqual('CREATE_NEW', current_resolution(self.db, self.a)['resolution_action'])
+        self.assertEqual([first], [r['submission_concept_resolution_id'] for r in resolution_history(self.db,self.a)])
+
+    def test_changed_note_versions_same_concept(self):
+        first = self.save(concept_id=1)
+        second = self.save(concept_id=1, note=' Nota adicional ')
+        self.assertNotEqual(first, second)
+        history = resolution_history(self.db, self.a)
+        self.assertEqual([1,0], [r['is_current'] for r in history])
+        self.assertEqual(first, history[0]['supersedes_submission_concept_resolution_id'])
+        self.assertEqual('Nota adicional', history[0]['resolution_note'])
+        before = self.snapshot()
+        self.assertEqual(second, self.save(concept_id=1, note='  Nota adicional\n'))
+        self.assertEqual(before, self.snapshot())
+        third = self.save(concept_id=1, note='')
+        self.assertNotEqual(second, third)
+        self.assertIsNone(current_resolution(self.db,self.a)['resolution_note'])
+
+    def test_noop_preserves_outer_transaction(self):
+        first = self.save(concept_id=1)
+        before = self.snapshot()
+        self.db.execute('BEGIN')
+        self.db.execute("UPDATE concept_proposal SET proposed_label='Cambio temporal'")
+        self.assertEqual(first, self.save(concept_id=1))
+        self.assertTrue(self.db.in_transaction)
+        self.db.rollback()
+        self.assertEqual(before, self.snapshot())
 
     def test_accept_proposal_requires_proposal_and_preserves_change_note_rule(self):
         self.save(concept_id=2,note='Corrección')

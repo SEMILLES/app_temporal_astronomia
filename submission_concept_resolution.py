@@ -112,6 +112,10 @@ def save_resolution(connection, submission_id, action, *, concept_id=None,
             concept_id = None
         else:
             raise ConceptResolutionError('La acción de resolución conceptual no es válida.')
+        if (previous is not None and previous['concept_id'] == concept_id
+                and ((previous['resolution_note'] or '').strip() or None) == note):
+            connection.commit() if owns else connection.execute('RELEASE SAVEPOINT local_concept')
+            return previous['submission_concept_resolution_id']
         original_id = submission['reference_concept_id']
         original_label = submission['proposed_label']
         same_original = (concept_id == original_id if original_id is not None else
