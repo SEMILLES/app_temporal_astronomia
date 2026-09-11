@@ -169,30 +169,51 @@
 {% if occurrence['reference_concept_id'] %}<p>La aceptación inmediata confirma el concepto de referencia para este aporte y registra su resolución local.</p>
 {% else %}<p>La referencia es una propuesta conceptual. Envíe el aporte a revisión para guardar primero su resolución conceptual local.</p>{% endif %}
 
-<label>Decisión
-<select name="canonical_decision">
+<p id="immediate-concept-status">Concepto que se usará: <strong>{{ occurrence['reference_label'] or 'Referencia conceptual vigente' }}</strong></p>
+
+<p><label>Acción léxica
+<select id="canonical-decision" name="canonical_decision">
 <option value="">Seleccione</option>
 <option value="existing">Alternativa existente</option>
 <option value="new">Nueva alternativa</option>
 </select>
 </label>
+</p>
 
-<select name="canonical_alternative_id">
+<p id="immediate-existing-alternative" hidden><label>Alternative destino
+<select name="canonical_alternative_id" disabled>
 <option value="">Alternativa final</option>
 {% for alternative in alternatives %}
 <option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
 {% endfor %}
 </select>
+</label></p>
 
-<label><input type="radio" name="approve_relations" value="no" checked> Revisar relaciones después</label>
-<label><input type="radio" name="approve_relations" value="yes"> Usar relaciones propuestas</label>
+<fieldset id="immediate-relations" hidden>
+<legend>Relaciones propuestas</legend>
+<p id="immediate-relations-existing-note" hidden>Estas relaciones no se incorporarán a la Alternative existente. Debe rechazarlas explícitamente para continuar.</p>
+<p id="immediate-relations-new-note" hidden>Resuelva las relaciones propuestas antes de confirmar. No hay una opción preseleccionada.</p>
+<label><input type="radio" name="relations_resolution" value="ACCEPTED"> Aceptar relaciones propuestas</label>
+<label><input type="radio" name="relations_resolution" value="REJECTED"> Rechazar relaciones propuestas</label>
+</fieldset>
 
-<label><input type="radio" name="approve_morphology" value="no" checked> Revisar morfología después</label>
-<label><input type="radio" name="approve_morphology" value="yes"> Usar morfología propuesta</label>
+<fieldset id="immediate-morphology" hidden>
+<legend>Morfología propuesta</legend>
+<p id="immediate-morphology-existing-note" hidden>La morfología propuesta no se copiará a la Alternative existente. Debe rechazarla explícitamente para continuar.</p>
+<p id="immediate-morphology-new-note" hidden>Resuelva la morfología propuesta antes de confirmar. No hay una opción preseleccionada.</p>
+<label><input type="radio" name="morphology_resolution" value="ACCEPTED"> Aceptar morfología propuesta</label>
+<label><input type="radio" name="morphology_resolution" value="REJECTED"> Rechazar morfología propuesta</label>
+</fieldset>
+
+<p id="immediate-resolution-warning" role="alert" hidden>Falta resolver una propuesta antes de confirmar la aceptación inmediata.</p>
+
+<p><label>Nota de revisión <span id="review-note-required" hidden>(obligatoria)</span>
+<textarea name="review_note" id="immediate-review-note"></textarea>
+</label></p>
 
 <input type="hidden" name="nomenclature_mode" value="automatic">
 
-<button{% if not occurrence['reference_concept_id'] %} disabled{% endif %} formaction="{{ url_for('occurrences.preview_alternative_immediate',occurrence_id=occurrence['occurrence_id']) }}">Aceptar inmediatamente</button>
+<button id="immediate-confirm"{% if not occurrence['reference_concept_id'] %} disabled{% endif %} formaction="{{ url_for('occurrences.preview_alternative_immediate',occurrence_id=occurrence['occurrence_id']) }}">Aceptar inmediatamente</button>
 
 </details>
 {% endif %}
@@ -339,6 +360,77 @@
     };
 
     toggle();
+})();
+</script>
+
+<script>
+(function(){
+    const decision=document.getElementById('canonical-decision');
+    if(!decision){return;}
+
+    const existing=document.getElementById('immediate-existing-alternative'),
+          existingSelect=existing.querySelector('select'),
+          relations=document.getElementById('immediate-relations'),
+          relationsExisting=document.getElementById('immediate-relations-existing-note'),
+          relationsNew=document.getElementById('immediate-relations-new-note'),
+          morphology=document.getElementById('immediate-morphology'),
+          morphologyExisting=document.getElementById('immediate-morphology-existing-note'),
+          morphologyNew=document.getElementById('immediate-morphology-new-note'),
+          warning=document.getElementById('immediate-resolution-warning'),
+          note=document.getElementById('immediate-review-note'),
+          required=document.getElementById('review-note-required'),
+          confirmButton=document.getElementById('immediate-confirm'),
+          relationChoice=document.querySelector('[name=relations_resolution]'),
+          morphologyChoice=document.querySelector('[name=morphology_resolution]'),
+          relationAnswer=document.querySelector('[name=phonological_relation_answer]'),
+          relationInputs=document.querySelectorAll('#relations select'),
+          morphologyCount=document.querySelector('[name=morphology_component_count]'),
+          proposedExisting=document.querySelector('[name=proposed_existing_alternative_id]');
+
+    function hasRelations(){
+        if(!relationAnswer||relationAnswer.value!=='YES'){return false;}
+        return Array.from(relationInputs).some(input=>input.value);
+    }
+
+    function selected(name){
+        return document.querySelector('[name='+name+']:checked');
+    }
+
+    function update(){
+        const action=decision.value,
+              isExisting=action==='existing',
+              relationProposal=hasRelations(),
+              proposal=selected('proposal_kind'),
+              morphologyProposal=proposal&&proposal.value==='NEW'&&morphologyCount&&morphologyCount.value,
+              relationResolution=selected('relations_resolution'),
+              morphologyResolution=selected('morphology_resolution'),
+              changedExisting=isExisting&&proposedExisting&&proposedExisting.value&&existingSelect.value!==proposedExisting.value,
+              rejected=relationResolution&&relationResolution.value==='REJECTED'||morphologyResolution&&morphologyResolution.value==='REJECTED';
+
+        existing.hidden=!isExisting;
+        existingSelect.disabled=!isExisting;
+        relations.hidden=!relationProposal;
+        relationsExisting.hidden=!isExisting||!relationProposal;
+        relationsNew.hidden=isExisting||!relationProposal;
+        morphology.hidden=!morphologyProposal;
+        morphologyExisting.hidden=!isExisting||!morphologyProposal;
+        morphologyNew.hidden=isExisting||!morphologyProposal;
+
+        const unresolved=relationProposal&&!relationResolution||morphologyProposal&&!morphologyResolution;
+        warning.hidden=!unresolved;
+        required.hidden=!(action==='existing'&&proposal&&proposal.value==='NEW'||
+            action==='new'&&proposal&&proposal.value==='EXISTING'||
+            proposal&&proposal.value==='UNSURE'||changedExisting||rejected);
+        note.required=!required.hidden;
+        if(relationChoice){relationChoice.required=relationProposal;}
+        if(morphologyChoice){morphologyChoice.required=morphologyProposal;}
+        confirmButton.disabled=!action||isExisting&&!existingSelect.value||unresolved;
+    }
+
+    document.querySelectorAll('[name=proposal_kind],[name=phonological_relation_answer],#relations select,[name=morphology_component_count],[name=canonical_alternative_id],[name=relations_resolution],[name=morphology_resolution]')
+        .forEach(input=>input.addEventListener('change',update));
+    decision.addEventListener('change',update);
+    update();
 })();
 </script>
 

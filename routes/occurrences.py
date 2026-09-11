@@ -109,10 +109,22 @@ def _confirmation(template_kind,occurrence_id,operation):
         occurrence=db.execute("SELECT occurrence_id,original_gloss FROM occurrence WHERE occurrence_id=?",(occurrence_id,)).fetchone()
         current=db.execute("SELECT * FROM occurrence_grammar WHERE occurrence_id=? AND is_current=1",(occurrence_id,)).fetchone() if template_kind=="grammar" else None
         result=preview_operation(db,operation)
+        proposed=_alternative_payload(request.form) if template_kind=="alternative" else None
+        decision=_alternative_decision(request.form) if template_kind=="alternative" else None
+        concept_label=None
+        destination_label=None
+        if template_kind=="alternative":
+            concept=db.execute("""SELECT c.preferred_label FROM occurrence_concept_reference r
+                JOIN concept c ON c.concept_id=r.concept_id
+                WHERE r.occurrence_id=? AND r.is_current=1""",(occurrence_id,)).fetchone()
+            concept_label=concept[0] if concept else None
+            if decision.get("alternative_id"):
+                destination=db.execute("SELECT working_label FROM alternative WHERE alternative_id=?",(decision["alternative_id"],)).fetchone()
+                destination_label=destination[0] if destination else None
     except StaleEdit as error:return str(error),409
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
     finally:db.close()
-    summary={"occurrence":dict(occurrence) if occurrence else None,"current":dict(current) if current else None,"proposed":_grammar_values(request.form) if template_kind=="grammar" else _alternative_payload(request.form),"decision":_alternative_decision(request.form) if template_kind=="alternative" else None}
+    summary={"occurrence":dict(occurrence) if occurrence else None,"current":dict(current) if current else None,"proposed":_grammar_values(request.form) if template_kind=="grammar" else proposed,"decision":decision if template_kind=="alternative" else None,"concept_label":concept_label,"destination_label":destination_label,"review_note":request.form.get("review_note")}
     return render_template("confirmar_aceptacion_inmediata.html",kind=template_kind,occurrence_id=occurrence_id,payload=list(request.form.lists()),preflight=result,summary=summary)
 
 

@@ -403,6 +403,68 @@ class ImmediateAcceptanceRouteTests(unittest.TestCase):
         self.assertEqual(0, db.execute('SELECT count(*) FROM alternative_morphology').fetchone()[0])
         db.close()
 
+    def test_classification_ui_requires_explicit_group_decisions(self):
+        self.role = 'reviewer'
+        html = self.client.get('/ocurrencias/1/clasificar').get_data(as_text=True)
+        self.assertIn('name="relations_resolution" value="ACCEPTED"', html)
+        self.assertIn('name="relations_resolution" value="REJECTED"', html)
+        self.assertIn('name="morphology_resolution" value="ACCEPTED"', html)
+        self.assertIn('name="morphology_resolution" value="REJECTED"', html)
+        self.assertNotIn('name="approve_relations"', html)
+        self.assertNotIn('name="approve_morphology"', html)
+        self.assertIn('Nota de revisión', html)
+        self.assertIn('no se incorporarán a la Alternative existente', html)
+
+    def test_create_new_summary_shows_explicit_group_resolutions(self):
+        self.role = 'reviewer'
+        data = {
+            'proposal_kind': 'NEW', 'phonological_relation_answer': 'YES',
+            'relation_target_type': 'alternative', 'relation_target_id': '1',
+            'relation_parameter': 'CM_1', 'morphology_component_count': 'N/A',
+            'canonical_decision': 'new', 'canonical_alternative_id': '',
+            'relations_resolution': 'ACCEPTED',
+            'morphology_resolution': 'REJECTED',
+            'collaborator_id': '1', 'review_note': 'Decisión documentada',
+        }
+        response = self.client.post(
+            '/ocurrencias/1/clasificar/aceptacion-inmediata/preview',
+            data=data,
+        )
+        self.assertEqual(200, response.status_code)
+        html = response.get_data(as_text=True)
+        self.assertIn('Concepto que se usará', html)
+        self.assertIn('Crear una alternativa nueva', html)
+        self.assertIn('Relaciones</dt><dd>Aceptadas', html)
+        self.assertIn('Morfología</dt><dd>Rechazada', html)
+        self.assertIn('Decisión documentada', html)
+
+    def test_existing_destination_rejects_both_proposed_groups_without_union(self):
+        self.role = 'reviewer'
+        data = {
+            'proposal_kind': 'NEW', 'phonological_relation_answer': 'YES',
+            'relation_target_type': 'alternative', 'relation_target_id': '1',
+            'relation_parameter': 'CM_1', 'morphology_component_count': 'N/A',
+            'canonical_decision': 'existing', 'canonical_alternative_id': '1',
+            'relations_resolution': 'REJECTED',
+            'morphology_resolution': 'REJECTED', 'collaborator_id': '1',
+            'confirm_immediate': 'yes',
+        }
+        url = '/ocurrencias/1/clasificar/aceptacion-inmediata/confirmar'
+        self.assertEqual(400, self.client.post(url, data=data).status_code)
+        self.assertEqual(
+            302,
+            self.client.post(url, data=dict(data, review_note='No se incorporan al destino.')).status_code,
+        )
+        db = self.connect()
+        self.assertEqual(
+            ('USE_EXISTING', 'REJECTED', 'REJECTED'),
+            tuple(db.execute(
+                'SELECT decision_action,relations_resolution,morphology_resolution '
+                'FROM submission_lexical_decision'
+            ).fetchone()),
+        )
+        db.close()
+
 
 if __name__ == "__main__":
     unittest.main()
