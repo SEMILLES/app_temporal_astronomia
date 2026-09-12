@@ -29,6 +29,12 @@ submissions_bp = Blueprint("submissions", __name__)
 submissions_bp.add_app_template_filter(format_source_period, "source_period")
 
 
+@submissions_bp.app_template_filter("preview_proposed_order")
+def preview_proposed_order(rows):
+    """Order a display copy without changing the calculated preview."""
+    return sorted(rows, key=lambda row: working_label_key(row["proposed_label"]))
+
+
 def _context(db, draft=None, error=None):
     return dict(
         fuentes=db.execute("SELECT source_id, source_name, source_type, start_year, end_year, end_year_status FROM source WHERE retired_at IS NULL ORDER BY source_name").fetchall(),

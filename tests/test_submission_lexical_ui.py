@@ -1,9 +1,35 @@
 """Ordinary review UI, using disposable synthetic databases only."""
 import unittest
+from copy import deepcopy
+from html.parser import HTMLParser
+
+from flask import render_template
 
 from tests import test_alternative_routes as fixtures
 from routes.submissions import _alternative_review_context, _rows
 from submission_concept_resolution import save_resolution
+
+
+class PreviewTableParser(HTMLParser):
+    def __init__(self):
+        super().__init__()
+        self.rows = []
+        self.cell = None
+
+    def handle_starttag(self, tag, attrs):
+        if tag == 'tr':
+            self.rows.append([])
+        elif tag in ('th', 'td'):
+            self.cell = ''
+
+    def handle_data(self, data):
+        if self.cell is not None:
+            self.cell += data
+
+    def handle_endtag(self, tag):
+        if tag in ('th', 'td'):
+            self.rows[-1].append(self.cell)
+            self.cell = None
 
 
 class LexicalUITests(unittest.TestCase):
@@ -56,6 +82,39 @@ class LexicalUITests(unittest.TestCase):
 
     def post(self, sid, **form):
         return self.client.post(f'/aportes/{sid}/decidir', data=form)
+
+    def test_preview_table_presentation_preserves_calculated_values(self):
+        preview = {'rows': [
+            {'alternative_id': 10, 'current_label': '2a', 'proposed_label': '10a',
+             'reference_year': 2006, 'reference_basis': 'source_single_year'},
+            {'alternative_id': 2, 'current_label': '10a', 'proposed_label': '2a',
+             'reference_year': 2012, 'reference_basis': 'occurrence_year'},
+            {'alternative_id': 4, 'current_label': '4a', 'proposed_label': '4a',
+             'reference_year': None, 'reference_basis': None},
+            {'alternative_id': 3, 'current_label': '7a', 'proposed_label': '3c',
+             'reference_year': 2019, 'reference_basis': 'source_range_start'},
+            {'alternative_id': 1, 'current_label': '3a', 'proposed_label': '3a',
+             'reference_year': 2001, 'reference_basis': 'source_single_year'},
+            {'alternative_id': 'new', 'current_label': None, 'proposed_label': '3b',
+             'reference_year': 2018, 'reference_basis': 'occurrence_year'},
+        ], 'suggestions': {10: '10a', 2: '2a', 4: '4a', 3: '3c', 1: '3a', 'new': '3b'}}
+        before = deepcopy(preview)
+        html = render_template('_submission_lexical_preview.html', preview=preview,
+                               aporte={'local_concept_label': 'TEST'})
+        table = PreviewTableParser()
+        table.feed(html)
+        self.assertEqual(['ID', 'Actual', 'Propuesta', 'Año', 'Estado'], table.rows[0])
+        self.assertEqual([
+            ['2', '10a', '2a', '2012', '↺ Cambia'],
+            ['1', '3a', '3a', '2001', '= Sin cambio'],
+            ['Nueva', '—', '3b', '2018', '+ Nueva'],
+            ['3', '7a', '3c', '2019', '↺ Cambia'],
+            ['4', '4a', '4a', '—', '= Sin cambio'],
+            ['10', '2a', '10a', '2006', '↺ Cambia'],
+        ], table.rows[1:])
+        for internal in ('source_single_year', 'occurrence_year', 'source_range_start'):
+            self.assertNotIn(internal, html)
+        self.assertEqual(before, preview)
 
     def test_ordinary_review_can_change_existing_a_to_b(self):
         sid = self.create(kind='EXISTING')
