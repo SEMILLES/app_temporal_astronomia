@@ -172,10 +172,6 @@ def generated_working_label(conexion, concept_id, related_alternative_id=None):
         FROM alternative
         WHERE concept_id = ?
     """, (concept_id,)).fetchall()
-    alternative_rows = sorted(
-        alternative_rows,
-        key=lambda row: (working_label_key(row["working_label"]), row["alternative_id"]),
-    )
     labels = [row["working_label"] for row in rows if row["working_label"]]
     parsed = [
         (int(match.group(1)), match.group(2))
@@ -236,6 +232,10 @@ def alternativas(concept_id):
         WHERE a.concept_id = ?
         ORDER BY a.alternative_id
     """, (concept_id,)).fetchall()
+    alternative_rows = sorted(
+        alternative_rows,
+        key=lambda row: (working_label_key(row["working_label"]), row["alternative_id"]),
+    )
 
     alternatives = {
         row["alternative_id"]: {

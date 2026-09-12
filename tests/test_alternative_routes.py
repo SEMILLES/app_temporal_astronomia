@@ -10,6 +10,8 @@ import database
 from concept_labels import alternative_display_label, human_concept_label
 from routes.occurrences import occurrences_bp
 from routes.submissions import submissions_bp
+from routes.alternatives import alternatives_bp
+from routes.concepts import concepts_bp
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -21,7 +23,7 @@ class AlternativeRouteTests(unittest.TestCase):
         for gloss,year in (("KNOWN",2000),("TO-ANALYZE",2001),("TARGET",2002)):
             oid=db.execute("INSERT INTO occurrence(source_id,original_gloss,occurrence_year) VALUES(1,?,?)",(gloss,year)).lastrowid; db.execute("INSERT INTO occurrence_concept_reference(occurrence_id,concept_id) VALUES(?,1)",(oid,))
         db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1')"); db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,1)"); db.commit(); db.close()
-        app=Flask(__name__,template_folder=str(ROOT/"templates")); app.testing=True; app.jinja_env.filters.update(human_concept_label=human_concept_label,alternative_display_label=alternative_display_label); app.register_blueprint(occurrences_bp); app.register_blueprint(submissions_bp); self.client=app.test_client()
+        app=Flask(__name__,template_folder=str(ROOT/"templates")); app.testing=True; app.jinja_env.filters.update(human_concept_label=human_concept_label,alternative_display_label=alternative_display_label); app.register_blueprint(occurrences_bp); app.register_blueprint(submissions_bp); app.register_blueprint(alternatives_bp); app.register_blueprint(concepts_bp); self.client=app.test_client()
         @app.before_request
         def reviewer_context():
             g.current_access_role='reviewer'
@@ -46,6 +48,18 @@ class AlternativeRouteTests(unittest.TestCase):
         page=self.client.get("/ocurrencias/2/clasificar").get_data(as_text=True)
         for text in ("TO-ANALYZE","Concepto","TEST-1","KNOWN","OCC-000003 · TARGET","TARGET"):
             self.assertIn(text,page)
+
+    def test_alternatives_page_orders_working_labels_structurally(self):
+        db=self.connect()
+        db.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=1")
+        db.executemany(
+            "INSERT INTO alternative(concept_id,working_label) VALUES(1,?)",
+            [("10a",), ("2a",), ("unexpected",), ("1c",), ("3a",), ("1b",)],
+        )
+        db.commit(); db.close()
+        page=self.client.get("/conceptos/1/alternativas").get_data(as_text=True)
+        positions=[page.index("TEST-" + label) for label in ("1a", "1b", "1c", "2a", "3a", "10a", "unexpected")]
+        self.assertEqual(positions, sorted(positions))
 
     def test_analysis_page_progressive_disclosure_and_singular_count(self):
         page=self.client.get("/ocurrencias/2/clasificar").get_data(as_text=True)
