@@ -31,7 +31,7 @@ class AnalysisFlowTests(unittest.TestCase):
                     relation_target_type=['alternative', 'alternative'],
                     relation_target_id=['1', '1'], relation_parameter=['CM_1', 'N_MANOS'],
                     relation_uncertain=['1'], morphology_component_count='N/A',
-                    immediate_mode='as_proposed', confirm_immediate='yes', collaborator_id='1')
+                    confirm_immediate='yes', collaborator_id='1')
         data.update(changes)
         return data
 
@@ -42,7 +42,7 @@ class AnalysisFlowTests(unittest.TestCase):
     def test_existing_inherits_without_note_and_preserves_proposal(self):
         self.role = 'reviewer'
         data = dict(proposal_kind='EXISTING', proposed_existing_alternative_id='1',
-                    immediate_mode='as_proposed', confirm_immediate='yes')
+                    confirm_immediate='yes')
         preview = self.client.post(self.base+'preview', data=data)
         self.assertEqual(200, preview.status_code)
         self.assertIn('Se acepta el análisis tal como fue registrado', preview.text)
@@ -81,14 +81,14 @@ class AnalysisFlowTests(unittest.TestCase):
         self.assertEqual(200, response.status_code, response.text)
         for endpoint in ('preview', 'confirmar'):
             data = dict(proposal_kind='UNSURE', analysis_note='Duda original',
-                        immediate_mode='as_proposed', confirm_immediate='yes')
+                        confirm_immediate='yes')
             response = self.client.post(self.base+endpoint, data=data)
             self.assertEqual(400, response.status_code)
-            self.assertIn('es necesario resolver la clasificación', response.text)
+            self.assertIn('Para aceptar inmediatamente, seleccione una clasificación concreta', response.text)
             data.update(immediate_mode='modify', canonical_decision='existing', canonical_alternative_id='1')
             self.assertEqual(400, self.client.post(self.base+endpoint, data=data).status_code)
         data['review_note'] = 'Resuelvo la duda'
-        self.assertEqual(302, self.client.post(self.base+'confirmar', data=data).status_code)
+        self.assertEqual(400, self.client.post(self.base+'confirmar', data=data).status_code)
 
     def test_preview_passes_every_target_to_existing_nomenclature_algorithm(self):
         from alternative_workflow import calculate_nomenclature_preview
@@ -107,59 +107,30 @@ class AnalysisFlowTests(unittest.TestCase):
         with patch('alternative_workflow.calculate_nomenclature_preview', wraps=calculate_nomenclature_preview) as calculate:
             response = self.client.post(self.base+'preview', data=data)
         self.assertEqual(200, response.status_code, response.text)
-        self.assertEqual([], calculate.call_args.kwargs['extra_edges'])
+        self.assertEqual([1, 2], [target for _, target in calculate.call_args.kwargs['extra_edges']])
         self.assertEqual(before, self.dump())
 
-    def test_modify_existing_destination_requires_note(self):
+    def test_obsolete_post_overrides_cannot_change_existing_destination(self):
         self.role = 'reviewer'
         with self.database() as db:
             db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2')")
         data = dict(proposal_kind='EXISTING', proposed_existing_alternative_id='1',
                     immediate_mode='modify', canonical_decision='existing', canonical_alternative_id='2', confirm_immediate='yes')
-        before = self.dump()
-        self.assertEqual(400, self.client.post(self.base+'confirmar', data=data).status_code)
-        self.assertEqual(before, self.dump())
-        data['review_note'] = 'Elijo la otra alternativa'
-        response = self.client.post(self.base+'preview', data=data)
-        self.assertEqual(200, response.status_code, response.text)
-        self.assertIn('El Revisor modificó la decisión antes de aceptar', response.text)
         self.assertEqual(302, self.client.post(self.base+'confirmar', data=data).status_code)
         with self.database() as db:
             self.assertEqual(1, db.execute('SELECT proposed_existing_alternative_id FROM alternative_submission').fetchone()[0])
-            self.assertEqual(2, db.execute('SELECT resolved_alternative_id FROM submission_lexical_decision').fetchone()[0])
+            self.assertEqual(1, db.execute('SELECT resolved_alternative_id FROM submission_lexical_decision').fetchone()[0])
 
-    def test_group_pending_or_omitted_has_no_effects(self):
-        self.role = 'reviewer'
-        before = self.dump()
-        for resolution in (None, 'pending', 'PENDING'):
-            data = self.payload(immediate_mode='modify', canonical_decision='new', morphology_resolution='ACCEPTED')
-            if resolution is not None:
-                data['relations_resolution'] = resolution
-            for endpoint in ('preview', 'confirmar'):
-                self.assertEqual(400, self.client.post(self.base+endpoint, data=data).status_code)
-                self.assertEqual(before, self.dump())
-
-    def test_rejected_group_does_not_materialize(self):
-        self.role = 'reviewer'
-        data = self.payload(immediate_mode='modify', canonical_decision='new',
-                            relations_resolution='REJECTED', morphology_resolution='ACCEPTED')
-        self.assertEqual(400, self.client.post(self.base+'confirmar', data=data).status_code)
-        data['review_note'] = 'No hay relación'
-        self.assertEqual(302, self.client.post(self.base+'confirmar', data=data).status_code)
-        with self.database() as db:
-            self.assertEqual(0, db.execute('SELECT count(*) FROM alternative_relation').fetchone()[0])
-            self.assertEqual(2, db.execute('SELECT count(*) FROM alternative_submission_relation').fetchone()[0])
-
-    def test_modify_new_to_existing_rejects_both_groups(self):
+    def test_obsolete_post_overrides_cannot_reject_or_redirect_new_analysis(self):
         self.role = 'master'
         data = self.payload(immediate_mode='modify', canonical_decision='existing', canonical_alternative_id='1',
                             relations_resolution='REJECTED', morphology_resolution='REJECTED')
-        self.assertEqual(400, self.client.post(self.base+'confirmar', data=data).status_code)
-        data['review_note'] = 'Uso la alternativa existente'
         self.assertEqual(302, self.client.post(self.base+'confirmar', data=data).status_code)
         with self.database() as db:
-            self.assertEqual(0, db.execute('SELECT count(*) FROM alternative_relation').fetchone()[0])
-            self.assertEqual(0, db.execute('SELECT count(*) FROM alternative_morphology').fetchone()[0])
+            self.assertEqual(('CREATE_NEW', 'ACCEPTED', 'ACCEPTED'), tuple(db.execute(
+                'SELECT decision_action,relations_resolution,morphology_resolution FROM submission_lexical_decision').fetchone()))
+            self.assertEqual(2, db.execute('SELECT count(*) FROM alternative_relation').fetchone()[0])
+            self.assertEqual(1, db.execute('SELECT count(*) FROM alternative_morphology').fetchone()[0])
 
     def test_incomplete_duplicate_or_misaligned_relations_are_rejected(self):
         self.role = 'reviewer'
@@ -235,7 +206,7 @@ class AnalysisFlowTests(unittest.TestCase):
             self.assertEqual(404, client.post('/analysis/aportes/1/decidir', data={'decision':'accepted'}).status_code)
             self.assertEqual(before, self.dump())
 
-    def test_browser_form_inheritance_relations_validation_and_modify(self):
+    def test_browser_single_form_relations_validation_and_unsure(self):
         self.role = 'reviewer'
         html = self.client.get('/ocurrencias/1/clasificar').text
         with sync_playwright() as pw:
@@ -259,15 +230,13 @@ class AnalysisFlowTests(unittest.TestCase):
             page.locator('[name=relation_uncertain]').nth(1).check()
             data = MultiDict(page.locator('form').evaluate('(form)=>[...new FormData(form)]'))
             self.assertEqual(['1'], data.getlist('relation_uncertain'))
-            self.assertEqual('as_proposed', data['immediate_mode'])
+            self.assertNotIn('immediate_mode', data)
             self.assertNotIn('canonical_decision', data)
             response = self.client.post(self.base+'preview', data=data)
             self.assertEqual(200, response.status_code, response.text)
-            page.locator('#modify-immediate summary').click()
-            page.locator('#canonical-decision').select_option('existing')
-            page.locator('[name=canonical_alternative_id]').select_option('1')
-            self.assertTrue(page.locator('#immediate-review-note').evaluate('(e)=>e.required'))
-            page.locator('#modify-immediate summary').click()
+            for name in ('canonical_decision', 'canonical_alternative_id', 'relations_resolution', 'morphology_resolution'):
+                self.assertEqual(0, page.locator('[name='+name+']').count())
+            self.assertNotIn('Modificar antes de aceptar', html)
             self.assertFalse(page.locator('#immediate-review-note').evaluate('(e)=>e.required'))
             page.locator('[name=phonological_relation_answer]').select_option('NO')
             data = MultiDict(page.locator('form').evaluate('(form)=>[...new FormData(form)]'))
@@ -276,6 +245,9 @@ class AnalysisFlowTests(unittest.TestCase):
             page.locator('.remove-relation').nth(1).click()
             self.assertEqual(1, page.locator('.relation').count())
             page.locator('[name=proposal_kind][value=UNSURE]').check()
-            self.assertTrue(page.locator('#modify-immediate').evaluate('(e)=>e.open'))
-            self.assertEqual('', page.locator('#canonical-decision').input_value())
+            self.assertTrue(page.locator('#immediate-confirm').is_disabled())
+            self.assertTrue(page.locator('#immediate-unsure').is_visible())
+            self.assertEqual('Para aceptar inmediatamente, seleccione una clasificación concreta: una alternativa existente o una nueva alternativa.', page.locator('#immediate-unsure').inner_text())
+            page.locator('[name=proposal_kind][value=EXISTING]').check()
+            self.assertTrue(page.locator('#immediate-confirm').is_enabled())
             self.assertEqual([], errors)

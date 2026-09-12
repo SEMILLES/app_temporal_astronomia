@@ -172,8 +172,7 @@
 <section id="immediate-acceptance">
 <h2>Aceptar inmediatamente como revisor</h2>
 <p>Aceptar inmediatamente el análisis tal como está</p>
-<input type="hidden" name="immediate_mode" id="immediate-mode" value="as_proposed">
-<p id="immediate-unsure" role="alert" hidden>El análisis está marcado como ‘No estoy seguro’. Para aceptarlo inmediatamente es necesario resolver la clasificación.</p>
+<p id="immediate-unsure" role="alert" hidden>Para aceptar inmediatamente, seleccione una clasificación concreta: una alternativa existente o una nueva alternativa.</p>
 
 <p>Esta sección avanzada aplica la decisión sin enviarla a la cola de revisión.</p>
 {% if occurrence['reference_concept_id'] %}<p>La aceptación inmediata confirma el concepto de referencia para este aporte y registra su resolución local.</p>
@@ -181,52 +180,10 @@
 
 <p id="immediate-concept-status">Concepto que se usará: <strong>{{ occurrence['reference_label'] or 'Referencia conceptual vigente' }}</strong></p>
 
-<details id="modify-immediate">
-<summary>Modificar antes de aceptar</summary>
-<fieldset id="immediate-overrides" disabled>
-<p><label>Acción léxica
-<select id="canonical-decision" name="canonical_decision">
-<option value="">Seleccione</option>
-<option value="existing">Alternativa existente</option>
-<option value="new">Nueva alternativa</option>
-</select>
-</label>
-</p>
-
-<p id="immediate-existing-alternative" hidden><label>Alternativa destino
-<select name="canonical_alternative_id" disabled>
-<option value="">Alternativa final</option>
-{% for alternative in alternatives %}
-<option value="{{ alternative['alternative_id'] }}">{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
-{% endfor %}
-</select>
-</label></p>
-
-<fieldset id="immediate-relations" hidden>
-<legend>Relaciones propuestas</legend>
-<p id="immediate-relations-existing-note" hidden>Estas relaciones no se incorporarán a la Alternativa existente. Debe rechazarlas explícitamente para continuar.</p>
-<p id="immediate-relations-new-note" hidden>La decisión se aplica a todas las relaciones propuestas.</p>
-<label><input type="radio" name="relations_resolution" value="ACCEPTED"> Aceptar relaciones propuestas</label>
-<label><input type="radio" name="relations_resolution" value="REJECTED"> Rechazar relaciones propuestas</label>
-</fieldset>
-
-<fieldset id="immediate-morphology" hidden>
-<legend>Morfología propuesta</legend>
-<p id="immediate-morphology-existing-note" hidden>La morfología propuesta no se copiará a la Alternativa existente. Debe rechazarla explícitamente para continuar.</p>
-<p id="immediate-morphology-new-note" hidden>Puede aceptar o rechazar la morfología propuesta.</p>
-<label><input type="radio" name="morphology_resolution" value="ACCEPTED"> Aceptar morfología propuesta</label>
-<label><input type="radio" name="morphology_resolution" value="REJECTED"> Rechazar morfología propuesta</label>
-</fieldset>
-
-</fieldset>
-</details>
-<p id="immediate-resolution-warning" role="alert" hidden>Falta resolver una propuesta antes de confirmar la aceptación inmediata.</p>
-
-<p><label>Nota de revisión <span id="review-note-required" hidden>(obligatoria)</span>
+<p><label>Nota de revisión (opcional)
 <textarea name="review_note" id="immediate-review-note"></textarea>
 </label></p>
 
-<input type="hidden" name="nomenclature_mode" value="automatic">
 
 <button id="immediate-confirm"{% if not occurrence['reference_concept_id'] %} disabled{% endif %} formaction="{{ url_for('occurrences.preview_alternative_immediate',occurrence_id=occurrence['occurrence_id']) }}">Aceptar inmediatamente</button>
 
@@ -408,59 +365,17 @@
 <script>
 (function(){
     const form=document.querySelector('[name=proposal_kind]').form,
-          decision=document.getElementById('canonical-decision'),
-          editor=document.getElementById('modify-immediate'),
-          overrides=document.getElementById('immediate-overrides'),
-          mode=document.getElementById('immediate-mode'),
-          note=document.getElementById('immediate-review-note');
+          immediateButton=document.getElementById('immediate-confirm');
     const selected=name=>form.querySelector('[name='+name+']:checked');
     const error=document.createElement('p');error.role='alert';error.hidden=true;form.appendChild(error);
-    let previousKind='';
+    const conceptUnavailable=immediateButton&&immediateButton.disabled;
     function update(){
-        if(!decision)return;
-        const proposal=selected('proposal_kind'),kind=proposal?proposal.value:'',
-              unsure=kind==='UNSURE';
+        if(!immediateButton)return;
+        const proposal=selected('proposal_kind'),unsure=proposal&&proposal.value==='UNSURE';
         document.getElementById('immediate-unsure').hidden=!unsure;
-        if(unsure){
-            editor.open=true;
-            if(previousKind!==kind)decision.value='';
-        }
-        previousKind=kind;
-        mode.value=editor.open?'modify':'as_proposed';
-        overrides.disabled=!editor.open;
-        if(!editor.open){
-            decision.value=kind==='NEW'?'new':kind==='EXISTING'?'existing':'';
-            form.elements.canonical_alternative_id.value=form.elements.proposed_existing_alternative_id.value;
-        }
-        const existing=decision.value==='existing',
-              hasRelations=kind==='NEW'&&form.elements.phonological_relation_answer.value==='YES',
-              hasMorphology=kind==='NEW'&&!!form.elements.morphology_component_count.value;
-        decision.required=editor.open;
-        document.getElementById('immediate-existing-alternative').hidden=!existing;
-        form.elements.canonical_alternative_id.disabled=!editor.open||!existing;
-        form.elements.canonical_alternative_id.required=editor.open&&existing;
-        for(const [group,proposed] of [['relations',hasRelations],['morphology',hasMorphology]]){
-            const fieldset=document.getElementById('immediate-'+group);
-            fieldset.hidden=!proposed;fieldset.disabled=!editor.open||!proposed;
-            document.getElementById('immediate-'+group+'-existing-note').hidden=!existing;
-            document.getElementById('immediate-'+group+'-new-note').hidden=existing;
-            fieldset.querySelectorAll('input').forEach(x=>{
-                x.required=editor.open&&proposed;
-                if(!editor.open)x.checked=x.value==='ACCEPTED';
-                x.disabled=existing&&x.value==='ACCEPTED';
-                if(x.disabled&&editor.open)x.checked=false;
-            });
-        }
-        const rejected=['relations_resolution','morphology_resolution'].some(name=>{
-            const input=selected(name);return input&&!input.matches(':disabled')&&input.value==='REJECTED';
-        });
-        const changed=editor.open&&(unsure||kind==='NEW'&&existing||kind==='EXISTING'&&(
-            !existing||form.elements.canonical_alternative_id.value!==form.elements.proposed_existing_alternative_id.value)||rejected);
-        note.required=!!changed;
-        document.getElementById('review-note-required').hidden=!changed;
+        immediateButton.disabled=conceptUnavailable||unsure;
     }
     form.addEventListener('change',update);
-    if(editor)editor.addEventListener('toggle',update);
     form.addEventListener('submit',event=>{
         const immediate=event.submitter&&event.submitter.id==='immediate-confirm';
         let message='';
@@ -482,8 +397,7 @@
                 if(!immediate&&input.closest('#immediate-acceptance'))return false;
                 return input.willValidate&&!input.validity.valid;
             });
-            if(invalid)message=invalid===note?'Explique la decisión en la nota de revisión.':
-                invalid.closest('#immediate-overrides')?'Seleccione la decisión y resuelva los grupos propuestos antes de aceptar.':'Complete los campos obligatorios del análisis.';
+            if(invalid)message='Complete los campos obligatorios del análisis.';
         }
         error.textContent=message;error.hidden=!message;
         if(message){event.preventDefault();error.scrollIntoView({block:'center'});}

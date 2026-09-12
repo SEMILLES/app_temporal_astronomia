@@ -57,6 +57,17 @@ class LexicalUITests(unittest.TestCase):
     def post(self, sid, **form):
         return self.client.post(f'/aportes/{sid}/decidir', data=form)
 
+    def test_ordinary_review_can_change_existing_a_to_b(self):
+        sid = self.create(kind='EXISTING')
+        db = self.connect()
+        concept_id = db.execute('SELECT concept_id FROM alternative WHERE alternative_id=1').fetchone()[0]
+        target = db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(?,'B')", (concept_id,)).lastrowid
+        db.commit()
+        response = self.post(sid, decision='existing', alternative_id=str(target), review_note='Corresponde a B')
+        self.assertEqual(302, response.status_code, response.text)
+        self.assertEqual(1, db.execute('SELECT proposed_existing_alternative_id FROM alternative_submission WHERE submission_id=?', (sid,)).fetchone()[0])
+        self.assertEqual(('USE_EXISTING', target), tuple(db.execute('SELECT decision_action,resolved_alternative_id FROM submission_lexical_decision WHERE submission_id=?', (sid,)).fetchone()))
+
     def test_unresolved_concept_blocks_closing_and_keeps_concept_editor(self):
         sid = self.create(resolved=False)
         page = self.page(sid)

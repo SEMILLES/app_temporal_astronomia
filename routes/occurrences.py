@@ -106,22 +106,16 @@ def _alternative_payload(form):
 
 
 def _alternative_decision(form):
-    # New forms explicitly select inheritance; legacy explicit decisions remain valid.
-    inherit = form.get("immediate_mode") == "as_proposed" or (
-        not form.get("immediate_mode") and not form.get("canonical_decision"))
-    if inherit:
-        proposal = _alternative_payload(form)
-        if proposal["proposal_kind"] == "UNSURE":
-            raise ValueError("El análisis está marcado como ‘No estoy seguro’. Para aceptarlo inmediatamente es necesario resolver la clasificación.")
-        return {
-            "decision": {"EXISTING": "existing", "NEW": "new"}.get(proposal["proposal_kind"]),
-            "alternative_id": proposal["proposed_existing_alternative_id"],
-            "relations_resolution": "ACCEPTED" if proposal["relations"] else "NOT_PROPOSED",
-            "morphology_resolution": "ACCEPTED" if proposal["morphology"] else "NOT_PROPOSED",
-            "nomenclature_mode": "automatic",
-        }
-    action=form.get("concept_resolution_action");concept_resolution={"action":action,"concept_id":form.get("resolved_concept_id") or None,"label":form.get("new_concept_label") or None} if action else None
-    return {"decision":form.get("canonical_decision"),"alternative_id":form.get("canonical_alternative_id") or form.get("proposed_existing_alternative_id"),"relation_policy":form.get("relation_policy","preserve"),"concept_resolution":concept_resolution,"relations_resolution":form.get("relations_resolution"),"morphology_resolution":form.get("morphology_resolution"),"approve_relations":(form.get("approve_relations")=="yes" if "approve_relations" in form else None),"approve_morphology":(form.get("approve_morphology")=="yes" if "approve_morphology" in form else None),"nomenclature_mode":form.get("nomenclature_mode","automatic"),"labels":{key[6:]:value for key,value in form.items() if key.startswith("label_")},"nomenclature_reason":form.get("nomenclature_reason")}
+    proposal = _alternative_payload(form)
+    if proposal["proposal_kind"] == "UNSURE":
+        raise ValueError("Para aceptar inmediatamente, seleccione una clasificación concreta: una alternativa existente o una nueva alternativa.")
+    return {
+        "decision": {"EXISTING": "existing", "NEW": "new"}.get(proposal["proposal_kind"]),
+        "alternative_id": proposal["proposed_existing_alternative_id"],
+        "relations_resolution": "ACCEPTED" if proposal["relations"] else "NOT_PROPOSED",
+        "morphology_resolution": "ACCEPTED" if proposal["morphology"] else "NOT_PROPOSED",
+        "nomenclature_mode": "automatic",
+    }
 
 
 def _actor(form):return {"collaborator_id":form.get("collaborator_id"),"access_role":getattr(g,"current_access_role",None)}
@@ -161,13 +155,7 @@ def _confirmation(template_kind,occurrence_id,operation):
     except StaleEdit as error:return str(error),409
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
     finally:db.close()
-    changed = False
-    if template_kind == "alternative":
-        changed = (decision['decision'] != {'NEW':'new','EXISTING':'existing'}.get(proposed['proposal_kind'])
-                   or (decision['decision']=='existing' and str(decision['alternative_id']) != str(proposed['proposed_existing_alternative_id']))
-                   or decision.get('relations_resolution') == 'REJECTED'
-                   or decision.get('morphology_resolution') == 'REJECTED')
-    summary={"changed":changed,"occurrence":dict(occurrence) if occurrence else None,"current":dict(current) if current else None,"proposed":_grammar_values(request.form) if template_kind=="grammar" else proposed,"decision":decision if template_kind=="alternative" else None,"concept_label":concept_label,"destination_label":destination_label,"review_note":request.form.get("review_note")}
+    summary={"occurrence":dict(occurrence) if occurrence else None,"current":dict(current) if current else None,"proposed":_grammar_values(request.form) if template_kind=="grammar" else proposed,"decision":decision if template_kind=="alternative" else None,"concept_label":concept_label,"destination_label":destination_label,"review_note":request.form.get("review_note")}
     return render_template("confirmar_aceptacion_inmediata.html",kind=template_kind,occurrence_id=occurrence_id,payload=list(request.form.lists()),preflight=result,summary=summary,nomenclature_preview=nomenclature_preview)
 
 
