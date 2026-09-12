@@ -159,7 +159,7 @@ class AlternativeRouteTests(unittest.TestCase):
         for text in ("Aceptar la alternativa propuesta por el analista","Asignar a otra alternativa existente","Crear una nueva alternativa","Rechazar el resto del análisis"):
             self.assertIn(text,page)
         self.assertIn("Esta operación modificará la nomenclatura de 1 alternativa existente.",page)
-        self.assertIn("↺ Cambia",page);self.assertIn("1 alternativa existente cambia. Se creará 1 alternativa nueva.",page)
+        self.assertIn("↻ Cambia",page);self.assertIn("1 alternativa existente cambia. Se creará 1 alternativa nueva.",page)
         self.assertEqual(self.review_post(f"/aportes/{sid}/decidir",data={"decision":"existing_proposed"}).status_code,302)
         db=self.connect();self.assertEqual(db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0],1);db.close()
 
@@ -175,7 +175,7 @@ class AlternativeRouteTests(unittest.TestCase):
     def test_route_review_new_auto_and_legacy_detail_read_only(self):
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"});db=self.connect();sid=db.execute("SELECT submission_id FROM submission").fetchone()[0];db.close()
         self.resolve_pending_concepts()
-        review=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("Propuesta: nueva alternativa",review); self.assertIn("PREVIEW DE CAMBIOS",review); self.assertIn("DECISIÓN DEL REVISOR",review)
+        review=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("Propuesta: nueva alternativa",review); self.assertIn("VISTA PREVIA DE CAMBIOS",review); self.assertIn("DECISIÓN DEL REVISOR",review)
         self.assertEqual(self.review_post(f"/aportes/{sid}/decidir",data={"decision":"new","approve_relations":"no","approve_morphology":"yes","nomenclature_mode":"automatic"}).status_code,302)
         db=self.connect();self.assertEqual(db.execute("SELECT count(*) FROM alternative").fetchone()[0],2);snapshot=tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone());db.close()
         self.assertEqual(self.client.get(f"/aportes/{sid}").status_code,200);db=self.connect();self.assertEqual(tuple(db.execute("SELECT * FROM submission WHERE submission_id=?",(sid,)).fetchone()),snapshot);db.close()

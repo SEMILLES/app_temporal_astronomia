@@ -33,9 +33,9 @@
 </fieldset>{% endif %}{% endfor %}
 <div class="new-decision-controls" hidden><fieldset disabled><legend>Crear una nueva alternativa</legend>
 {% if not ctx['proposed_morphology'] %}<p>Sin morfología propuesta.</p>{% endif %}
-<p class="preview-pending">Preview de nomenclatura no definitivo: resuelva las relaciones propuestas. Si el destino ya no es válido, no hay preview de aceptación disponible.</p>
+<p class="preview-pending">Vista previa de nomenclatura no definitiva: resuelva las relaciones propuestas. Si el destino ya no es válido, no hay vista previa de aceptación disponible.</p>
 {% for resolution,preview in ctx['nomenclature_previews'].items() %}<div class="lexical-preview" data-resolution="{{ resolution }}" hidden>{% include '_submission_lexical_preview.html' %}</div>{% endfor %}
-<p>El backend recalcula la nomenclatura al cerrar. En modo manual o con ajustes, las etiquetas introducidas sustituyen las sugerencias del preview.</p>
+<p>El backend recalcula la nomenclatura al cerrar. En modo manual o con ajustes, las etiquetas introducidas sustituyen las sugerencias de la vista previa.</p>
 <details class="nomenclature-options"><summary>Modificar nomenclatura manualmente</summary><p><strong>Los cambios de nomenclatura se aplicarán al confirmar la decisión del revisor.</strong></p>
 <label>Modo <select name="nomenclature_mode"><option value="automatic">Modo automático</option><option value="manual">Modo manual</option><option value="adjusted">Automático con ajustes</option></select></label>
 {% for alternative in ctx['alternatives'] %}<label>{{ alternative['display_label'] }} <input class="nomenclature-label" name="label_{{ alternative['alternative_id'] }}" value="{{ alternative['working_label'] }}" readonly></label>{% endfor %}

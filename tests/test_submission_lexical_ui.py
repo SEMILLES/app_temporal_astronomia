@@ -105,16 +105,53 @@ class LexicalUITests(unittest.TestCase):
         table.feed(html)
         self.assertEqual(['ID', 'Actual', 'Propuesta', 'Año', 'Estado'], table.rows[0])
         self.assertEqual([
-            ['2', '10a', '2a', '2012', '↺ Cambia'],
+            ['2', '10a', '2a', '2012', '↻ Cambia de grupo'],
             ['1', '3a', '3a', '2001', '= Sin cambio'],
             ['Nueva', '—', '3b', '2018', '+ Nueva'],
-            ['3', '7a', '3c', '2019', '↺ Cambia'],
+            ['3', '7a', '3c', '2019', '↻ Cambia de grupo'],
             ['4', '4a', '4a', '—', '= Sin cambio'],
-            ['10', '2a', '10a', '2006', '↺ Cambia'],
+            ['10', '2a', '10a', '2006', '↻ Cambia de grupo'],
         ], table.rows[1:])
         for internal in ('source_single_year', 'occurrence_year', 'source_range_start'):
             self.assertNotIn(internal, html)
         self.assertEqual(before, preview)
+
+    def test_group_changes_and_terminology_in_both_presentations(self):
+        rows = [
+            dict(alternative_id=1, current_label='8a', proposed_label='4c', reference_year=2000),
+            dict(alternative_id=2, current_label='1b', proposed_label='1c', reference_year=2001),
+            dict(alternative_id=3, current_label='1a', proposed_label='1a', reference_year=None),
+            dict(alternative_id='new', current_label=None, proposed_label='4b', reference_year=2018),
+        ]
+        for count in (1, 2):
+            if count == 2:
+                rows.append(dict(alternative_id=4, current_label='7a', proposed_label='3c', reference_year=2019))
+            preview = {'rows': deepcopy(rows)}
+            before = deepcopy(preview)
+            with self.client.application.test_request_context():
+                ordinary = render_template('_submission_lexical_preview.html', preview=preview,
+                                           aporte={'local_concept_label': 'TEST'})
+                immediate = render_template('confirmar_aceptacion_inmediata.html',
+                    kind='alternative', occurrence_id=2, payload=[], preflight={'token': 'test'},
+                    nomenclature_preview=preview, summary={
+                        'concept_label': 'TEST', 'proposed': {'proposal_kind': 'NEW', 'relations': []},
+                        'decision': {'decision': 'new'},
+                    })
+            tables = []
+            for html in (ordinary, immediate):
+                self.assertIn('VISTA PREVIA DE CAMBIOS', html)
+                self.assertNotIn('PREVIEW DE CAMBIOS', html)
+                self.assertIn(f"{count} " + ('alternativa cambia' if count == 1 else 'alternativas cambian') + ' de grupo léxico.', html)
+                table = PreviewTableParser()
+                table.feed(html)
+                by_id = {row[0]: row for row in table.rows[1:]}
+                self.assertEqual('↻ Cambia de grupo', by_id['1'][-1])
+                self.assertEqual('↻ Cambia', by_id['2'][-1])
+                self.assertEqual('= Sin cambio', by_id['3'][-1])
+                self.assertEqual('+ Nueva', by_id['Nueva'][-1])
+                tables.append(table.rows)
+            self.assertEqual(tables[0], tables[1])
+            self.assertEqual(before, preview)
 
     def test_ordinary_review_can_change_existing_a_to_b(self):
         sid = self.create(kind='EXISTING')

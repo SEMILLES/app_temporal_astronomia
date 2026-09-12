@@ -35,6 +35,15 @@ def preview_proposed_order(rows):
     return sorted(rows, key=lambda row: working_label_key(row["proposed_label"]))
 
 
+@submissions_bp.app_template_filter("preview_group_changed")
+def preview_group_changed(row):
+    if row['alternative_id'] == 'new':
+        return False
+    current = working_label_key(row['current_label'])
+    proposed = working_label_key(row['proposed_label'])
+    return current[0] == proposed[0] == 0 and current[1] != proposed[1]
+
+
 def _context(db, draft=None, error=None):
     return dict(
         fuentes=db.execute("SELECT source_id, source_name, source_type, start_year, end_year, end_year_status FROM source WHERE retired_at IS NULL ORDER BY source_name").fetchall(),

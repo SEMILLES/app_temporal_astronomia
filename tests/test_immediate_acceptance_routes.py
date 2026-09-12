@@ -448,7 +448,9 @@ class ImmediateAcceptanceRouteTests(unittest.TestCase):
                 self.assertEqual(200, response.status_code)
                 html = response.get_data(as_text=True)
                 self.assertIn('Vista previa de solo lectura', html)
-                tables[resolution] = html.split('<table>')[1].split('</table>')[0]
+                self.assertIn('VISTA PREVIA DE CAMBIOS', html)
+                self.assertNotIn('PREVIEW DE CAMBIOS', html)
+                tables[resolution] = html.split('<table class="preview-table">')[1].split('</table>')[0]
                 previews[resolution] = re.search(r'class="preview-nueva".*?<td>Nueva</td><td>.*?</td><td>(.*?)</td>', html).group(1)
                 self.assertEqual(before, list(db.iterdump()))
             self.assertEqual(tables['ACCEPTED'], tables['REJECTED'])
