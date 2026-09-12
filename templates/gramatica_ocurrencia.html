@@ -51,6 +51,7 @@ Sin analizar
 {% if registration_flow %}
 <input type="hidden" name="flow" value="registration">
 {% endif %}
+<button type="button" id="complete-unmarked">Completar campos sin marca</button>
 <input type="hidden" name="edit_token" value="{{ edit_token }}">
 
 {% for field, label in [('gender','Género'),('plural','Plural'),('agentive','Agentivo'),('conjugated_form','Forma conjugada'),('negation','Negación')] %}
@@ -111,6 +112,13 @@ Aceptar inmediatamente
     const form=document.querySelector('.grammar-analysis-form');
     if(!form) return;
 
+    form.querySelector('#complete-unmarked').addEventListener('click',()=>{
+        const defaults={gender:'SIN-MARCA',plural:'SIN-MARCA',agentive:'N/A',conjugated_form:'NO',negation:'SIN-NEG'};
+        Object.entries(defaults).forEach(([field,value])=>{
+            const select=form.elements[field];
+            if(select.value==='') select.value=value;
+        });
+    });
     const note=form.querySelector('[name=note]');
     const errorBox=form.querySelector('.grammar-note-validation');
 

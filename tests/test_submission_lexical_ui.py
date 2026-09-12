@@ -76,7 +76,7 @@ class LexicalUITests(unittest.TestCase):
                 self.assertIn(f'name="{field}" value="{value}"', page)
             self.assertNotIn(f'value="ACCEPTED" checked', page)
             self.assertNotIn(f'value="REJECTED" checked', page)
-        for text in ('NOTA ORIGINAL', 'CM_1', 'Con duda', 'Tipo original: NEW', 'no se incorporará', 'Nota de revisión'):
+        for text in ('NOTA ORIGINAL', 'CM_1', 'Con duda', 'Tipo original: Nueva alternativa', 'no se incorporará', 'Nota de revisión'):
             self.assertIn(text, page)
         self.assertNotIn('value="union"', page)
         self.assertNotIn('name="nomenclature_reason"', page)
@@ -144,7 +144,7 @@ class LexicalUITests(unittest.TestCase):
         self.assertEqual(relations, [tuple(r) for r in db.execute('SELECT * FROM alternative_submission_relation')])
         db.close()
         page = self.page(sid)
-        for text in ('Creó una Alternative nueva', 'Relaciones: aceptadas', 'Morfología: aceptada', 'Morfología resultante:', 'NOTA ORIGINAL', 'Con duda'):
+        for text in ('Creó una Alternativa nueva', 'Relaciones: aceptadas', 'Morfología: aceptada', 'Morfología resultante:', 'NOTA ORIGINAL', 'Con duda'):
             self.assertIn(text, page)
 
     def test_selector_only_local_concept_and_active_alternatives(self):
@@ -171,12 +171,48 @@ class LexicalUITests(unittest.TestCase):
         page = self.page(sid)
         history = page.split('<section class="lexical-history">')[1].split('</section>')[0]
         current = page.split('<section class="lexical-current">')[1].split('</section>')[0]
-        for text in ('Usó una Alternative existente', 'Concepto snapshot: TEST', 'Alternative snapshot: TEST-1', 'Se creó la clasificación', 'Relaciones: no propuestas', 'Morfología: no propuesta'):
+        for text in ('Usó una Alternativa existente', 'Concepto al decidir: TEST', 'Alternativa al decidir: TEST-1', 'Se creó la clasificación', 'Relaciones: no propuestas', 'Morfología: no propuesta'):
             self.assertIn(text, history)
         self.assertNotIn('RENOMBRADA', history)
         self.assertNotIn('CONCEPTO ACTUAL', history)
         for text in ('RENOMBRADA', 'CONCEPTO ACTUAL', 'Retirada', 'CLASIFICACIÓN VIGENTE ACTUAL'):
             self.assertIn(text, current)
+
+    def test_created_history_uses_only_snapshots_and_message_excludes_new_label(self):
+        db = self.connect()
+        db.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=1")
+        db.commit()
+        sid = self.create(groups=False)
+        response = self.post(sid, decision='new', morphology_resolution='ACCEPTED')
+        self.assertEqual(302, response.status_code)
+        self.assertIn('No+fue+necesario+renumerar', response.location)
+        db = self.connect()
+        decision = dict(db.execute('SELECT * FROM submission_lexical_decision WHERE submission_id=?', (sid,)).fetchone())
+        expected = decision['concept_label_snapshot'] + '-' + decision['alternative_label_snapshot']
+        before = self.page(sid).split('<section class="lexical-history">')[1].split('</section>')[0]
+        self.assertIn(expected, before)
+        db.execute("UPDATE concept SET preferred_label='CONCEPTO-ACTUAL'")
+        db.execute("UPDATE alternative SET working_label='CAMBIADA' WHERE alternative_id=?", (decision['resolved_alternative_id'],))
+        db.commit()
+        after = self.page(sid).split('<section class="lexical-history">')[1].split('</section>')[0]
+        self.assertEqual(before, after)
+        self.assertEqual(decision, dict(db.execute('SELECT * FROM submission_lexical_decision WHERE submission_id=?', (sid,)).fetchone()))
+        self.assertIn('Aceptado', self.page(sid))
+
+    def test_creation_message_counts_only_changed_existing_alternatives(self):
+        from urllib.parse import parse_qs, urlparse
+        sid = self.create(groups=False)
+        response = self.post(sid, decision='new', morphology_resolution='ACCEPTED')
+        self.assertEqual(302, response.status_code)
+        message = parse_qs(urlparse(response.location).query)['message'][0]
+        self.assertIn('1 etiqueta de una alternativa existente.', message)
+        self.assertNotIn('2 etiquetas', message)
+
+    def test_explicit_rejection_is_visible_in_list_and_detail(self):
+        sid = self.create(groups=False)
+        self.assertEqual(302, self.post(sid, decision='rejected', review_note='No corresponde').status_code)
+        self.assertIn('Rechazado', self.page(sid))
+        self.assertIn('Rechazado', self.client.get('/aportes').get_data(as_text=True))
 
     def test_legacy_closed_without_decision_does_not_infer_history(self):
         sid = self.create('EXISTING', resolved=False)
@@ -188,8 +224,8 @@ class LexicalUITests(unittest.TestCase):
         self.assertIn('Decisión léxica explícita no registrada.', page)
         self.assertIn('NOTA HISTÓRICA', page)
         self.assertIn('NOTA ORIGINAL', page)
-        self.assertNotIn('Alternative snapshot:', page)
-        self.assertNotIn('Usó una Alternative existente', page)
+        self.assertNotIn('Alternativa al decidir:', page)
+        self.assertNotIn('Usó una Alternativa existente', page)
 
     def test_existing_to_new_without_morphology_and_note_validation(self):
         sid = self.create('EXISTING')

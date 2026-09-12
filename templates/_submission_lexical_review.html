@@ -1,7 +1,7 @@
 {% include '_submission_lexical_proposal.html' %}
 <h3>Relaciones propuestas originalmente</h3>
 <ul>{% for relation in ctx['relations'] %}
-<li>Destino: {% if relation['target_alternative_id'] %}Alternative ID {{ relation['target_alternative_id'] }}{% else %}Aporte #{{ relation['target_submission_id'] }}{% endif %} · {{ relation['phonological_parameter'] }}{% if relation['uncertain'] %} · Con duda{% endif %}</li>
+<li>Destino: {% if relation['target_alternative_id'] %}Alternativa ID {{ relation['target_alternative_id'] }}{% else %}Aporte #{{ relation['target_submission_id'] }}{% endif %} · {{ relation['phonological_parameter'] }}{% if relation['uncertain'] %} · Con duda{% endif %}</li>
 {% else %}<li>Sin relaciones propuestas.</li>{% endfor %}</ul>
 {% include '_submission_concept_resolution.html' %}
 {% if aporte['status']=='pending' %}
@@ -24,7 +24,7 @@
 <div class="existing-decision-controls" hidden><label>Alternativa vigente <select name="alternative_id" disabled><option value="">Seleccione</option>{% for alternative in ctx['alternatives'] %}<option value="{{ alternative['alternative_id'] }}">{{ alternative['display_label'] }}</option>{% endfor %}</select></label></div>
 {% for field,title,proposed in [('relations_resolution','relaciones propuestas',ctx['relations']),('morphology_resolution','morfología propuesta',ctx['proposed_morphology'])] %}
 {% if proposed %}<fieldset class="group-decision" hidden disabled><legend>Decisión sobre {{ title }}</legend>
-<p class="existing-group-warning" hidden>La propuesta de {{ title }} no se incorporará a la Alternative existente. Confirme explícitamente su rechazo para cerrar; el destino conserva sus relaciones y su morfología canónicas.</p>
+<p class="existing-group-warning" hidden>{{ 'Las relaciones propuestas' if field=='relations_resolution' else 'La morfología propuesta' }} no se {{ 'incorporarán' if field=='relations_resolution' else 'incorporará' }} a la Alternativa existente. Confirme explícitamente su rechazo para cerrar; el destino conserva sus relaciones y su morfología canónicas.</p>
 <label class="accept-group"><input type="radio" name="{{ field }}" value="ACCEPTED"> Aceptar {{ title }}</label>
 <label><input type="radio" name="{{ field }}" value="REJECTED"> Rechazar {{ title }}</label>
 <label><input type="radio" name="{{ field }}" value="pending" checked> Dejar pendiente</label>

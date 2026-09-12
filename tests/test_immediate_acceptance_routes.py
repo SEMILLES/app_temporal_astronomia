@@ -413,7 +413,7 @@ class ImmediateAcceptanceRouteTests(unittest.TestCase):
         self.assertNotIn('name="approve_relations"', html)
         self.assertNotIn('name="approve_morphology"', html)
         self.assertIn('Nota de revisión', html)
-        self.assertIn('no se incorporarán a la Alternative existente', html)
+        self.assertIn('no se incorporarán a la Alternativa existente', html)
 
     def test_create_new_summary_shows_explicit_group_resolutions(self):
         self.role = 'reviewer'
@@ -432,11 +432,49 @@ class ImmediateAcceptanceRouteTests(unittest.TestCase):
         )
         self.assertEqual(200, response.status_code)
         html = response.get_data(as_text=True)
-        self.assertIn('Concepto que se usará', html)
+        self.assertIn('Concepto</dt>', html)
         self.assertIn('Crear una alternativa nueva', html)
         self.assertIn('Relaciones</dt><dd>Aceptadas', html)
         self.assertIn('Morfología</dt><dd>Rechazada', html)
         self.assertIn('Decisión documentada', html)
+
+    def test_nomenclature_preview_matches_confirmation_and_rolls_back(self):
+        import re
+        self.role = 'reviewer'
+        base = '/ocurrencias/1/clasificar/aceptacion-inmediata/'
+        common = dict(proposal_kind='NEW', canonical_decision='new',
+                      morphology_component_count='N/A', morphology_resolution='REJECTED',
+                      collaborator_id='1', review_note='Decision documentada')
+        from contextlib import closing
+        with closing(self.connect()) as db:
+            before = list(db.iterdump())
+            previews = {}
+            tables = {}
+            for resolution in ('ACCEPTED', 'REJECTED', 'NOT_PROPOSED'):
+                data = dict(common, phonological_relation_answer='NO')
+                if resolution != 'NOT_PROPOSED':
+                    data.update(phonological_relation_answer='YES', relation_target_type='alternative',
+                                relation_target_id='1', relation_parameter='CM_1', relations_resolution=resolution)
+                response = self.client.post(base+'preview', data=data)
+                self.assertEqual(200, response.status_code)
+                html = response.get_data(as_text=True)
+                self.assertIn('Vista previa de solo lectura', html)
+                tables[resolution] = html.split('<table>')[1].split('</table>')[0]
+                previews[resolution] = re.search(r'class="preview-nueva".*?<td>Nueva</td><td>.*?</td><td>(.*?)</td>', html).group(1)
+                self.assertEqual(before, list(db.iterdump()))
+            self.assertNotEqual(tables['ACCEPTED'], tables['REJECTED'])
+            self.assertEqual(tables['REJECTED'], tables['NOT_PROPOSED'])
+            self.assertEqual(302, self.client.post(base+'confirmar', data=dict(data, confirm_immediate='yes')).status_code)
+            label = db.execute('SELECT alternative_label_snapshot FROM submission_lexical_decision').fetchone()[0]
+            self.assertEqual(previews['NOT_PROPOSED'], label)
+
+    def test_existing_summary_has_full_destination(self):
+        self.role = 'reviewer'
+        response = self.client.post('/ocurrencias/1/clasificar/aceptacion-inmediata/preview', data={
+            'proposal_kind':'EXISTING', 'proposed_existing_alternative_id':'1',
+            'canonical_decision':'existing', 'collaborator_id':'1'})
+        self.assertEqual(200, response.status_code)
+        self.assertIn('Alternativa destino</dt><dd>C-1</dd>', response.get_data(as_text=True))
 
     def test_existing_destination_rejects_both_proposed_groups_without_union(self):
         self.role = 'reviewer'

@@ -46,6 +46,41 @@ class GrammarWorkflowRouteTests(unittest.TestCase):
             self.assertIn(text,page)
         self.assertNotIn('value="SIN-MARCA" selected',page)
 
+    def test_unmarked_shortcut_uses_canonical_values_only_for_empty_fields(self):
+        import re
+        from grammatical_marks import GRAMMATICAL_MARK_VOCABULARIES
+        page = self.client.get('/ocurrencias/1/gramatica').get_data(as_text=True)
+        self.assertIn('type="button" id="complete-unmarked"', page)
+        defaults = dict(re.findall(r"(\w+):'([^']+)'", re.search(r'const defaults=\{(.*?)\}', page).group(1)))
+        self.assertEqual(set(FIELDS), set(defaults))
+        for field, value in defaults.items():
+            self.assertIn(value, GRAMMATICAL_MARK_VOCABULARIES[field])
+        self.assertIn("if(select.value==='') select.value=value;", page)
+        self.assertNotIn('select.disabled=true', page)
+        self.assertNotIn('.checked=true', page)
+        import shutil
+        import subprocess
+        if not shutil.which('node'):
+            self.skipTest('Node no disponible para ejecutar el atajo JavaScript')
+        callback = re.search(r"form.querySelector\('#complete-unmarked'\).*?=>\{(.*?)\n    \}\);", page, re.S).group(1)
+        harness = """
+const assert=require('node:assert/strict');
+const form={elements:{gender:{value:'FEM-A'},plural:{value:''},agentive:{value:''},conjugated_form:{value:'SÍ'},negation:{value:''}}};
+const complete=()=>{CALLBACK};
+complete();
+assert.equal(form.elements.gender.value,'FEM-A');
+assert.equal(form.elements.plural.value,'SIN-MARCA');
+assert.equal(form.elements.agentive.value,'N/A');
+assert.equal(form.elements.conjugated_form.value,'SÍ');
+assert.equal(form.elements.negation.value,'SIN-NEG');
+form.elements.plural.value='REDUP.';
+complete();
+assert.equal(form.elements.plural.value,'REDUP.');
+""".replace('CALLBACK', callback)
+        result = subprocess.run(['node', '-e', harness], capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+
+
     def test_partial_submission_with_uncertainty_and_no_canonical_write(self):
         response=self.client.post("/ocurrencias/1/gramatica",data={"gender":"FEM-A","gender_uncertain":"on","note":"Observed"})
         self.assertEqual(response.status_code,302)

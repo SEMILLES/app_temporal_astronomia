@@ -56,7 +56,7 @@
 {% endif %}
 </td>
 
-<td>{{ 'Pendiente' if aporte.status=='pending' else 'Resuelto' }}</td>
+<td>{{ 'Pendiente' if aporte.status=='pending' else {'accepted':'Aceptado','rejected':'Rechazado'}.get(aporte['resolution'], 'Resuelto') }}</td>
 
 <td>
 {% if aporte.resolution=='rejected' %}

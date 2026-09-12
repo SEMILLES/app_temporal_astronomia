@@ -2,19 +2,19 @@
 <section class="lexical-history">
 <h2>DECISIÓN DEL REVISOR</h2>
 {% if decision %}
-<p>{{ {'USE_EXISTING':'Usó una Alternative existente','CREATE_NEW':'Creó una Alternative nueva','REJECT_REST':'Rechazó el resto del análisis'}[decision['decision_action']] }}</p>
+<p>{{ {'USE_EXISTING':'Usó una Alternativa existente','CREATE_NEW':'Creó una Alternativa nueva','REJECT_REST':'Rechazó el resto del análisis'}[decision['decision_action']] }}</p>
 <p>{{ decision['collaborator_name_snapshot'] or 'Sin colaborador identificado' }} · {{ decision['access_role'] }} · {{ decision['created_at'] }}</p>
-{% else %}<p>Decisión léxica explícita no registrada.</p><p>Resolución registrada: {{ aporte['resolution'] or 'Sin información' }}.</p>{% endif %}
+{% else %}<p>Decisión léxica explícita no registrada.</p><p>Resolución registrada: {{ {'accepted':'Aceptado','rejected':'Rechazado'}.get(aporte['resolution'], 'Sin información') }}.</p>{% endif %}
 <p>Nota de revisión: {{ aporte['review_note'] or 'Sin nota.' }}</p>
 <h2>RESULTADO HISTÓRICO AL DECIDIR</h2>
 {% if decision %}
-<p>Concepto snapshot: {{ decision['concept_label_snapshot'] }}</p>
-{% if decision['alternative_label_snapshot'] %}<p>Alternative snapshot: {{ decision['alternative_label_snapshot'] }} · ID {{ decision['resolved_alternative_id'] }}</p>{% endif %}
+<p>Concepto al decidir: {{ decision['concept_label_snapshot'] }}</p>
+{% if decision['alternative_label_snapshot'] %}<p>Alternativa al decidir: {{ decision['historical_display_label'] }} · ID {{ decision['resolved_alternative_id'] }}</p>{% endif %}
 <p>{{ {'CREATED':'Se creó la clasificación de la ocurrencia.','REPLACED':'Se sustituyó la clasificación anterior de la ocurrencia.','REUSED':'Se conservó la misma clasificación vigente.','UNCHANGED':'La clasificación permaneció sin cambios.'}[decision['assignment_effect']] }}</p>
 <p>Relaciones: {{ {'ACCEPTED':'aceptadas','REJECTED':'rechazadas','NOT_PROPOSED':'no propuestas'}[decision['relations_resolution']] }}.</p>
 <p>Morfología: {{ {'ACCEPTED':'aceptada','REJECTED':'rechazada','NOT_PROPOSED':'no propuesta'}[decision['morphology_resolution']] }}.</p>
 {% if ctx['morphology_result'] %}{% set morphology=ctx['morphology_result'] %}<p>Morfología resultante: versión #{{ decision['morphology_result_id'] }} · Componentes: {{ 'N/A' if morphology['component_count_not_applicable'] else morphology['component_count'] or 'Sin analizar' }} · Permutación libre: {{ morphology['free_permutation'] or 'Sin analizar' }} · {{ morphology['note'] or 'Sin nota.' }}</p>{% endif %}
-{% else %}<p>No hay snapshots ni decisiones de grupos registrados para reconstruir este resultado.</p>{% endif %}
+{% else %}<p>No hay etiquetas históricas ni decisiones de grupos registrados para reconstruir este resultado.</p>{% endif %}
 </section>
 <section class="lexical-current"><h2>ESTADO ACTUAL</h2>
 {% if ctx['result_current'] %}{% set current=ctx['result_current'] %}<p>Concepto actual: {{ current['preferred_label'] }}. Denominación actual: {{ current['preferred_label'] | alternative_display_label(current['working_label']) }} · {{ 'Retirada' if current['retired_at'] else 'Vigente' }}.</p>

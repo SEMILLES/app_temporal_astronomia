@@ -1,3 +1,4 @@
+import re
 from submission_lexical_decision import get_decision
 from submission_concept_resolution import save_resolution, current_resolution, resolution_history
 from edit_concurrency import edit_token, StaleEdit
@@ -312,6 +313,14 @@ def _alternative_review_context(db, rows):
                     previews['ACCEPTED']=calculate_nomenclature_preview(
                         db,concept_id,extra_edges=edges,virtual_occurrences={'new':row['occurrence_id']})
         lexical_decision=get_decision(db,row['submission_id'])
+        if lexical_decision:
+            lexical_decision = dict(lexical_decision)
+            label = lexical_decision['alternative_label_snapshot']
+            if (lexical_decision['decision_action'] == 'CREATE_NEW' and label
+                    and re.fullmatch(r'[0-9]+[a-z]+', label)
+                    and lexical_decision['concept_label_snapshot']):
+                label = alternative_display_label(lexical_decision['concept_label_snapshot'], label)
+            lexical_decision['historical_display_label'] = label
         result_current=None
         morphology_result=None
         if lexical_decision:
@@ -396,11 +405,12 @@ def decidir_aporte(submission_id):
                 run_normal_review(db,lambda connection: review_as_existing(connection,submission_id,target_id,concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),relations_resolution=request.form.get("relations_resolution"),morphology_resolution=request.form.get("morphology_resolution"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
             elif decision == "new":
                 labels={key[6:]:value for key,value in request.form.items() if key.startswith("label_")}
-                before_events=db.execute("SELECT count(*) FROM renumber_change").fetchone()[0]
+                before_labels=dict(db.execute("SELECT alternative_id,working_label FROM alternative"))
                 new_id=run_normal_review(db,lambda connection: review_as_new(connection,submission_id,concept_resolution=concept_resolution,approve_relations=(request.form.get("approve_relations")=="yes" if "approve_relations" in request.form else None),relations_resolution=request.form.get("relations_resolution"),morphology_resolution=request.form.get("morphology_resolution"),nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason") or request.form.get("review_note"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=(request.form.get("approve_morphology")=="yes" if "approve_morphology" in request.form else None),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
                 created=db.execute("SELECT c.preferred_label,a.working_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.alternative_id=?",(new_id,)).fetchone()
-                changes=db.execute("SELECT count(*) FROM renumber_change").fetchone()[0]-before_events
-                created_message=f"Nueva alternativa creada como {alternative_display_label(created['preferred_label'],created['working_label'])}. Se actualizaron {changes} etiquetas del concepto {created['preferred_label']}."
+                changes=sum(before_labels[item[0]] != item[1] for item in db.execute("SELECT alternative_id,working_label FROM alternative") if item[0] in before_labels)
+                renumber_message = (f"Se actualizaron {changes} etiquetas de alternativas existentes." if changes != 1 else "Se actualizó 1 etiqueta de una alternativa existente.") if changes else "No fue necesario renumerar alternativas existentes."
+                created_message=f"Nueva alternativa creada como {alternative_display_label(created['preferred_label'],created['working_label'])}. {renumber_message}"
             else: raise AlternativeWorkflowError("Decisión de review no válida.")
     except (AlternativeWorkflowError,GrammarWorkflowError,ImmediateAcceptanceError, sqlite3.IntegrityError, ValueError) as error:
         return str(error), 400
