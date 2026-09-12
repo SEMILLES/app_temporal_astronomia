@@ -17,6 +17,7 @@ from alternative_workflow import (
     review_as_existing, review_as_new,
 )
 from alternative_nomenclature import calculate_nomenclature_preview
+from alternative_nomenclature import working_label_key
 from alternative_morphology import submission_morphology
 from concept_labels import alternative_display_label
 from source_period import format_source_period
@@ -276,14 +277,17 @@ def _alternative_review_context(db, rows):
     for row in rows:
         if row["submission_type"] != "ALTERNATIVE": continue
         concept_id=row["local_concept_id"]
-        alternatives=[dict(item) for item in db.execute("SELECT a.alternative_id,a.working_label,c.preferred_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.concept_id=? AND a.retired_at IS NULL ORDER BY a.working_label",(concept_id,)).fetchall()] if concept_id else []
+        alternatives=[dict(item) for item in db.execute("SELECT a.alternative_id,a.working_label,c.preferred_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.concept_id=? AND a.retired_at IS NULL",(concept_id,)).fetchall()] if concept_id else []
+        alternatives.sort(key=lambda item: (working_label_key(item["working_label"]), item["alternative_id"]))
         for alternative in alternatives:
             alternative["current_video"]=get_current_video(db, alternative["alternative_id"])
             alternative["display_label"]=alternative_display_label(
                 alternative["preferred_label"],alternative["working_label"]
             )
             alternative["occurrences"]=[dict(item) for item in db.execute("""
-                SELECT o.occurrence_id,o.original_gloss,s.source_name,o.source_detail_1,o.source_detail_2
+                  SELECT o.occurrence_id,o.original_gloss,o.occurrence_year,s.source_name,
+                      s.start_year,s.end_year,s.end_year_status,
+                      o.source_detail_1,o.source_detail_2
                 FROM assignment ass JOIN occurrence o USING(occurrence_id)
                 JOIN source s USING(source_id)
                 WHERE ass.alternative_id=? AND ass.is_current=1 ORDER BY o.occurrence_id
@@ -304,6 +308,11 @@ def _alternative_review_context(db, rows):
             LEFT JOIN concept rc ON rc.concept_id=ra.concept_id
             WHERE r.submission_id=? ORDER BY r.alternative_submission_relation_id
         """,(row["submission_id"],)).fetchall()
+        pending_target_relations = any(
+            relation["target_submission_id"] is not None
+            and relation["target_submission_status"] == "pending"
+            for relation in relations
+        )
         assignment=db.execute("""SELECT a.alternative_id,al.working_label,c.preferred_label FROM assignment a JOIN alternative al USING(alternative_id) JOIN concept c USING(concept_id) WHERE a.occurrence_id=? AND a.is_current=1""",(row["occurrence_id"],)).fetchone()
         pending=db.execute("""SELECT s.submission_id,o.original_gloss FROM submission s JOIN alternative_submission a USING(submission_id) JOIN occurrence o USING(occurrence_id) WHERE s.status='pending' AND s.submission_type='ALTERNATIVE' AND a.proposal_kind='NEW' AND s.submission_id!=? AND (a.reference_concept_id=? OR a.reference_concept_proposal_id=?)""",(row["submission_id"],row["reference_concept_id"],row["reference_concept_proposal_id"])).fetchall()
         relations_error=None
@@ -351,7 +360,10 @@ def _alternative_review_context(db, rows):
                 item["display_label"] = alternative_display_label(label["preferred_label"], label["working_label"]) if label else None
                 components.append(item)
             morphology = morphology[0], components
-        result[row["submission_id"]]=dict(relations_error=relations_error,proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),concept_edit_token=edit_token(db,"submission_concept",row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_previews=previews,lexical_decision=lexical_decision,result_current=result_current,morphology_result=morphology_result,proposed_morphology=morphology)
+        result[row["submission_id"]]=dict(relations_error=relations_error,relations_pending_warning=(
+            "No se pueden aceptar las relaciones todavía porque al menos una apunta a una propuesta de nueva alternativa pendiente. Resuelva primero esa propuesta, o rechace/deje pendientes las relaciones."
+            if pending_target_relations else None
+        ),proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),concept_edit_token=edit_token(db,"submission_concept",row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_previews=previews,lexical_decision=lexical_decision,result_current=result_current,morphology_result=morphology_result,proposed_morphology=morphology)
     return result
 
 

@@ -1,5 +1,6 @@
 """Deterministic, read-only projection of the current canonical catalog."""
 from source_details import catalog_source_reference
+from alternative_nomenclature import working_label_key
 
 from youtube_media import (InvalidYouTubeURL, parse_youtube_url,
                            youtube_embed_url, youtube_watch_url)
@@ -217,7 +218,7 @@ def build_catalog_projection(connection):
     concepts = list(by_concept.values())
     for concept in concepts:
         concept["alternatives"].sort(
-            key=lambda item: (_key(item["working_label"]), item["alternative_id"])
+            key=lambda item: (working_label_key(item["working_label"]), item["alternative_id"])
         )
         for relation in concept["relations"]:
             for alternative in concept["alternatives"]:

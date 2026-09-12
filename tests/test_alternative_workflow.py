@@ -8,6 +8,7 @@ import database
 from alternative_nomenclature import (
     InconclusiveNomenclatureError, InvalidNomenclatureError,
     apply_nomenclature, calculate_nomenclature_preview, temporal_reference,
+    working_label_key,
 )
 from alternative_workflow import (
     AlternativeWorkflowError, create_alternative_submission,
@@ -156,6 +157,13 @@ class NomenclatureTests(unittest.TestCase):
         oid=self.db.execute("INSERT INTO occurrence(source_id,occurrence_year) VALUES(?,?)",(source,year)).lastrowid; aid=self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,?)",(label,)).lastrowid; self.db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(?,?)",(oid,aid)); self.db.commit(); return aid,oid
     def test_temporal_priority_and_fallback(self):
         self.assertEqual(temporal_reference(2005,2000,2000,"known"),(2005,"occurrence_year")); self.assertEqual(temporal_reference(None,2000,2000,"known"),(2000,"source_single_year")); self.assertEqual(temporal_reference(None,1990,1995,"range"),(1990,"source_range_start"))
+
+    def test_working_label_key_orders_numbers_and_falls_back(self):
+        labels = ["1c", "10a", "1a", "unexpected", "2a", "1b"]
+        self.assertEqual(
+            sorted(labels, key=working_label_key),
+            ["1a", "1b", "1c", "2a", "10a", "unexpected"],
+        )
     def test_connected_components_and_no_transitive_insert(self):
         a,_=self.add(2000);b,_=self.add(2001);c,_=self.add(2002); self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(?,?,?)",(a,b,"CM_1"));self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(?,?,?)",(b,c,"CM_1"));self.db.commit(); p=calculate_nomenclature_preview(self.db,1);self.assertEqual(set(p["suggestions"].values()),{"1a","1b","1c"});self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation").fetchone()[0],2)
     def test_tie_and_missing_use_stable_registration_order(self):
@@ -168,6 +176,23 @@ class NomenclatureTests(unittest.TestCase):
         a,_=self.add(2000,label="1a"); oid=self.db.execute("INSERT INTO occurrence(source_id,occurrence_year) VALUES(1,2001)").lastrowid; self.db.commit(); before=self.db.execute("SELECT count(*) FROM alternative").fetchone()[0]
         preview=calculate_nomenclature_preview(self.db,1,extra_edges=[("new",a)],virtual_occurrences={"new":oid})
         self.assertEqual(preview["suggestions"],{a:"1a","new":"1b"}); self.assertEqual(self.db.execute("SELECT count(*) FROM alternative").fetchone()[0],before)
+
+    def test_virtual_preview_matches_registered_alternative_on_reference_year_tie(self):
+        existing,_ = self.add(2000)
+        occurrence = self.db.execute(
+            "INSERT INTO occurrence(source_id,occurrence_year) VALUES(1,2000)"
+        ).lastrowid
+        preview = calculate_nomenclature_preview(
+            self.db, 1, virtual_occurrences={"new": occurrence}
+        )
+        registered = self.db.execute(
+            "INSERT INTO alternative(concept_id,working_label) VALUES(1,NULL)"
+        ).lastrowid
+        final = calculate_nomenclature_preview(
+            self.db, 1, occurrence_overrides={registered: occurrence}
+        )
+        self.assertEqual(preview["suggestions"]["new"], final["suggestions"][registered])
+        self.assertEqual(preview["suggestions"][existing], final["suggestions"][existing])
 
     def test_singleton_groups_always_keep_letters(self):
         a,_=self.add(2000,label="1a");b,_=self.add(2001,label="2a")

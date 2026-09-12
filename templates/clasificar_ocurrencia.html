@@ -393,7 +393,7 @@
                 const values=[...row.querySelectorAll('select')].map(x=>x.value);
                 if(values.some(x=>!x)){message='Cada relación debe tener un destino y un parámetro.';break;}
                 const key=values[0];
-                if(keys.has(key)){message='Hay una relación propuesta duplicada: el destino está repetido. Cada destino admite un solo parámetro.';break;}
+                if(keys.has(key)){const destination=row.querySelector('select[name="relation_alternative_id"] option:checked')?.textContent.trim()||'el destino seleccionado';message='No se puede registrar más de una relación con '+destination+'. Cada alternativa destino admite una sola relación fonológica y un único parámetro diferenciador.';break;}
                 keys.add(key);
             }
         }

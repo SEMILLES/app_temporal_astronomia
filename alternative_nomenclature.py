@@ -2,6 +2,7 @@ import re
 
 
 LABEL_PATTERN = re.compile(r"[1-9][0-9]*[a-z]")
+WORKING_LABEL_PATTERN = re.compile(r"([1-9][0-9]*)([a-z])\Z")
 CREATED_AT_PATTERN = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
 )
@@ -13,6 +14,15 @@ class InconclusiveNomenclatureError(ValueError):
 
 class InvalidNomenclatureError(ValueError):
     pass
+
+
+def working_label_key(value):
+    """Sort structured labels numerically while keeping legacy labels safe."""
+    text = str(value or "")
+    match = WORKING_LABEL_PATTERN.fullmatch(text)
+    if match:
+        return (0, int(match.group(1)), match.group(2))
+    return (1, text.casefold(), text)
 
 
 def temporal_reference(occurrence_year, start_year, end_year, end_year_status):
@@ -69,10 +79,11 @@ def _alternative_rows(connection, concept_id, occurrence_overrides=None,
         references = [(*temporal_reference(*row[:4]), row[5] or row[4]) for row in evidence]
         usable = [item for item in references if item[0] is not None]
         reference = min(usable, default=(None, None, None), key=lambda item: item[0])
+        registration_time = connection.execute("SELECT CURRENT_TIMESTAMP").fetchone()[0]
         result.append({"alternative_id": alternative_id, "current_label": None,
                        "reference_year": reference[0],
                        "reference_basis": reference[1],
-                       "reference_source": reference[2], "created_at": None})
+                   "reference_source": reference[2], "created_at": registration_time})
     return result
 
 

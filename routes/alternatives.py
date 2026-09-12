@@ -16,7 +16,8 @@ from alternative_morphology import MorphologyValidationError
 from alternative_relations import (DuplicateCurrentRelationError,
                                    RelationNotFoundError, SelfRelationError)
 from alternative_nomenclature import (InvalidNomenclatureError,
-                                      calculate_nomenclature_preview)
+                                      calculate_nomenclature_preview,
+                                      working_label_key)
 from alternative_admin import (AlternativeAdminError, apply_direct_nomenclature,
                                apply_relation_change, relation_preview,
                                update_morphology)
@@ -171,6 +172,10 @@ def generated_working_label(conexion, concept_id, related_alternative_id=None):
         FROM alternative
         WHERE concept_id = ?
     """, (concept_id,)).fetchall()
+    alternative_rows = sorted(
+        alternative_rows,
+        key=lambda row: (working_label_key(row["working_label"]), row["alternative_id"]),
+    )
     labels = [row["working_label"] for row in rows if row["working_label"]]
     parsed = [
         (int(match.group(1)), match.group(2))

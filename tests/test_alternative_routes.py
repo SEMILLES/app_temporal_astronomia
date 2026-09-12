@@ -90,7 +90,7 @@ class AlternativeRouteTests(unittest.TestCase):
         self.assertIn('name="morphology_resolution" value="pending" checked',page)
         self.assertNotIn('name="approve_morphology"',page)
         self.assertIn("Las etiquetas de las alternativas existentes no cambian. La nueva alternativa se creará como TEST-2a.",page)
-        self.assertIn("TEST-1a — 1 ocurrencia",page);self.assertNotIn("1 ocurrencias",page)
+        self.assertIn("TEST-1a · ID 1 — 1 ocurrencia",page);self.assertNotIn("1 ocurrencias",page)
         for text in ("Estado","= Sin cambio","+ Nueva","0 alternativas existentes cambian. Se creará 1 alternativa nueva."):
             self.assertIn(text,page)
         self.assertIn("Los cambios de nomenclatura se aplicarán al confirmar la decisión del revisor.",page)

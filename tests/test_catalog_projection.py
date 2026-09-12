@@ -82,6 +82,19 @@ class CatalogProjectionTests(unittest.TestCase):
         self.assertEqual(alternative["morphology"]["components"][0]["component_alternative_name"], "ALFA-1a")
         self.assertEqual([r["phonological_parameter"] for r in zeta["relations"]], ["CM_1", "CM_2"])
 
+    def test_orders_working_labels_structurally(self):
+        self.db.executemany(
+            "INSERT INTO alternative(concept_id,working_label) VALUES(1,?)",
+            [("10a",), ("2a",), ("1c",), ("1a",), ("1b",)],
+        )
+        self.db.commit()
+        projection = build_catalog_projection(self.db)
+        zeta = next(c for c in projection["concepts"] if c["preferred_label"] == "ZETA")
+        self.assertEqual(
+            [item["working_label"] for item in zeta["alternatives"]],
+            ["1a", "1b", "1b", "1c", "2a", "10a"],
+        )
+
     def test_is_repeatable_deterministic_and_json_serializable(self):
         first = build_catalog_projection(self.db)
         second = build_catalog_projection(self.db)
