@@ -136,6 +136,45 @@ class ComparableUITests(unittest.TestCase):
         self.assertNotIn('todavía no ha sido resuelta',detail)
         self.assertIn('data-resolution="ACCEPTED"',detail)
 
+    def assert_closed_pending_target_has_no_action_warning(self, decision):
+        from submission_concept_resolution import save_resolution
+        _, target = self.pending()
+        data = self.payload(relation_target_type=['submission'],
+                            relation_target_id=[str(target)], relation_parameter=['N_MANOS'])
+        self.assertEqual(302, self.client.post('/ocurrencias/1/clasificar', data=data).status_code)
+        with self.database() as db:
+            sid = db.execute('SELECT submission_id FROM submission WHERE occurrence_id=1').fetchone()[0]
+            save_resolution(db, sid, 'CONFIRM_REFERENCE', access_role='reviewer')
+        detail = self.client.get(f'/aportes/{sid}')
+        self.assertEqual(200, detail.status_code)
+        self.assertIn('Una de las relaciones apunta a una propuesta que todavía no ha sido resuelta.', detail.text)
+        self.assertIn('Para aceptar las relaciones, primero debe resolverse esa propuesta.', detail.text)
+        response = self.client.post(f'/aportes/{sid}/decidir', data={
+            'decision': decision, 'alternative_id': '1',
+            'relations_resolution': 'REJECTED', 'morphology_resolution': 'REJECTED',
+            'review_note': 'No aceptar la relación propuesta',
+        })
+        self.assertEqual(302, response.status_code)
+        with self.database() as db:
+            self.assertEqual('pending', db.execute('SELECT status FROM submission WHERE submission_id=?', (target,)).fetchone()[0])
+            self.assertNotEqual('pending', db.execute('SELECT status FROM submission WHERE submission_id=?', (sid,)).fetchone()[0])
+        detail = self.client.get(f'/aportes/{sid}')
+        self.assertEqual(200, detail.status_code)
+        self.assertNotIn('Para aceptar las relaciones', detail.text)
+        self.assertNotIn('Resuelva primero esa propuesta', detail.text)
+        self.assertIn('Relaciones: rechazadas', detail.text)
+        self.assertIn('Relaciones propuestas originalmente', detail.text)
+        self.assertIn('Propuesta de nueva alternativa pendiente', detail.text)
+
+    def test_closed_new_with_rejected_relations_has_no_pending_action(self):
+        self.assert_closed_pending_target_has_no_action_warning('new')
+
+    def test_closed_existing_with_rejected_relations_has_no_pending_action(self):
+        self.assert_closed_pending_target_has_no_action_warning('existing')
+
+    def test_rejected_submission_has_no_pending_action(self):
+        self.assert_closed_pending_target_has_no_action_warning('rejected')
+
     def test_all_occ_ids_and_optional_video(self):
         oid,_=self.pending()
         with self.database() as db:
