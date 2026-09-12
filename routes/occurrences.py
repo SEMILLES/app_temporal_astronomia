@@ -551,7 +551,8 @@ def _load_classification_page_data(conexion, occurrence_id):
         for alternative in alternatives:
             alternative["current_video"] = get_current_video(conexion, alternative["alternative_id"])
             alternative["occurrences"] = conexion.execute("""
-                SELECT o.occurrence_id,o.original_gloss,s.source_name,o.occurrence_year
+                SELECT o.occurrence_id,o.original_gloss,s.source_name,o.occurrence_year,
+                       s.start_year,s.end_year,s.end_year_status
                 FROM assignment a
                 JOIN occurrence o USING(occurrence_id)
                 JOIN source s USING(source_id)

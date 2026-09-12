@@ -63,7 +63,7 @@ class AlternativeRouteTests(unittest.TestCase):
 
     def test_analysis_page_progressive_disclosure_and_singular_count(self):
         page=self.client.get("/ocurrencias/2/clasificar").get_data(as_text=True)
-        self.assertIn("TEST-1 — 1 ocurrencia",page);self.assertNotIn("1 ocurrencias",page)
+        self.assertIn("TEST-1 · ID 1 — 1 ocurrencia",page);self.assertNotIn("1 ocurrencias",page)
         self.assertIn('id="existing-alternative-field" hidden',page);self.assertIn("existing.hidden=!isExisting",page)
         self.assertIn('id="permutation-field" hidden',page)
         self.assertIn("¿Se identificaron componentes?",page)
@@ -71,6 +71,46 @@ class AlternativeRouteTests(unittest.TestCase):
         self.assertIn('<div id="components"></div>',page);self.assertIn('id="component-template"',page)
         self.assertNotIn('<div id="components"><div class="component">',page)
         self.assertNotIn("list.replaceChildren()",page)
+
+    def test_classification_comparator_id_only_in_summary(self):
+        response = self.client.get('/ocurrencias/2/clasificar')
+        self.assertEqual(200, response.status_code)
+        comparator = response.text.split('<h2>Alternativas vigentes</h2>')[1].split('</section>')[0]
+        self.assertIn('<summary>TEST-1 · ID 1 — 1 ocurrencia</summary>', comparator)
+        self.assertNotIn('ID 1', comparator.split('</summary>')[1])
+
+    def test_classification_comparator_temporal_priority(self):
+        cases = (
+            (2014, 2012, 2017, 'known', ' · 2014'),
+            (None, 2001, 2001, 'known', ' · 2001'),
+            (None, 2012, 2017, 'known', ' · 2012–2017'),
+            (None, 2012, None, 'ongoing', ' · 2012–en curso'),
+            (None, 2012, None, 'unknown', ' · 2012–final desconocido'),
+            (None, None, None, None, ''),
+            (None, None, None, 'known', ''),
+            (None, None, 2017, 'known', ' · 2017'),
+        )
+        for year, start, end, status, suffix in cases:
+            with self.subTest(year=year, start=start, end=end, status=status):
+                db = self.connect()
+                db.execute('UPDATE occurrence SET occurrence_year=? WHERE occurrence_id=1', (year,))
+                db.execute('UPDATE source SET start_year=?,end_year=?,end_year_status=?', (start, end, status))
+                db.commit(); db.close()
+                response = self.client.get('/ocurrencias/2/clasificar')
+                self.assertEqual(200, response.status_code)
+                self.assertIn('<p>OCC-000001 · KNOWN · Synthetic' + suffix + '</p>', response.text)
+
+    def test_classification_comparator_preserves_current_order(self):
+        db = self.connect()
+        db.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=1")
+        db.executemany('INSERT INTO alternative(concept_id,working_label) VALUES(1,?)',
+                       [('10a',), ('2a',), ('1c',), ('3a',), ('1b',)])
+        expected = db.execute('SELECT alternative_id,working_label FROM alternative ORDER BY working_label').fetchall()
+        db.commit(); db.close()
+        page = self.client.get('/ocurrencias/2/clasificar').text
+        comparator = page.split('<h2>Alternativas vigentes</h2>')[1].split('</section>')[0]
+        positions = [comparator.index('<summary>TEST-' + row['working_label'] + ' · ID ' + str(row['alternative_id'])) for row in expected]
+        self.assertEqual(positions, sorted(positions))
 
     def test_count_one_discards_stale_permutation_and_components(self):
         response=self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"1","free_permutation":"SIN INFORMACIÓN","record_components":"yes","component_position":"1","component_type":"unapproved","component_alternative_id":"","component_note":"STALE"})
