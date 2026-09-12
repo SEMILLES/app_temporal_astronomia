@@ -12,7 +12,10 @@ from tests import test_immediate_acceptance_routes as fixtures
 
 
 class AnalysisFlowTests(unittest.TestCase):
-    setUp = fixtures.ImmediateAcceptanceRouteTests.setUp
+    def setUp(self):
+        fixtures.ImmediateAcceptanceRouteTests.setUp(self)
+        with self.database() as db:
+            db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2a')")
     tearDown = fixtures.ImmediateAcceptanceRouteTests.tearDown
     connect = fixtures.ImmediateAcceptanceRouteTests.connect
     base = '/ocurrencias/1/clasificar/aceptacion-inmediata/'
@@ -29,7 +32,7 @@ class AnalysisFlowTests(unittest.TestCase):
     def payload(self, **changes):
         data = dict(proposal_kind='NEW', phonological_relation_answer='YES',
                     relation_target_type=['alternative', 'alternative'],
-                    relation_target_id=['1', '1'], relation_parameter=['CM_1', 'N_MANOS'],
+                    relation_target_id=['1', '2'], relation_parameter=['CM_1', 'N_MANOS'],
                     relation_uncertain=['1'], morphology_component_count='N/A',
                     confirm_immediate='yes', collaborator_id='1')
         data.update(changes)
@@ -140,7 +143,8 @@ class AnalysisFlowTests(unittest.TestCase):
             (dict(relation_parameter=['CM_1', '']), 'destino y un parámetro'),
             (dict(relation_target_id=['1', '']), 'destino y un parámetro'),
             (dict(relation_parameter=['CM_1']), 'al menos una relación completa'),
-            (dict(relation_parameter=['CM_1', 'CM_1']), 'duplicada'),
+            (dict(relation_target_id=['1', '1'], relation_parameter=['CM_1', 'CM_1']), 'duplicada'),
+            (dict(relation_target_id=['1', '1']), 'destino'),
         ]:
             for url in ('/ocurrencias/1/clasificar', self.base+'preview', self.base+'confirmar'):
                 with self.subTest(url=url, changes=changes):
@@ -228,6 +232,9 @@ class AnalysisFlowTests(unittest.TestCase):
             page.locator('[name=relation_alternative_id]').nth(1).select_option('1')
             page.locator('[name=relation_parameter]').nth(1).select_option('N_MANOS')
             page.locator('[name=relation_uncertain]').nth(1).check()
+            page.locator('#immediate-confirm').click()
+            self.assertIn('destino está repetido', page.locator('form > p[role=alert]').inner_text())
+            page.locator('[name=relation_alternative_id]').nth(1).select_option('2')
             data = MultiDict(page.locator('form').evaluate('(form)=>[...new FormData(form)]'))
             self.assertEqual(['1'], data.getlist('relation_uncertain'))
             self.assertNotIn('immediate_mode', data)

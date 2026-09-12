@@ -72,6 +72,29 @@ def _valid_alternative(connection, alternative_id, concept_id):
     return row is not None and row[1] is None and row[0] == concept_id
 
 
+def comparable_pending_proposals(connection, occurrence_id):
+    """Share the proposal service's conceptual comparability with comparison screens."""
+    try:
+        concept_id, proposal_id = _context_reference(connection, occurrence_id)
+    except AlternativeWorkflowError:
+        return []
+    resolved = _context_concept(connection, concept_id, proposal_id)
+    rows = connection.execute("""
+        SELECT s.submission_id,o.occurrence_id,o.original_gloss,src.source_name,
+               a.reference_concept_id,a.reference_concept_proposal_id
+        FROM submission s JOIN alternative_submission a USING(submission_id)
+        JOIN occurrence o USING(occurrence_id) JOIN source src USING(source_id)
+        WHERE s.status='pending' AND s.submission_type='ALTERNATIVE'
+          AND a.proposal_kind='NEW' AND s.occurrence_id!=?
+        ORDER BY o.occurrence_id
+    """, (occurrence_id,)).fetchall()
+    def comparable(row):
+        target = _context_concept(connection, row['reference_concept_id'], row['reference_concept_proposal_id'])
+        return (target == resolved if target is not None and resolved is not None else
+                (row['reference_concept_id'], row['reference_concept_proposal_id']) == (concept_id, proposal_id))
+    return [row for row in rows if comparable(row)]
+
+
 def _validate_relation_target(connection, relation, submission_id=None):
     alternative_id = relation.get("target_alternative_id")
     target_submission_id = relation.get("target_submission_id")
@@ -86,7 +109,7 @@ def _validate_relation_target(connection, relation, submission_id=None):
             WHERE s.submission_id=?
         """, (target_submission_id,)).fetchone()
         if target is None or tuple(target) != ("pending", "ALTERNATIVE", "NEW"):
-            raise AlternativeWorkflowError("La submission destino no es una propuesta NEW pending.")
+            raise AlternativeWorkflowError("El destino ya no es una propuesta de nueva alternativa pendiente. Actualice la comparación.")
     else:
         target = connection.execute(
             "SELECT retired_at FROM alternative WHERE alternative_id=?", (alternative_id,)
@@ -130,6 +153,11 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
             "Una propuesta NEW exige cantidad de componentes o N/A."
         )
     if proposal_kind == "EXISTING": answer = None
+    if proposal_kind == "NEW" and answer == "YES":
+        available = resolved_concept is not None and connection.execute(
+            "SELECT 1 FROM alternative WHERE concept_id=? AND retired_at IS NULL", (resolved_concept,)).fetchone()
+        if not available and not comparable_pending_proposals(connection, occurrence_id):
+            raise AlternativeWorkflowError("No existen otras alternativas o propuestas comparables disponibles para registrar una relación fonológica.")
     validated = [_validate_relation_target(connection, relation) for relation in relations]
     for target_alternative_id, target_submission_id, _, _ in validated:
         if target_alternative_id is not None and resolved_concept is not None:
@@ -140,24 +168,11 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
             if target_concept != resolved_concept:
                 raise AlternativeWorkflowError("La relación propuesta sale del contexto conceptual.")
         if target_submission_id is not None:
-            target_context = connection.execute(
-                "SELECT reference_concept_id,reference_concept_proposal_id "
-                "FROM alternative_submission WHERE submission_id=?",
-                (target_submission_id,),
-            ).fetchone()
-            target_resolved = _context_concept(
-                connection, target_context[0], target_context[1]
-            )
-            same_context = (
-                target_resolved == resolved_concept
-                if target_resolved is not None and resolved_concept is not None
-                else tuple(target_context) == (concept_id, proposal_id)
-            )
-            if not same_context:
-                raise AlternativeWorkflowError("La submission destino pertenece a otro contexto conceptual.")
-    keys = [(a, s, p) for a, s, p, _ in validated]
+            if int(target_submission_id) not in {row['submission_id'] for row in comparable_pending_proposals(connection, occurrence_id)}:
+                raise AlternativeWorkflowError("La propuesta destino no pertenece al contexto comparable disponible.")
+    keys = [(a, s) for a, s, p, _ in validated]
     if len(keys) != len(set(keys)):
-        raise AlternativeWorkflowError("Hay una relación propuesta duplicada.")
+        raise AlternativeWorkflowError("Hay una relación propuesta duplicada: el destino está repetido. Cada destino admite un solo parámetro.")
     if proposal_kind == "NEW" and answer == "YES" and not validated:
         raise AlternativeWorkflowError("La respuesta SÍ exige al menos una relación.")
     name = "create_alternative_submission"; owns = _transaction(connection, name)
@@ -241,9 +256,13 @@ def _relation_targets(connection, submission_id):
                 FROM submission s JOIN alternative_submission a USING(submission_id)
                 WHERE s.submission_id=?
             """, (relation["target_submission_id"],)).fetchone()
+            if resolved is not None and resolved[0] == "pending":
+                raise AlternativeWorkflowError("Una de las relaciones apunta a una propuesta que todavía no ha sido resuelta. Para aceptar las relaciones, primero debe resolverse esa propuesta.")
             if resolved is None or tuple(resolved[:2]) != ("resolved", "accepted") or resolved[2] is None:
-                raise AlternativeWorkflowError("Una relación apunta a una submission sin alternative resuelta.")
+                raise AlternativeWorkflowError("Una relación apunta a una propuesta rechazada o sin alternativa resultante. Revise el destino.")
             target = resolved[2]
+        if any(existing == target for existing, _ in targets):
+            raise AlternativeWorkflowError("Dos destinos propuestos se resuelven a la misma alternativa. Revise explícitamente las relaciones antes de aceptarlas.")
         targets.append((target, relation["phonological_parameter"]))
     return targets
 
@@ -251,7 +270,7 @@ def _relation_targets(connection, submission_id):
 def _materialize_relations(connection, source_id, submission_id):
     for target_id, parameter in _relation_targets(connection, submission_id):
         if target_id == source_id:
-            raise AlternativeWorkflowError("No puede aprobarse una self-relation.")
+            raise AlternativeWorkflowError("No puede aprobarse una autorrelación: el destino es la misma alternativa de origen.")
         pair = connection.execute("""
             SELECT source.concept_id,target.concept_id,target.retired_at
             FROM alternative source JOIN alternative target

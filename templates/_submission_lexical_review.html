@@ -1,8 +1,9 @@
 {% include '_submission_lexical_proposal.html' %}
 <h3>Relaciones propuestas originalmente</h3>
 <ul>{% for relation in ctx['relations'] %}
-<li>Destino: {% if relation['target_alternative_id'] %}{{ relation['target_concept_label'] | alternative_display_label(relation['target_working_label']) }} · Alternativa ID {{ relation['target_alternative_id'] }}{% else %}Aporte #{{ relation['target_submission_id'] }}{% endif %} · {{ relation['phonological_parameter'] }}{% if relation['uncertain'] %} · Con duda{% endif %}</li>
+<li>Destino: {% if relation['target_alternative_id'] %}{{ relation['target_concept_label'] | alternative_display_label(relation['target_working_label']) }} · Alternativa ID {{ relation['target_alternative_id'] }}{% else %}{{ 'OCC-%06d'|format(relation['target_occurrence_id']) }} · {{ relation['target_gloss'] }}{% if relation['target_submission_status']=='pending' %} · Propuesta de nueva alternativa pendiente{% elif relation['target_submission_resolution']=='accepted' and relation['target_resolved_alternative_id'] %} · Resuelta como: {{ relation['resolved_concept_label'] | alternative_display_label(relation['resolved_working_label']) }}{% else %} · Propuesta rechazada o sin alternativa resultante{% endif %}{% endif %} · Diferencia: {{ relation['phonological_parameter'] }}{% if relation['uncertain'] %} · Con duda{% endif %}</li>
 {% else %}<li>Sin relaciones propuestas.</li>{% endfor %}</ul>
+{% if ctx['relations_error'] %}<p role="alert">{{ ctx['relations_error'] }}</p>{% endif %}
 {% include '_submission_concept_resolution.html' %}
 {% if aporte['status']=='pending' %}
 {% include '_submission_lexical_alternatives.html' %}
@@ -26,7 +27,7 @@
 {% for field,title,proposed in [('relations_resolution','relaciones propuestas',ctx['relations']),('morphology_resolution','morfología propuesta',ctx['proposed_morphology'])] %}
 {% if proposed %}<fieldset class="group-decision" hidden disabled><legend>Decisión sobre {{ title }}</legend>
 <p class="existing-group-warning" hidden>{{ 'Las relaciones propuestas' if field=='relations_resolution' else 'La morfología propuesta' }} no se {{ 'incorporarán' if field=='relations_resolution' else 'incorporará' }} a la Alternativa existente. Confirme explícitamente su rechazo para cerrar; el destino conserva sus relaciones y su morfología canónicas.</p>
-<label class="accept-group"><input type="radio" name="{{ field }}" value="ACCEPTED"> Aceptar {{ title }}</label>
+<label class="accept-group"><input type="radio" name="{{ field }}" value="ACCEPTED"{% if field=='relations_resolution' and ctx['relations_error'] %} data-blocked="true" disabled{% endif %}> Aceptar {{ title }}</label>
 <label><input type="radio" name="{{ field }}" value="REJECTED"> Rechazar {{ title }}</label>
 <label><input type="radio" name="{{ field }}" value="pending" checked> Dejar pendiente</label>
 </fieldset>{% endif %}{% endfor %}

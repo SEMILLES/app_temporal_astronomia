@@ -1,3 +1,5 @@
+from alternative_video_service import get_current_video
+from alternative_workflow import _relation_targets
 import re
 from submission_lexical_decision import get_decision
 from submission_concept_resolution import save_resolution, current_resolution, resolution_history
@@ -276,6 +278,7 @@ def _alternative_review_context(db, rows):
         concept_id=row["local_concept_id"]
         alternatives=[dict(item) for item in db.execute("SELECT a.alternative_id,a.working_label,c.preferred_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.concept_id=? AND a.retired_at IS NULL ORDER BY a.working_label",(concept_id,)).fetchall()] if concept_id else []
         for alternative in alternatives:
+            alternative["current_video"]=get_current_video(db, alternative["alternative_id"])
             alternative["display_label"]=alternative_display_label(
                 alternative["preferred_label"],alternative["working_label"]
             )
@@ -287,32 +290,44 @@ def _alternative_review_context(db, rows):
             """,(alternative["alternative_id"],))]
         relations=db.execute("""
             SELECT r.*,a.working_label AS target_working_label,c.preferred_label AS target_concept_label,
-                   ts.status AS target_submission_status,
+                   ts.status AS target_submission_status, ts.resolution AS target_submission_resolution,
+                   o.occurrence_id AS target_occurrence_id,o.original_gloss AS target_gloss,
+                   ra.working_label AS resolved_working_label,rc.preferred_label AS resolved_concept_label,
                    ta.resolved_alternative_id AS target_resolved_alternative_id
             FROM alternative_submission_relation r
             LEFT JOIN alternative a ON a.alternative_id=r.target_alternative_id
             LEFT JOIN concept c ON c.concept_id=a.concept_id
             LEFT JOIN submission ts ON ts.submission_id=r.target_submission_id
             LEFT JOIN alternative_submission ta ON ta.submission_id=r.target_submission_id
+            LEFT JOIN occurrence o ON o.occurrence_id=ts.occurrence_id
+            LEFT JOIN alternative ra ON ra.alternative_id=ta.resolved_alternative_id
+            LEFT JOIN concept rc ON rc.concept_id=ra.concept_id
             WHERE r.submission_id=? ORDER BY r.alternative_submission_relation_id
         """,(row["submission_id"],)).fetchall()
         assignment=db.execute("""SELECT a.alternative_id,al.working_label,c.preferred_label FROM assignment a JOIN alternative al USING(alternative_id) JOIN concept c USING(concept_id) WHERE a.occurrence_id=? AND a.is_current=1""",(row["occurrence_id"],)).fetchone()
         pending=db.execute("""SELECT s.submission_id,o.original_gloss FROM submission s JOIN alternative_submission a USING(submission_id) JOIN occurrence o USING(occurrence_id) WHERE s.status='pending' AND s.submission_type='ALTERNATIVE' AND a.proposal_kind='NEW' AND s.submission_id!=? AND (a.reference_concept_id=? OR a.reference_concept_proposal_id=?)""",(row["submission_id"],row["reference_concept_id"],row["reference_concept_proposal_id"])).fetchall()
+        relations_error=None
+        try:
+            resolved_targets=_relation_targets(db,row['submission_id'])
+        except AlternativeWorkflowError as error:
+            resolved_targets=[]
+            relations_error=str(error)
         previews={}
         if concept_id and row['status']=='pending':
             previews['REJECTED' if relations else 'NOT_PROPOSED']=calculate_nomenclature_preview(
                 db,concept_id,virtual_occurrences={'new':row['occurrence_id']})
             edges=[]
-            for relation in relations:
-                target=relation["target_alternative_id"] or relation["target_resolved_alternative_id"]
-                valid=db.execute('SELECT 1 FROM alternative WHERE alternative_id=? AND concept_id=? AND retired_at IS NULL',(target,concept_id)).fetchone()
-                if not valid or (relation['target_submission_id'] and relation['target_submission_status']!='resolved'):
-                    break
-                edges.append(('new',target))
-            else:
-                if relations:
-                    previews['ACCEPTED']=calculate_nomenclature_preview(
-                        db,concept_id,extra_edges=edges,virtual_occurrences={'new':row['occurrence_id']})
+            if not relations_error:
+                for target, parameter in resolved_targets:
+                    valid=db.execute('SELECT 1 FROM alternative WHERE alternative_id=? AND concept_id=? AND retired_at IS NULL',(target,concept_id)).fetchone()
+                    if not valid:
+                        relations_error='La relación propuesta ya no tiene un destino vigente del mismo concepto.'
+                        break
+                    edges.append(('new',target))
+                else:
+                    if relations:
+                        previews['ACCEPTED']=calculate_nomenclature_preview(
+                            db,concept_id,extra_edges=edges,virtual_occurrences={'new':row['occurrence_id']})
         lexical_decision=get_decision(db,row['submission_id'])
         if lexical_decision:
             lexical_decision = dict(lexical_decision)
@@ -336,7 +351,7 @@ def _alternative_review_context(db, rows):
                 item["display_label"] = alternative_display_label(label["preferred_label"], label["working_label"]) if label else None
                 components.append(item)
             morphology = morphology[0], components
-        result[row["submission_id"]]=dict(proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),concept_edit_token=edit_token(db,"submission_concept",row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_previews=previews,lexical_decision=lexical_decision,result_current=result_current,morphology_result=morphology_result,proposed_morphology=morphology)
+        result[row["submission_id"]]=dict(relations_error=relations_error,proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),concept_edit_token=edit_token(db,"submission_concept",row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_previews=previews,lexical_decision=lexical_decision,result_current=result_current,morphology_result=morphology_result,proposed_morphology=morphology)
     return result
 
 

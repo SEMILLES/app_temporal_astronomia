@@ -70,10 +70,9 @@ class AlternativeWorkflowTests(unittest.TestCase):
     def test_pending_target_and_relation_uniqueness(self):
         target=self.create(occurrence=1,phonological_relation_answer="NO")
         relation=lambda parameter:{"target_submission_id":target,"phonological_parameter":parameter}
-        sid=self.create(relations=[relation("CM_1"),relation("CM_2")],phonological_relation_answer="UNSURE")
-        self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_submission_relation WHERE submission_id=?",(sid,)).fetchone()[0],2)
-        self.db.execute("UPDATE submission SET status='resolved',resolution='rejected' WHERE submission_id=?",(sid,)); self.db.commit()
-        with self.assertRaises(AlternativeWorkflowError): self.create(relations=[relation("CM_1"),relation("CM_1")],phonological_relation_answer="UNSURE")
+        for parameter in ('CM_1', 'CM_2'):
+            with self.assertRaisesRegex(AlternativeWorkflowError, 'destino'):
+                self.create(relations=[relation("CM_1"),relation(parameter)],phonological_relation_answer="UNSURE")
 
     def test_invalid_or_self_target_submission(self):
         grammar=self.db.execute("INSERT INTO submission(occurrence_id,submission_type,status) VALUES(1,'GRAMMAR','pending')").lastrowid; self.db.execute("INSERT INTO grammar_submission(submission_id,gender) VALUES(?,'FEM-A')",(grammar,)); self.db.commit()

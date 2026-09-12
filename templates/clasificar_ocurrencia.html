@@ -1,4 +1,5 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><title>Clasificar ocurrencia</title><body>
+{% set has_relation_targets = alternatives or pending_context %}
 {% set form_values = form_values|default({}) %}
 {% if registration_flow %}<p><strong>Paso 3 de 4 — Análisis léxico</strong></p>{% endif %}
 <h1>Clasificar ocurrencia</h1>
@@ -11,8 +12,8 @@
 {% endif %}
 <section><h2>Glosa original</h2><p><strong>{{ occurrence['original_gloss'] }}</strong> · {{ occurrence['source_name'] }}</p>{% if occurrence['occurrence_year'] %}<p>Año: {{ occurrence['occurrence_year'] }}</p>{% endif %}</section>
 <section><h2>Concepto</h2><p>{{ occurrence['reference_label'] or 'Contexto pendiente' }}</p></section>
-<section><h2>Alternativas vigentes</h2>{% for alternative in alternatives %}<details><summary>{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }} — {{ alternative['occurrences']|length }} {{ 'ocurrencia' if alternative['occurrences']|length == 1 else 'ocurrencias' }}</summary><p><small>ID {{ alternative['alternative_id'] }}</small></p>{% for evidence in alternative['occurrences'] %}<p>{{ evidence['original_gloss'] }} · {{ evidence['source_name'] }}{% if evidence['occurrence_year'] %} · {{ evidence['occurrence_year'] }}{% endif %}</p>{% else %}<p>Sin ocurrencias vigentes.</p>{% endfor %}</details>{% else %}<p>No hay alternativas vigentes para este concepto.</p>{% endfor %}</section>
-<details><summary>Propuestas pendientes comparables</summary>{% for pending in pending_context %}<p><strong>{{ occurrence['reference_label'] }} — [PENDIENTE #{{ pending['submission_id'] }}]</strong>: {{ pending['original_gloss'] }} · {{ pending['source_name'] }}</p>{% else %}<p>No hay propuestas pendientes comparables.</p>{% endfor %}</details>
+<section><h2>Alternativas vigentes</h2>{% for alternative in alternatives %}<details><summary>{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }} — {{ alternative['occurrences']|length }} {{ 'ocurrencia' if alternative['occurrences']|length == 1 else 'ocurrencias' }}</summary><p><small>ID {{ alternative['alternative_id'] }}</small></p>{% if alternative.current_video %}<p><a href="{{ alternative.current_video.watch_url }}" target="_blank" rel="noopener noreferrer">Ver video canónico</a></p>{% endif %}{% for evidence in alternative['occurrences'] %}<p>{{ 'OCC-%06d'|format(evidence['occurrence_id']) }} · {{ evidence['original_gloss'] }} · {{ evidence['source_name'] }}{% if evidence['occurrence_year'] %} · {{ evidence['occurrence_year'] }}{% endif %}</p>{% else %}<p>Sin ocurrencias vigentes.</p>{% endfor %}</details>{% else %}<p>No hay alternativas vigentes para este concepto.</p>{% endfor %}</section>
+<details><summary>Propuestas pendientes comparables</summary>{% for pending in pending_context %}<p><strong>{{ 'OCC-%06d'|format(pending['occurrence_id']) }} · {{ pending['original_gloss'] }}</strong><br>Fuente: {{ pending['source_name'] }}<br>Propuesta: Nueva alternativa</p>{% else %}<p>No hay propuestas pendientes comparables.</p>{% endfor %}</details>
 
 {% if existing_pending %}
 <section><h2>Propuesta pendiente #{{ existing_pending['submission_id'] }}</h2><p>Ya existe un análisis pendiente de revisión.</p>{% if g.current_access_role in ('reviewer','master') %}<a href="{{ url_for('submissions.revisar_aportes') }}#submission-{{ existing_pending['submission_id'] }}">Ir a revisión</a>{% endif %}</section>
@@ -41,28 +42,31 @@
 
 <fieldset id="phonological-relations">
 <legend>Relaciones fonológicas</legend>
+<p>Cada destino admite una sola relación. El parámetro indica la diferencia fonológica pertinente entre las dos formas.</p>
 
 <p>¿Esta nueva alternativa parece estar relacionada fonológicamente con otra alternativa?
 <select name="phonological_relation_answer">
 <option value="">Seleccione</option>
-<option value="YES"{% if form_values.get('phonological_relation_answer') == 'YES' %} selected{% endif %}>Sí</option>
+<option value="YES"{% if not has_relation_targets %} disabled{% endif %}{% if form_values.get('phonological_relation_answer') == 'YES' %} selected{% endif %}>Sí</option>
 <option value="NO"{% if form_values.get('phonological_relation_answer') == 'NO' %} selected{% endif %}>No</option>
 <option value="UNSURE"{% if form_values.get('phonological_relation_answer') == 'UNSURE' %} selected{% endif %}>No estoy seguro</option>
 </select>
 </p>
 
-<div id="relations">
+{% if not has_relation_targets %}<p>No existen otras alternativas o propuestas comparables disponibles para registrar una relación fonológica.</p>{% endif %}
+<div id="relations" hidden>
 {% set relation_targets = form_values.getlist('relation_alternative_id') if form_values.getlist is defined else [] %}
 {% for target in relation_targets or [''] %}
 <div class="relation">
 <strong class="relation-number">Relación {{ loop.index }}</strong>
 
-<label>Alternativa relacionada
+<label>Destino
 <select name="relation_alternative_id">
 <option value="">Seleccione</option>
-{% for alternative in alternatives %}
+{% if alternatives %}<optgroup label="Alternativas vigentes">{% for alternative in alternatives %}
 <option value="{{ alternative['alternative_id'] }}"{% if target == (alternative['alternative_id'] ~ '') %} selected{% endif %}>{{ occurrence['reference_label'] | alternative_display_label(alternative['working_label']) }}</option>
-{% endfor %}
+{% endfor %}</optgroup>{% endif %}
+{% if pending_context %}<optgroup label="Propuestas de nuevas alternativas pendientes">{% for pending in pending_context %}<option value="submission:{{ pending.submission_id }}"{% if target == 'submission:' ~ pending.submission_id %} selected{% endif %}>{{ 'OCC-%06d'|format(pending.occurrence_id) }} · {{ pending.original_gloss }} · {{ pending.source_name }}</option>{% endfor %}</optgroup>{% endif %}
 </select>
 </label>
 
@@ -290,6 +294,7 @@
     });
 
     function toggle(){
+        if({{ 'false' if has_relation_targets else 'true' }})answer.value='NO';
         const choice=document.querySelector('[name=proposal_kind]:checked'),
               isNew=choice&&choice.value==='NEW',
               isExisting=choice&&choice.value==='EXISTING',
@@ -387,8 +392,8 @@
             for(const row of rows){
                 const values=[...row.querySelectorAll('select')].map(x=>x.value);
                 if(values.some(x=>!x)){message='Cada relación debe tener un destino y un parámetro.';break;}
-                const key=values.join(':');
-                if(keys.has(key)){message='Hay una relación propuesta duplicada.';break;}
+                const key=values[0];
+                if(keys.has(key)){message='Hay una relación propuesta duplicada: el destino está repetido. Cada destino admite un solo parámetro.';break;}
                 keys.add(key);
             }
         }

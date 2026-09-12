@@ -44,7 +44,7 @@ class AlternativeRouteTests(unittest.TestCase):
     def test_analysis_page_shows_context_canonical_and_pending_proposals(self):
         self.client.post("/ocurrencias/3/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"})
         page=self.client.get("/ocurrencias/2/clasificar").get_data(as_text=True)
-        for text in ("TO-ANALYZE","Concepto","TEST-1","KNOWN","TEST — [PENDIENTE #","TARGET"):
+        for text in ("TO-ANALYZE","Concepto","TEST-1","KNOWN","OCC-000003 · TARGET","TARGET"):
             self.assertIn(text,page)
 
     def test_analysis_page_progressive_disclosure_and_singular_count(self):

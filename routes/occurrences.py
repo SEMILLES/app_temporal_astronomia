@@ -1,3 +1,5 @@
+from alternative_video_service import get_current_video
+from alternative_workflow import comparable_pending_proposals
 from activity import record_activity, resolve_collaborator
 from edit_concurrency import edit_token, check_edit, StaleEdit
 from flask import Blueprint, render_template, request, redirect, url_for, g
@@ -93,6 +95,8 @@ def _alternative_payload(form):
         if not types or not (len(types) == len(targets) == len(parameters)):
             raise ValueError("La respuesta Sí exige al menos una relación completa: destino y parámetro.")
         for index,(kind,target,parameter) in enumerate(zip(types,targets,parameters)):
+            if target.startswith("submission:"):
+                kind, target = "submission", target.split(":", 1)[1]
             if kind not in ("alternative", "submission") or not target or not parameter:
                 raise ValueError("Cada relación debe tener un destino y un parámetro.")
             item={"phonological_parameter":parameter,"uncertain":str(index) in uncertain}
@@ -545,26 +549,16 @@ def _load_classification_page_data(conexion, occurrence_id):
         ]
 
         for alternative in alternatives:
+            alternative["current_video"] = get_current_video(conexion, alternative["alternative_id"])
             alternative["occurrences"] = conexion.execute("""
-                SELECT o.original_gloss,s.source_name,o.occurrence_year
+                SELECT o.occurrence_id,o.original_gloss,s.source_name,o.occurrence_year
                 FROM assignment a
                 JOIN occurrence o USING(occurrence_id)
                 JOIN source s USING(source_id)
                 WHERE a.alternative_id=? AND a.is_current=1
             """, (alternative["alternative_id"],)).fetchall()
 
-        pending_context = conexion.execute("""
-            SELECT s.submission_id,o.original_gloss,src.source_name
-            FROM submission s
-            JOIN alternative_submission als USING(submission_id)
-            JOIN occurrence o USING(occurrence_id)
-            JOIN source src USING(source_id)
-            WHERE s.status='pending'
-              AND s.submission_type='ALTERNATIVE'
-              AND als.proposal_kind='NEW'
-              AND als.reference_concept_id=?
-              AND s.occurrence_id != ?
-        """, (context_concept_id, occurrence_id)).fetchall()
+    pending_context = comparable_pending_proposals(conexion, occurrence_id)
 
     existing_pending = conexion.execute("""
         SELECT s.submission_id,als.proposal_kind,als.analysis_note

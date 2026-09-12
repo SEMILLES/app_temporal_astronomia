@@ -17,7 +17,7 @@ document.querySelectorAll('.review-decision').forEach(form=>{
         groups.forEach(group=>{
             group.hidden=!(isNew||isExisting); group.disabled=group.hidden;
             const accept=group.querySelector('.accept-group'), radio=accept.querySelector('input');
-            accept.hidden=!isNew; radio.disabled=!isNew;
+            accept.hidden=!isNew; radio.disabled=!isNew||radio.dataset.blocked==='true';
             if(!isNew&&radio.checked) group.querySelector('[value=pending]').checked=true;
             group.querySelector('.existing-group-warning').hidden=!isExisting;
         });
