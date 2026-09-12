@@ -1,4 +1,12 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><title>Revisión de aportes</title><body>
+<!doctype html><html lang="es"><meta charset="utf-8"><title>Revisión de aportes</title><style>
+.preview-table{border-collapse:collapse;width:auto}
+.preview-table th,.preview-table td{padding:.35rem .75rem;vertical-align:middle;text-align:left}
+.preview-table th:nth-child(1),.preview-table td:nth-child(1),
+.preview-table th:nth-child(4),.preview-table td:nth-child(4){text-align:right}
+.preview-table th:nth-child(2),.preview-table td:nth-child(2),
+.preview-table th:nth-child(3),.preview-table td:nth-child(3){text-align:center}
+</style>
+<body>
 <h1>{{ 'Detalle del aporte' if detail else 'Revisión de aportes pendientes' }}</h1>{% if request.args.get('message') %}<p role="status"><strong>{{ request.args.get('message') }}</strong></p>{% endif %}
 {% set can_review = g.current_access_role in ('reviewer','master') %}
 {% for aporte in aportes %}{% set ctx=alternative_context.get(aporte['submission_id']) %}
