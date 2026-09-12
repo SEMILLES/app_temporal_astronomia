@@ -12,7 +12,7 @@
 <ul>{% for resolution in ctx['concept_history'] %}<li>#{{ resolution['submission_concept_resolution_id'] }} · {{ resolution['preferred_label'] }} · {{ 'Vigente' if resolution['is_current'] else 'Histórica' }} · {{ resolution['created_at'] }} · {{ resolution['collaborator_name_snapshot'] or 'Sin colaborador identificado' }} · {{ resolution['resolution_note'] or 'Sin nota adicional.' }}</li>{% endfor %}</ul></details>
 {% elif aporte['status']=='pending' %}<p>Concepto pendiente.</p>
 {% else %}<p>No existe resolución conceptual local registrada para este aporte histórico.</p>{% endif %}
-{% if aporte['status']=='pending' %}
+{% if aporte['status']=='pending' and can_review %}
 {% set resolution = ctx['concept_resolution'] %}
 {% set selected_action = ('CONFIRM_REFERENCE' if resolution['resolution_action']=='CONFIRM_REFERENCE' else 'USE_EXISTING') if resolution else ('ACCEPT_PROPOSAL' if aporte['reference_concept_proposal_id'] else 'CONFIRM_REFERENCE' if aporte['reference_concept_id'] else 'USE_EXISTING') %}
 {% if resolution %}<details class="concept-resolution-editor"><summary>Modificar resolución</summary>{% endif %}

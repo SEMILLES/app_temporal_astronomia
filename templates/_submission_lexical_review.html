@@ -1,13 +1,14 @@
 {% include '_submission_lexical_proposal.html' %}
 <h3>Relaciones propuestas originalmente</h3>
 <ul>{% for relation in ctx['relations'] %}
-<li>Destino: {% if relation['target_alternative_id'] %}Alternativa ID {{ relation['target_alternative_id'] }}{% else %}Aporte #{{ relation['target_submission_id'] }}{% endif %} · {{ relation['phonological_parameter'] }}{% if relation['uncertain'] %} · Con duda{% endif %}</li>
+<li>Destino: {% if relation['target_alternative_id'] %}{{ relation['target_concept_label'] | alternative_display_label(relation['target_working_label']) }} · Alternativa ID {{ relation['target_alternative_id'] }}{% else %}Aporte #{{ relation['target_submission_id'] }}{% endif %} · {{ relation['phonological_parameter'] }}{% if relation['uncertain'] %} · Con duda{% endif %}</li>
 {% else %}<li>Sin relaciones propuestas.</li>{% endfor %}</ul>
 {% include '_submission_concept_resolution.html' %}
 {% if aporte['status']=='pending' %}
 {% include '_submission_lexical_alternatives.html' %}
 <h2>CLASIFICACIÓN VIGENTE ACTUAL</h2>
 {% if ctx['assignment'] %}<p>{{ ctx['assignment']['preferred_label'] | alternative_display_label(ctx['assignment']['working_label']) }} · ID {{ ctx['assignment']['alternative_id'] }}</p>{% else %}<p>Sin clasificación vigente.</p>{% endif %}
+{% if can_review %}
 <form class="review-decision" method="post" action="{{ url_for('submissions.decidir_aporte',submission_id=aporte['submission_id']) }}"
       data-kind="{{ aporte['proposal_kind'] }}" data-proposed="{{ aporte['proposed_existing_alternative_id'] or '' }}" data-assignment="{{ ctx['assignment']['alternative_id'] if ctx['assignment'] else '' }}">
 <h2>DECISIÓN DEL REVISOR</h2>
@@ -45,5 +46,6 @@
 <p class="lexical-validation" role="alert" hidden></p><button type="submit">Aplicar decisión</button>
 </fieldset></form>
 <p>Dejar pendiente conserva el aporte pendiente sin guardar una decisión ni modificar la clasificación, las alternativas, relaciones, morfología o nomenclatura.</p>
+{% endif %}
 <h2>RESULTADO FINAL DEL APORTE</h2><p>Pendiente</p>
 {% else %}{% include '_submission_lexical_history.html' %}{% endif %}

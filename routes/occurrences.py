@@ -76,18 +76,28 @@ def _component_rows(form):
 
 
 def _alternative_payload(form):
-    proposal_kind=form.get("proposal_kind");relations=[]
-    types=form.getlist("relation_target_type");targets=form.getlist("relation_target_id");parameters=form.getlist("relation_parameter");uncertain=set(form.getlist("relation_uncertain"))
-    if types:
+    proposal_kind=form.get("proposal_kind")
+    relations=[]
+    if proposal_kind == "NEW" and form.get("phonological_relation_answer") == "YES":
+        types=form.getlist("relation_target_type")
+        targets=form.getlist("relation_target_id")
+        parameters=form.getlist("relation_parameter")
+        uncertain=set(form.getlist("relation_uncertain"))
+        if not types:
+            types=[value for key,value in form.items() if key.startswith("relation_target_type_")]
+            alternatives=form.getlist("relation_alternative_id")
+            submissions=form.getlist("relation_submission_id")
+            targets=[(submissions if kind == "submission" else alternatives)[index]
+                     if index < len(submissions if kind == "submission" else alternatives) else ""
+                     for index,kind in enumerate(types)]
+        if not types or not (len(types) == len(targets) == len(parameters)):
+            raise ValueError("La respuesta Sí exige al menos una relación completa: destino y parámetro.")
         for index,(kind,target,parameter) in enumerate(zip(types,targets,parameters)):
-            if not target and not parameter:continue
-            item={"phonological_parameter":parameter,"uncertain":str(index) in uncertain};item["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None;relations.append(item)
-    else:
-        kinds=[value for key,value in form.items() if key.startswith("relation_target_type_")];alternative_ids=form.getlist("relation_alternative_id");submission_ids=form.getlist("relation_submission_id")
-        for index,kind in enumerate(kinds):
-            target=(submission_ids[index] if kind=="submission" and index<len(submission_ids) else alternative_ids[index] if index<len(alternative_ids) else "");parameter=parameters[index] if index<len(parameters) else ""
-            if not target and not parameter:continue
-            item={"phonological_parameter":parameter,"uncertain":str(index) in uncertain};item["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None;relations.append(item)
+            if kind not in ("alternative", "submission") or not target or not parameter:
+                raise ValueError("Cada relación debe tener un destino y un parámetro.")
+            item={"phonological_parameter":parameter,"uncertain":str(index) in uncertain}
+            item["target_submission_id" if kind=="submission" else "target_alternative_id"]=target
+            relations.append(item)
     morphology=None
     if proposal_kind=="NEW":
         choice=form.get("morphology_component_count");components=_component_rows(form)
@@ -96,6 +106,20 @@ def _alternative_payload(form):
 
 
 def _alternative_decision(form):
+    # New forms explicitly select inheritance; legacy explicit decisions remain valid.
+    inherit = form.get("immediate_mode") == "as_proposed" or (
+        not form.get("immediate_mode") and not form.get("canonical_decision"))
+    if inherit:
+        proposal = _alternative_payload(form)
+        if proposal["proposal_kind"] == "UNSURE":
+            raise ValueError("El análisis está marcado como ‘No estoy seguro’. Para aceptarlo inmediatamente es necesario resolver la clasificación.")
+        return {
+            "decision": {"EXISTING": "existing", "NEW": "new"}.get(proposal["proposal_kind"]),
+            "alternative_id": proposal["proposed_existing_alternative_id"],
+            "relations_resolution": "ACCEPTED" if proposal["relations"] else "NOT_PROPOSED",
+            "morphology_resolution": "ACCEPTED" if proposal["morphology"] else "NOT_PROPOSED",
+            "nomenclature_mode": "automatic",
+        }
     action=form.get("concept_resolution_action");concept_resolution={"action":action,"concept_id":form.get("resolved_concept_id") or None,"label":form.get("new_concept_label") or None} if action else None
     return {"decision":form.get("canonical_decision"),"alternative_id":form.get("canonical_alternative_id") or form.get("proposed_existing_alternative_id"),"relation_policy":form.get("relation_policy","preserve"),"concept_resolution":concept_resolution,"relations_resolution":form.get("relations_resolution"),"morphology_resolution":form.get("morphology_resolution"),"approve_relations":(form.get("approve_relations")=="yes" if "approve_relations" in form else None),"approve_morphology":(form.get("approve_morphology")=="yes" if "approve_morphology" in form else None),"nomenclature_mode":form.get("nomenclature_mode","automatic"),"labels":{key[6:]:value for key,value in form.items() if key.startswith("label_")},"nomenclature_reason":form.get("nomenclature_reason")}
 
@@ -118,7 +142,7 @@ def _confirmation(template_kind,occurrence_id,operation):
                 (outcome['alternative_id'],)).fetchone()
             simulated['concept_label'] = destination['preferred_label']
             simulated['destination_label'] = alternative_display_label(destination['preferred_label'], destination['working_label'])
-            if request.form.get('canonical_decision') == 'new':
+            if _alternative_decision(request.form)['decision'] == 'new':
                 simulated['preview'] = {'rows': [
                     {'alternative_id': 'new' if row['alternative_id'] == outcome['alternative_id'] else row['alternative_id'],
                      'current_label': before.get(row['alternative_id']), 'proposed_label': row['working_label']}
@@ -137,7 +161,13 @@ def _confirmation(template_kind,occurrence_id,operation):
     except StaleEdit as error:return str(error),409
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
     finally:db.close()
-    summary={"occurrence":dict(occurrence) if occurrence else None,"current":dict(current) if current else None,"proposed":_grammar_values(request.form) if template_kind=="grammar" else proposed,"decision":decision if template_kind=="alternative" else None,"concept_label":concept_label,"destination_label":destination_label,"review_note":request.form.get("review_note")}
+    changed = False
+    if template_kind == "alternative":
+        changed = (decision['decision'] != {'NEW':'new','EXISTING':'existing'}.get(proposed['proposal_kind'])
+                   or (decision['decision']=='existing' and str(decision['alternative_id']) != str(proposed['proposed_existing_alternative_id']))
+                   or decision.get('relations_resolution') == 'REJECTED'
+                   or decision.get('morphology_resolution') == 'REJECTED')
+    summary={"changed":changed,"occurrence":dict(occurrence) if occurrence else None,"current":dict(current) if current else None,"proposed":_grammar_values(request.form) if template_kind=="grammar" else proposed,"decision":decision if template_kind=="alternative" else None,"concept_label":concept_label,"destination_label":destination_label,"review_note":request.form.get("review_note")}
     return render_template("confirmar_aceptacion_inmediata.html",kind=template_kind,occurrence_id=occurrence_id,payload=list(request.form.lists()),preflight=result,summary=summary,nomenclature_preview=nomenclature_preview)
 
 
@@ -636,53 +666,14 @@ def clasificar_ocurrencia(occurrence_id):
 
 @occurrences_bp.route("/ocurrencias/<int:occurrence_id>/clasificar", methods=["POST"])
 def guardar_clasificacion(occurrence_id):
-    proposal_kind=request.form.get("proposal_kind")
-    alternative_id=request.form.get("proposed_existing_alternative_id") or None
-    target_types=request.form.getlist("relation_target_type")
-    target_ids=request.form.getlist("relation_target_id")
-    parameters=request.form.getlist("relation_parameter")
-    uncertain=set(request.form.getlist("relation_uncertain"))
-    relations=[]
-    for index,(kind,target,parameter) in enumerate(zip(target_types,target_ids,parameters)):
-        if not target and not parameter: continue
-        relation={"phonological_parameter":parameter,"uncertain":str(index) in uncertain}
-        relation["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None
-        relations.append(relation)
-    if not target_types:
-        kinds=[value for key,value in request.form.items() if key.startswith("relation_target_type_")]
-        alternative_ids=request.form.getlist("relation_alternative_id")
-        submission_ids=request.form.getlist("relation_submission_id")
-        for index,kind in enumerate(kinds):
-            target=(submission_ids[index] if kind=="submission" and index<len(submission_ids)
-                    else alternative_ids[index] if index<len(alternative_ids) else "")
-            parameter=parameters[index] if index<len(parameters) else ""
-            if not target and not parameter: continue
-            relation={"phonological_parameter":parameter,"uncertain":str(index) in uncertain}
-            relation["target_submission_id" if kind=="submission" else "target_alternative_id"]=target or None
-            relations.append(relation)
-    morphology=None
-    if proposal_kind=="NEW":
-        count_choice=request.form.get("morphology_component_count")
-        not_applicable=count_choice=="N/A"
-        component_count=None if count_choice in (None,"","N/A") else count_choice
-        try:
-            components=_component_rows(request.form)
-        except ValueError as error:
-            return _render_classification_page(
-                occurrence_id,
-                error=str(error),
-                form_values=request.form,
-                status=400,
-            )
-        morphology={"component_count":component_count,"component_count_not_applicable":not_applicable,"free_permutation":request.form.get("free_permutation"),"note":request.form.get("morphology_note"),"components":components}
+    try:
+        proposal = _alternative_payload(request.form)
+    except ValueError as error:
+        return _render_classification_page(occurrence_id, error=str(error), form_values=request.form, status=400)
     conexion = conectar()
     try:
         create_alternative_submission(
-            conexion,occurrence_id,proposal_kind,
-            proposed_existing_alternative_id=alternative_id,
-            phonological_relation_answer=request.form.get("phonological_relation_answer"),
-            relations=relations,analysis_note=request.form.get("analysis_note"),
-            morphology=morphology,
+            conexion,occurrence_id,**proposal,
             collaborator_id=request.form.get("collaborator_id"),
             access_role=getattr(g, "current_access_role", None),
         )

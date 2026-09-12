@@ -95,7 +95,7 @@ def install_access_context(app):
         if role is None:
             abort(404)
         reviewer_endpoints = {
-            "submissions.revisar_aportes", "submissions.detalle_aporte",
+            "submissions.revisar_aportes",
             "submissions.decidir_aporte",
             "conflicts.conflicts_list", "conflicts.new_conflict",
             "conflicts.conflict_detail", "conflicts.resolve_conflict",

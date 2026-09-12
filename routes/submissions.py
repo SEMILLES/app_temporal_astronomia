@@ -286,11 +286,12 @@ def _alternative_review_context(db, rows):
                 WHERE ass.alternative_id=? AND ass.is_current=1 ORDER BY o.occurrence_id
             """,(alternative["alternative_id"],))]
         relations=db.execute("""
-            SELECT r.*,a.working_label AS target_working_label,
+            SELECT r.*,a.working_label AS target_working_label,c.preferred_label AS target_concept_label,
                    ts.status AS target_submission_status,
                    ta.resolved_alternative_id AS target_resolved_alternative_id
             FROM alternative_submission_relation r
             LEFT JOIN alternative a ON a.alternative_id=r.target_alternative_id
+            LEFT JOIN concept c ON c.concept_id=a.concept_id
             LEFT JOIN submission ts ON ts.submission_id=r.target_submission_id
             LEFT JOIN alternative_submission ta ON ta.submission_id=r.target_submission_id
             WHERE r.submission_id=? ORDER BY r.alternative_submission_relation_id

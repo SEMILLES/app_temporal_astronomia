@@ -1,5 +1,6 @@
 <!doctype html><html lang="es"><meta charset="utf-8"><title>Revisión de aportes</title><body>
 <h1>{{ 'Detalle del aporte' if detail else 'Revisión de aportes pendientes' }}</h1>{% if request.args.get('message') %}<p role="status"><strong>{{ request.args.get('message') }}</strong></p>{% endif %}
+{% set can_review = g.current_access_role in ('reviewer','master') %}
 {% for aporte in aportes %}{% set ctx=alternative_context.get(aporte['submission_id']) %}
 <section id="submission-{{ aporte['submission_id'] }}"><details{% if detail %} open{% endif %}><summary><strong>#{{ aporte['submission_id'] }} · {{ aporte['original_gloss'] }}{% if aporte['display_concept'] %} · {{ aporte['display_concept'] }}{% endif %}</strong><br>Propuesta: {% if aporte['proposal_kind']=='NEW' %}nueva alternativa{% elif aporte['proposal_kind']=='EXISTING' %}alternativa existente{% elif aporte['proposal_kind']=='UNSURE' %}clasificación por determinar{% else %}análisis gramatical{% endif %} · Fuente: {{ aporte['source_name'] }} · {{ 'Revisar' if aporte['status']=='pending' else {'accepted':'Aceptado','rejected':'Rechazado'}.get(aporte['resolution'], 'Resuelto') }}</summary>
 {% if aporte['submission_type']=='GRAMMAR' %}
@@ -60,6 +61,7 @@ El Revisor/Master debe resolverla y responder la nota del analista antes de acep
 </p>
 {% endif %}
 
+{% if can_review %}
 <form
     class="grammar-review-decision"
     method="post"
@@ -129,6 +131,7 @@ Respuesta del revisor
 <button name="decision" value="accepted">Aceptar</button>
 <button name="decision" value="rejected">Rechazar</button>
 </form>
+{% endif %}
 
 {% else %}
 
