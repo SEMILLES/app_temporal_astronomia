@@ -92,6 +92,35 @@ class LexicalUITests(unittest.TestCase):
         self.assertNotIn('value="union"', page)
         self.assertNotIn('name="nomenclature_reason"', page)
 
+    def test_alternative_comparator_shows_id_and_temporal_context(self):
+        sid = self.create(groups=False)
+        db = self.connect()
+        db.execute("INSERT INTO source(source_name,start_year,end_year,end_year_status) VALUES('Fuente de rango',1990,1995,'known')")
+        range_source = db.execute("SELECT max(source_id) FROM source").fetchone()[0]
+        range_occurrence = db.execute(
+            "INSERT INTO occurrence(source_id,original_gloss,occurrence_year) VALUES(?,?,NULL)",
+            (range_source, 'RANGO'),
+        ).lastrowid
+        missing_source = db.execute(
+            "INSERT INTO source(source_name) VALUES('Fuente sin periodo')"
+        ).lastrowid
+        missing_occurrence = db.execute(
+            "INSERT INTO occurrence(source_id,original_gloss) VALUES(?,?)",
+            (missing_source, 'SIN TIEMPO'),
+        ).lastrowid
+        db.executemany(
+            "INSERT INTO assignment(occurrence_id,alternative_id,is_current) VALUES(?,?,1)",
+            [(range_occurrence, 1), (missing_occurrence, 1)],
+        )
+        db.commit()
+        db.close()
+        page = self.page(sid)
+        self.assertIn('TEST-1 · ID 1', page)
+        self.assertIn('OCC-000001 · KNOWN · Synthetic · Año: 2000', page)
+        self.assertNotIn('occurrence ID 1', page)
+        self.assertIn(f'OCC-{range_occurrence:06d} · RANGO · Fuente de rango · Período: 1990–1995', page)
+        self.assertIn(f'OCC-{missing_occurrence:06d} · SIN TIEMPO · Fuente sin periodo', page)
+
     def test_pending_or_omitted_groups_and_leave_pending_have_zero_effects(self):
         sid = self.create()
         before = self.dump()
