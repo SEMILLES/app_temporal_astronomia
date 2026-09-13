@@ -48,6 +48,27 @@ class LexicalSimulationTests(unittest.TestCase):
         self.assertEqual(set(result["affected_concepts"]), {1})
         self.assertEqual(self.years(result, 1)[2], 1980)
 
+    def test_capacity_preview_and_apply_do_not_write(self):
+        from alternative_nomenclature import apply_nomenclature, InvalidNomenclatureError
+        for aid in range(6, 31):
+            self.db.execute("INSERT INTO alternative(alternative_id,concept_id) VALUES(?,1)", (aid,))
+            self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,?,'movement')", (aid,))
+        self.db.commit()
+        # Joining Alternative 2 creates a 27-member component in the effective state.
+        result = self.simulate(self.operation(None, None,
+            added_relations=(Relation("new_relation:capacity", 1, 2, "movement"),)))
+        preview = result["affected_concepts"][1]
+        self.assertFalse(preview["conclusive"])
+        self.assertFalse(preview["applicable"])
+        self.assertEqual(preview["automatic_labels"], {})
+        self.assertEqual(preview["conflicts"][0]["code"], "VARIANT_CAPACITY_EXCEEDED")
+        refs = (1, 2, *range(6, 31))
+        labels = {ref: f"{index+1}a" for index, ref in enumerate(refs)}
+        before = "\n".join(self.db.iterdump())
+        with self.assertRaisesRegex(InvalidNomenclatureError, "VARIANT_CAPACITY_EXCEEDED"):
+            apply_nomenclature(self.db, 1, labels, origin="automatic_assisted", required_edges=((1, 2),))
+        self.assertEqual(before, "\n".join(self.db.iterdump()))
+
     def test_same_concept_move_preserves_destination_evidence(self):
         result = self.simulate(self.operation(2, 1))
         self.assertEqual(set(result["affected_concepts"]), {1})
@@ -63,6 +84,10 @@ class LexicalSimulationTests(unittest.TestCase):
         self.assertEqual(set(result["affected_concepts"]), {1, 2})
         self.assertEqual(result["affected_concepts"][1]["automatic_labels"], {2: "1a", 1: "2a"})
         self.assertEqual(result["affected_concepts"][2]["automatic_labels"], {4: "1a", 3: "2a"})
+        for concept in result["affected_concepts"].values():
+            self.assertTrue(concept["validation"]["valid"])
+            self.assertTrue(concept["conclusive"])
+            self.assertTrue(concept["applicable"])
         self.assertEqual(self.years(result, 2), {3: 1995, 4: 1990})
         self.assertEqual(result["affected_concepts"][1]["roles"], ("origin",))
         self.assertNotIn(5, {a.ref for a in result["effective_state"].alternatives})

@@ -5,7 +5,7 @@ Only explicitly listed canonical relation removals retire relations.
 """
 from dataclasses import dataclass, replace
 
-from alternative_nomenclature import calculate_nomenclature_rows, temporal_reference
+from alternative_nomenclature import calculate_nomenclature_rows, temporal_reference, parse_working_label
 
 
 AlternativeRef = int | str
@@ -230,7 +230,7 @@ def derive_affected_concepts(state, operation):
     return {concept: tuple(sorted(value)) for concept, value in sorted(roles.items())}
 
 
-def calculate_concept_nomenclature(concept_state):
+def _calculate_concept_nomenclature(concept_state):
     state = concept_state.lexical_state
     occurrences = {o.occurrence_id: o for o in state.occurrences}
     rows = []
@@ -250,8 +250,69 @@ def calculate_concept_nomenclature(concept_state):
                          reference_source=reference[2]))
     result = calculate_nomenclature_rows(rows, [(r.left, r.right) for r in state.relations])
     return dict(automatic_labels=result["suggestions"], preview_rows=result["rows"],
-                components=result["components"], conflicts=result["problems"],
+                components=result["components"], conflicts=result["conflicts"],
                 warnings=[], conclusive=result["conclusive"])
+
+
+def _validate_calculation(calculation, labels):
+    """Validate against ordered components from the same effective snapshot."""
+    conflicts = list(calculation["conflicts"])
+    cleaned = {ref: str(label).strip() for ref, label in labels.items()}
+    expected = {ref for component in calculation["components"] for ref in component}
+
+    def reject(code, refs=()):
+        conflicts.append(dict(code=code, alternative_refs=tuple(refs)))
+
+    missing, extra = expected - cleaned.keys(), cleaned.keys() - expected
+    if missing:
+        reject("MISSING_LABEL", sorted(missing, key=str))
+    if extra:
+        reject("UNKNOWN_ALTERNATIVE", sorted(extra, key=str))
+    parsed = {ref: parse_working_label(label) for ref, label in cleaned.items()}
+    invalid = [ref for ref, value in parsed.items() if value is None]
+    if invalid:
+        reject("INVALID_LABEL_FORMAT", invalid)
+    if len(set(cleaned.values())) != len(cleaned):
+        reject("DUPLICATE_LABEL")
+    if not missing and not extra and not invalid:
+        numbers = {value[0] for value in parsed.values()}
+        if numbers != set(range(1, len(calculation["components"]) + 1)):
+            reject("NONCONSECUTIVE_GROUPS")
+        used = set()
+        for number, component in enumerate(calculation["components"], 1):
+            groups = {parsed[ref][0] for ref in component}
+            if len(groups) != 1:
+                reject("COMPONENT_GROUP_MISMATCH", component)
+            if used & groups:
+                reject("SHARED_GROUP_NUMBER", component)
+            used.update(groups)
+            if groups != {number}:
+                reject("GROUP_CHRONOLOGY_MISMATCH", component)
+            anchors = [ref for ref in component if parsed[ref][1] == "a"]
+            if len(anchors) != 1:
+                reject("INVALID_A_COUNT", component)
+            elif anchors[0] != component[0]:
+                reject("A_CHRONOLOGY_MISMATCH", anchors)
+    valid = not conflicts
+    return dict(labels=cleaned, conflicts=conflicts, warnings=[], valid=valid,
+                conclusive=calculation["conclusive"],
+                applicable=valid and calculation["conclusive"])
+
+
+def validate_concept_nomenclature(concept_state, labels):
+    """Pure canonical validation of a complete map on an effective ConceptState.
+
+    No SQL, writes or clock. Recalculate internally so callers cannot supply a
+    stale calculation belonging to another state. Letters after a are free.
+    """
+    return _validate_calculation(_calculate_concept_nomenclature(concept_state), labels)
+
+
+def calculate_concept_nomenclature(concept_state):
+    calculation = _calculate_concept_nomenclature(concept_state)
+    validation = _validate_calculation(calculation, calculation["automatic_labels"])
+    return dict(calculation, validation=validation, conflicts=validation["conflicts"],
+                valid=validation["valid"], applicable=validation["applicable"])
 
 
 def simulate_lexical_operation(connection, operation):

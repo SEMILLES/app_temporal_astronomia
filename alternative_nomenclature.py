@@ -1,8 +1,8 @@
 import re
 
 
-LABEL_PATTERN = re.compile(r"[1-9][0-9]*[a-z]")
 WORKING_LABEL_PATTERN = re.compile(r"([1-9][0-9]*)([a-z])\Z")
+LABEL_PATTERN = WORKING_LABEL_PATTERN
 CREATED_AT_PATTERN = re.compile(
     r"[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}(?:\.[0-9]+)?"
 )
@@ -23,6 +23,12 @@ def working_label_key(value):
     if match:
         return (0, int(match.group(1)), match.group(2))
     return (1, text.casefold(), text)
+
+
+def parse_working_label(value):
+    """Shared validation parser; preserve the final-label strip contract."""
+    match = WORKING_LABEL_PATTERN.fullmatch(str(value).strip())
+    return (int(match.group(1)), match.group(2)) if match else None
 
 
 def temporal_reference(occurrence_year, start_year, end_year, end_year_status):
@@ -154,19 +160,34 @@ def calculate_nomenclature_rows(rows, edges):
         item[0] is None, item[0] if item[0] is not None else 0, item[1]
     ))
     suggestions = {}
+    conflicts = []
     for group_number, (_, _, members) in enumerate(component_rows, 1):
         members.sort(key=_temporal_key)
+        if len(members) > 26:
+            conflicts.append(dict(
+                code="VARIANT_CAPACITY_EXCEEDED",
+                message="El grupo contiene más variantes de las que admite la nomenclatura actual.",
+                alternative_refs=tuple(row["alternative_id"] for row in members)))
+            continue
         for index, row in enumerate(members):
             suggestions[row["alternative_id"]] = f"{group_number}{chr(97+index)}"
+    if conflicts:
+        suggestions = {}
     for row in rows:
         row["proposed_label"] = suggestions.get(row["alternative_id"])
-    return {"conclusive": True, "problems": [], "rows": rows,
+    return {"conclusive": not conflicts, "problems": [c["message"] for c in conflicts],
+            "conflicts": conflicts, "rows": rows,
             "suggestions": suggestions,
             "components": [tuple(row["alternative_id"] for row in members)
                            for _, _, members in component_rows]}
 
 
 def validate_final_labels(connection, concept_id, labels, required_edges=()):
+    """Legacy write-workflow adapter; canonical effective-state integration is A.4.
+
+    New callers must use lexical_simulation.validate_concept_nomenclature on
+    their effective ConceptState. This SQL path preserves existing workflows.
+    """
     active = {row[0] for row in connection.execute(
         "SELECT alternative_id FROM alternative WHERE concept_id=? AND retired_at IS NULL",
         (concept_id,),
@@ -187,10 +208,12 @@ def validate_final_labels(connection, concept_id, labels, required_edges=()):
           AND low.retired_at IS NULL AND high.retired_at IS NULL
     """, (concept_id, concept_id)).fetchall()]
     for component in connected_components(active, [*current_edges, *required_edges]):
+        if len(component) > 26:
+            raise InvalidNomenclatureError("VARIANT_CAPACITY_EXCEEDED")
         if len(component) < 2:
             continue
-        parsed = [re.fullmatch(r"([1-9][0-9]*)([a-z])", cleaned[item]) for item in component]
-        if any(match is None for match in parsed) or len({match.group(1) for match in parsed}) != 1:
+        parsed = [parse_working_label(cleaned[item]) for item in component]
+        if any(match is None for match in parsed) or len({match[0] for match in parsed}) != 1:
             raise InvalidNomenclatureError(
                 "Las alternatives conectadas deben compartir número de grupo y usar letras."
             )
