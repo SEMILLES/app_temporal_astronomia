@@ -61,6 +61,59 @@ class AlternativeRouteTests(unittest.TestCase):
         positions=[page.index("TEST-" + label) for label in ("1a", "1b", "1c", "2a", "3a", "10a", "unexpected")]
         self.assertEqual(positions, sorted(positions))
 
+    def test_alternatives_page_orders_occurrences_by_temporal_reference(self):
+        db = self.connect()
+        db.executemany(
+            "INSERT INTO source(source_name,start_year,end_year,end_year_status) VALUES(?,?,?,?)",
+            [
+                ("Range", 2010, 2020, "known"),
+                ("Single", 2015, 2015, "known"),
+                ("Older source", 1900, 1900, "known"),
+                ("Undated", None, None, None),
+            ],
+        )
+        occurrences = [
+            (2, "RANGE", None),
+            (3, "SINGLE", None),
+            (4, "OCCURRENCE YEAR", 2026),
+            (5, "UNDATED", None),
+            (1, "SAME YEAR", 2000),
+        ]
+        for source_id, gloss, year in occurrences:
+            occurrence_id = db.execute(
+                "INSERT INTO occurrence(source_id,original_gloss,occurrence_year) VALUES(?,?,?)",
+                (source_id, gloss, year),
+            ).lastrowid
+            db.execute(
+                "INSERT INTO assignment(occurrence_id,alternative_id) VALUES(?,1)",
+                (occurrence_id,),
+            )
+        db.commit()
+        db.close()
+
+        page = self.client.get("/conceptos/1/alternativas").text
+        positions = [page.index(f"OCC-{occurrence_id:06d}") for occurrence_id in (1, 8, 4, 5, 6, 7)]
+        self.assertEqual(positions, sorted(positions))
+
+    def test_alternatives_page_keeps_each_alternative_occurrence_order_independent(self):
+        db = self.connect()
+        db.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=1")
+        db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2a')")
+        occurrence_id = db.execute(
+            "INSERT INTO occurrence(source_id,original_gloss,occurrence_year) VALUES(1,'EARLIER',1999)",
+        ).lastrowid
+        db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(?,1)", (occurrence_id,))
+        db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(2,2)")
+        db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(3,2)")
+        db.commit()
+        db.close()
+
+        page = self.client.get("/conceptos/1/alternativas").text
+        first_alternative = page.split("TEST-1a", 1)[1].split("TEST-2a", 1)[0]
+        second_alternative = page.split("TEST-2a", 1)[1]
+        self.assertLess(first_alternative.index("OCC-000004"), first_alternative.index("OCC-000001"))
+        self.assertLess(second_alternative.index("OCC-000002"), second_alternative.index("OCC-000003"))
+
     def test_analysis_page_progressive_disclosure_and_singular_count(self):
         page=self.client.get("/ocurrencias/2/clasificar").get_data(as_text=True)
         self.assertIn("TEST-1 · ID 1 — 1 ocurrencia",page);self.assertNotIn("1 ocurrencias",page)

@@ -17,7 +17,7 @@ from alternative_relations import (DuplicateCurrentRelationError,
                                    RelationNotFoundError, SelfRelationError)
 from alternative_nomenclature import (InvalidNomenclatureError,
                                       calculate_nomenclature_preview,
-                                      working_label_key)
+                                      temporal_reference, working_label_key)
 from alternative_admin import (AlternativeAdminError, apply_direct_nomenclature,
                                apply_relation_change, relation_preview,
                                update_morphology)
@@ -28,6 +28,14 @@ from phonological_parameters import PHONOLOGICAL_PARAMETERS
 
 
 alternatives_bp = Blueprint("alternatives", __name__)
+
+
+def _occurrence_temporal_key(occurrence):
+    year, _ = temporal_reference(
+        occurrence["occurrence_year"], occurrence["start_year"],
+        occurrence["end_year"], occurrence["end_year_status"]
+    )
+    return (year is None, year or 0, occurrence["occurrence_id"])
 
 
 def _actor():
@@ -271,6 +279,9 @@ def alternativas(concept_id):
         alternatives[occurrence["alternative_id"]]["occurrences"].append(
             occurrence
         )
+
+    for group in alternatives.values():
+        group["occurrences"].sort(key=_occurrence_temporal_key)
 
     relation_rows = conexion.execute("""
         SELECT
