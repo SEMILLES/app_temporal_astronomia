@@ -89,6 +89,8 @@ def _alternative_rows(connection, concept_id, occurrence_overrides=None,
 
 def _registration_key(row):
     """Stable technical order; it does not assert historical precedence."""
+    if row.get("virtual_order") is not None:
+        return (2, row["virtual_order"], (1, str(row["alternative_id"])))
     created_at = row.get("created_at")
     identifier = row["alternative_id"]
     identifier_key = (0, identifier) if isinstance(identifier, int) else (1, str(identifier))
@@ -125,7 +127,6 @@ def calculate_nomenclature_preview(connection, concept_id, *, extra_edges=(),
     rows = _alternative_rows(
         connection, concept_id, occurrence_overrides, virtual_occurrences
     )
-    ids = {row["alternative_id"] for row in rows}
     relation_edges = [tuple(row) for row in connection.execute("""
         SELECT r.alternative_low_id,r.alternative_high_id
         FROM alternative_relation r
@@ -134,7 +135,14 @@ def calculate_nomenclature_preview(connection, concept_id, *, extra_edges=(),
         WHERE r.is_current=1 AND low.concept_id=? AND high.concept_id=?
           AND low.retired_at IS NULL AND high.retired_at IS NULL
     """, (concept_id, concept_id)).fetchall()]
-    components = connected_components(ids, [*relation_edges, *extra_edges])
+    return calculate_nomenclature_rows(rows, [*relation_edges, *extra_edges])
+
+
+def calculate_nomenclature_rows(rows, edges):
+    """Pure automatic calculation shared by SQL previews and effective states."""
+    rows = [dict(row) for row in rows]
+    ids = {row["alternative_id"] for row in rows}
+    components = connected_components(ids, edges)
     by_id = {row["alternative_id"]: row for row in rows}
     component_rows = []
     for component in components:
@@ -152,7 +160,10 @@ def calculate_nomenclature_preview(connection, concept_id, *, extra_edges=(),
             suggestions[row["alternative_id"]] = f"{group_number}{chr(97+index)}"
     for row in rows:
         row["proposed_label"] = suggestions.get(row["alternative_id"])
-    return {"conclusive": True, "problems": [], "rows": rows, "suggestions": suggestions}
+    return {"conclusive": True, "problems": [], "rows": rows,
+            "suggestions": suggestions,
+            "components": [tuple(row["alternative_id"] for row in members)
+                           for _, _, members in component_rows]}
 
 
 def validate_final_labels(connection, concept_id, labels, required_edges=()):
