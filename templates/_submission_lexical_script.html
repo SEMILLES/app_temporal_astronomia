@@ -6,6 +6,8 @@ document.querySelectorAll('.review-decision').forEach(form=>{
           mode=form.querySelector('[name=nomenclature_mode]'),
           note=form.querySelector('[name=review_note]'),
           validation=form.querySelector('.lexical-validation'),
+          labels=[...form.querySelectorAll('.nomenclature-label')],
+          manualValues=Object.fromEntries(labels.map(input=>[input.dataset.alternativeId,input.value])),
           groups=[...form.querySelectorAll('.group-decision')];
     const selected=name=>form.querySelector('[name="'+name+'"]:checked')?.value;
     function refresh(){
@@ -29,7 +31,17 @@ document.querySelectorAll('.review-decision').forEach(form=>{
         });
         form.querySelector('.preview-pending').hidden=visible;
         const editable=mode.value!=='automatic';
-        form.querySelectorAll('.nomenclature-label').forEach(input=>input.readOnly=!editable);
+        const suggestions={};
+        form.querySelector('.lexical-preview:not([hidden])')?.querySelectorAll('.preview-table tr:not(:first-child)').forEach(row=>{
+            const alternativeId=row.cells[0].textContent.trim()==='Nueva'?'new':row.cells[0].textContent.trim();
+            suggestions[alternativeId]=row.cells[2].textContent.trim()==='—'?'':row.cells[2].textContent.trim();
+        });
+        labels.forEach(input=>{
+            if(editable) input.value=manualValues[input.dataset.alternativeId]||'';
+            else if(suggestions[input.dataset.alternativeId]!==undefined) input.value=suggestions[input.dataset.alternativeId];
+            input.readOnly=!editable;
+        });
+        form.querySelector('.manual-preview-notice').hidden=!isNew||mode.value!=='manual';
         const destination=action==='existing_proposed'?form.dataset.proposed:target.value;
         const rejectedGroup=groups.some(group=>!group.disabled&&group.querySelector('[value=REJECTED]').checked);
         note.required=!!action&&action!=='pending'&&(action==='rejected'||form.dataset.kind==='UNSURE'||
@@ -42,6 +54,7 @@ document.querySelectorAll('.review-decision').forEach(form=>{
         validation.hidden=true;
     }
     form.addEventListener('change',refresh);
+    labels.forEach(input=>input.addEventListener('input',()=>{manualValues[input.dataset.alternativeId]=input.value;}));
     form.addEventListener('submit',event=>{
         if(groups.some(group=>!group.disabled&&group.querySelector('[value=pending]').checked)){
             event.preventDefault(); validation.textContent='Resuelva cada grupo propuesto o elija Dejar pendiente como decisión principal. No se ha aplicado ningún cambio.'; validation.hidden=false;

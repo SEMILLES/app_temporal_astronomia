@@ -35,12 +35,15 @@
 {% if not ctx['proposed_morphology'] %}<p>Sin morfología propuesta.</p>{% endif %}
 <p class="preview-pending">Vista previa de nomenclatura no definitiva: resuelva las relaciones propuestas. Si el destino ya no es válido, no hay vista previa de aceptación disponible.</p>
 {% for resolution,preview in ctx['nomenclature_previews'].items() %}<div class="lexical-preview" data-resolution="{{ resolution }}" hidden>{% include '_submission_lexical_preview.html' %}</div>{% endfor %}
+<p class="manual-preview-notice" role="status" hidden><strong>Sugerencia automática de nomenclatura:</strong> en modo manual, las etiquetas que se aplicarán son las introducidas abajo. La sugerencia automática se conserva únicamente como referencia y no implica que los valores manuales hayan sido validados.</p>
 <p>El backend recalcula la nomenclatura al cerrar. En modo manual o con ajustes, las etiquetas introducidas sustituyen las sugerencias de la vista previa.</p>
 <details class="nomenclature-options"><summary>Modificar nomenclatura manualmente</summary><p><strong>Los cambios de nomenclatura se aplicarán al confirmar la decisión del revisor.</strong></p>
 <label>Modo <select name="nomenclature_mode"><option value="automatic">Modo automático</option><option value="manual">Modo manual</option><option value="adjusted">Automático con ajustes</option></select></label>
-{% for alternative in ctx['alternatives'] %}<label>{{ alternative['display_label'] }} <input class="nomenclature-label" name="label_{{ alternative['alternative_id'] }}" value="{{ alternative['working_label'] }}" readonly></label>{% endfor %}
-<label>Nueva alternativa <input class="nomenclature-label" name="label_new" readonly></label>
-<p>Explique los cambios manuales en la nota de revisión.</p></details>
+<div class="nomenclature-label-list">
+{% for alternative in ctx['alternatives'] %}<div class="nomenclature-label-row"><span class="nomenclature-label-name">{{ alternative['display_label'] }} · ID {{ alternative['alternative_id'] }}</span><input class="nomenclature-label" name="label_{{ alternative['alternative_id'] }}" value="{{ alternative['working_label'] }}" readonly data-alternative-id="{{ alternative['alternative_id'] }}"></div>{% endfor %}
+<div class="nomenclature-label-row"><span class="nomenclature-label-name">Nueva alternativa</span><input class="nomenclature-label" name="label_new" readonly data-alternative-id="new"></div>
+</div>
+<p class="manual-nomenclature-note">Al cambiar nomenclatura manualmente, explique la modificación en la nota de revisión.</p></details>
 </fieldset></div>
 <p><label>Nota de revisión <textarea name="review_note"></textarea></label></p>
 <p class="lexical-note-help">Nota opcional al aceptar sin cambios. Obligatoria para cambios, rechazos, incertidumbre y conflictos actuales.</p>

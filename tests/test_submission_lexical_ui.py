@@ -164,6 +164,21 @@ class LexicalUITests(unittest.TestCase):
         self.assertEqual(1, db.execute('SELECT proposed_existing_alternative_id FROM alternative_submission WHERE submission_id=?', (sid,)).fetchone()[0])
         self.assertEqual(('USE_EXISTING', target), tuple(db.execute('SELECT decision_action,resolved_alternative_id FROM submission_lexical_decision WHERE submission_id=?', (sid,)).fetchone()))
 
+    def test_manual_nomenclature_rows_and_mode_warning_are_explicit(self):
+        sid = self.create()
+        page = self.page(sid)
+        self.assertIn('TEST-1 · ID 1', page)
+        self.assertIn('name="label_1"', page)
+        self.assertIn('Nueva alternativa', page)
+        self.assertIn('name="label_new"', page)
+        self.assertIn('class="manual-preview-notice"', page)
+        self.assertIn('Modo automático', page)
+        self.assertIn('Modo manual', page)
+        self.assertIn('input.readOnly=!editable', page)
+        self.assertIn('manualValues[input.dataset.alternativeId]', page)
+        self.assertIn('manual-preview-notice', page)
+        self.assertIn('manual-nomenclature-note', page)
+
     def test_unresolved_concept_blocks_closing_and_keeps_concept_editor(self):
         sid = self.create(resolved=False)
         page = self.page(sid)

@@ -5,6 +5,10 @@
 .preview-table th:nth-child(4),.preview-table td:nth-child(4){text-align:right}
 .preview-table th:nth-child(2),.preview-table td:nth-child(2),
 .preview-table th:nth-child(3),.preview-table td:nth-child(3){text-align:center}
+.nomenclature-label-list{display:grid;gap:.6rem;margin:.8rem 0}
+.nomenclature-label-row{align-items:center;display:grid;gap:1rem;grid-template-columns:minmax(0,1fr) 7rem}
+.nomenclature-label-name{overflow-wrap:anywhere}
+.nomenclature-label-row input{box-sizing:border-box;min-width:0;width:100%}
 </style>
 <body>
 <h1>{{ 'Detalle del aporte' if detail else 'Revisión de aportes pendientes' }}</h1>{% if request.args.get('message') %}<p role="status"><strong>{{ request.args.get('message') }}</strong></p>{% endif %}
