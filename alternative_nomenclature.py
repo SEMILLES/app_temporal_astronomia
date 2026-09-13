@@ -182,47 +182,36 @@ def calculate_nomenclature_rows(rows, edges):
                            for _, _, members in component_rows]}
 
 
-def validate_final_labels(connection, concept_id, labels, required_edges=()):
-    """Legacy write-workflow adapter; canonical effective-state integration is A.4.
-
-    New callers must use lexical_simulation.validate_concept_nomenclature on
-    their effective ConceptState. This SQL path preserves existing workflows.
-    """
-    active = {row[0] for row in connection.execute(
-        "SELECT alternative_id FROM alternative WHERE concept_id=? AND retired_at IS NULL",
+def canonical_concept_state(connection, concept_id, required_edges=()):
+    """Adapt persisted evidence for admin/structural callers of the pure validator."""
+    from lexical_simulation import Alternative, Assignment, ConceptState, LexicalState, Occurrence, Relation
+    rows = _alternative_rows(connection, concept_id)
+    edges = [tuple(row) for row in connection.execute(
+        "SELECT alternative_low_id,alternative_high_id FROM alternative_relation "
+        "WHERE is_current=1")]
+    state = LexicalState(
         (concept_id,),
-    )}
-    if set(labels) != active:
-        raise InvalidNomenclatureError("Deben indicarse labels para todas las alternatives vigentes.")
-    cleaned = {key: str(value).strip() for key, value in labels.items()}
-    if any(not value or LABEL_PATTERN.fullmatch(value) is None for value in cleaned.values()):
-        raise InvalidNomenclatureError("Hay una working_label vacía o no válida.")
-    if len(set(cleaned.values())) != len(cleaned):
-        raise InvalidNomenclatureError("No puede repetirse working_label dentro del concept.")
-    current_edges = [tuple(row) for row in connection.execute("""
-        SELECT r.alternative_low_id,r.alternative_high_id
-        FROM alternative_relation r
-        JOIN alternative low ON low.alternative_id=r.alternative_low_id
-        JOIN alternative high ON high.alternative_id=r.alternative_high_id
-        WHERE r.is_current=1 AND low.concept_id=? AND high.concept_id=?
-          AND low.retired_at IS NULL AND high.retired_at IS NULL
-    """, (concept_id, concept_id)).fetchall()]
-    for component in connected_components(active, [*current_edges, *required_edges]):
-        if len(component) > 26:
-            raise InvalidNomenclatureError("VARIANT_CAPACITY_EXCEEDED")
-        if len(component) < 2:
-            continue
-        parsed = [parse_working_label(cleaned[item]) for item in component]
-        if any(match is None for match in parsed) or len({match[0] for match in parsed}) != 1:
-            raise InvalidNomenclatureError(
-                "Las alternatives conectadas deben compartir número de grupo y usar letras."
-            )
-    return cleaned
+        tuple(Alternative(r['alternative_id'], concept_id, r['current_label'], r['created_at'], True) for r in rows),
+        tuple(Occurrence(r['alternative_id'], r['reference_year'], None, None, None, None, None) for r in rows),
+        tuple(Assignment(r['alternative_id'], r['alternative_id'], r['alternative_id']) for r in rows),
+        tuple(Relation(i, a, b, '') for i, (a, b) in enumerate([*edges, *required_edges])))
+    return ConceptState(concept_id, state)
+
+
+def validate_final_labels(connection, concept_id, labels, required_edges=(), *, concept_state=None):
+    from lexical_simulation import validate_concept_nomenclature
+    state = concept_state or canonical_concept_state(connection, concept_id, required_edges)
+    if state.concept_id != concept_id:
+        raise InvalidNomenclatureError("Concepto del plan incorrecto.")
+    result = validate_concept_nomenclature(state, labels)
+    if not result['applicable']:
+        raise InvalidNomenclatureError(', '.join(c['code'] for c in result['conflicts']) or 'INAPPLICABLE_NOMENCLATURE')
+    return result['labels']
 
 
 def apply_nomenclature(connection, concept_id, labels, *, origin, reason=None,
-                       submission_id=None, created_by=None, required_edges=()):
-    labels = validate_final_labels(connection, concept_id, labels, required_edges)
+                       submission_id=None, created_by=None, required_edges=(), concept_state=None):
+    labels = validate_final_labels(connection, concept_id, labels, required_edges, concept_state=concept_state)
     if origin not in ("automatic_assisted", "manual"):
         raise InvalidNomenclatureError("Origen de nomenclatura no válido.")
     reason = (reason or "").strip() or None

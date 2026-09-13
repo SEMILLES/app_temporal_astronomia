@@ -123,7 +123,8 @@ class AlternativeWorkflowTests(unittest.TestCase):
     def test_review_new_approved_relation_and_rollback(self):
         sid=self.create(phonological_relation_answer="YES",relations=[{"target_alternative_id":1,"phonological_parameter":"CM_1"}]); new=review_as_new(self.db,sid,approve_relations=True,nomenclature_mode="automatic", access_role="reviewer", morphology_resolution="ACCEPTED", review_note="Revision documentada"); self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE alternative_low_id=? OR alternative_high_id=?",(new,new)).fetchone()[0],1)
         sid=self.create(phonological_relation_answer="NO"); before=self.db.execute("SELECT count(*) FROM alternative").fetchone()[0]; self.db.execute("CREATE TRIGGER fail_resolve BEFORE UPDATE ON submission WHEN NEW.status='resolved' BEGIN SELECT RAISE(ABORT,'synthetic'); END"); self.db.commit()
-        labels=dict(self.db.execute("SELECT alternative_id,working_label FROM alternative WHERE concept_id=1 AND retired_at IS NULL")); labels[new+1]="9a"
+        from alternative_workflow import new_review_preview
+        labels=new_review_preview(self.db,5,1)['suggestions']
         with self.assertRaises(sqlite3.IntegrityError): review_as_new(self.db,sid,nomenclature_mode="manual",labels=labels,reason="Manual", access_role="reviewer", morphology_resolution="ACCEPTED", review_note="Revision documentada")
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative").fetchone()[0],before); self.assertEqual(self.db.execute("SELECT status FROM submission WHERE submission_id=?",(sid,)).fetchone()[0],"pending")
 
@@ -325,7 +326,10 @@ class FinalLexicalWorkflowTests(unittest.TestCase):
         canon=self.canonical();proposal=self.proposal(sid)
         with self.assertRaises(AlternativeWorkflowError):self.existing(sid,relations_resolution='REJECTED',morphology_resolution='REJECTED')
         self.existing(sid,relations_resolution='REJECTED',morphology_resolution='REJECTED',review_note='Conservar destino')
-        self.assertEqual(canon,self.canonical())
+        after=self.canonical()
+        for table in ('alternative_relation', 'alternative_morphology', 'alternative_component', 'occurrence_concept_reference', 'submission_concept_resolution'):
+            self.assertEqual(canon[table],after[table])
+        self.assertEqual(dict(self.db.execute('SELECT alternative_id,working_label FROM alternative WHERE concept_id=1')), calculate_nomenclature_preview(self.db,1)['suggestions'])
         self.assertEqual(proposal,self.proposal(sid))
         self.assertEqual(('REJECTED','REJECTED'),tuple(self.decision(sid)[k] for k in ('relations_resolution','morphology_resolution')))
 
@@ -397,9 +401,10 @@ class FinalLexicalWorkflowTests(unittest.TestCase):
         self.db.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=2");self.db.commit()
         before=self.dump()
         from unittest.mock import patch
-        from conflicts import detect_conflicts_after_change
         def detect_blocking(connection, *args, **kwargs):
-            return detect_conflicts_after_change(connection, 'alternative', 2)
+            # A label duplicate is now repaired by the canonical plan. Induce a
+            # separate blocking condition to preserve the review-note contract.
+            connection.execute("INSERT INTO conflict(origin_kind,rule_code,severity,description,subject_signature,detection_source) VALUES('automatic','INDUCED','blocking','Synthetic conflict','test:2','workflow')")
         with patch('alternative_workflow.detect_conflicts_after_change', side_effect=detect_blocking):
             with self.assertRaises(AlternativeWorkflowError):self.existing(sid)
             self.assertEqual(before,self.dump())

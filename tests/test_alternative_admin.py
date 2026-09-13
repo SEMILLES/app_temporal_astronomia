@@ -12,6 +12,7 @@ from alternative_admin import (
     AlternativeAdminError, apply_direct_nomenclature, apply_relation_change,
     relation_preview, update_morphology,
 )
+from alternative_nomenclature import InvalidNomenclatureError
 from alternative_relations import DuplicateCurrentRelationError, SelfRelationError
 
 
@@ -116,12 +117,23 @@ class AlternativeAdminServiceTests(unittest.TestCase):
         with self.assertRaises(AlternativeAdminError):
             apply_direct_nomenclature(self.db, 1, {1: "2a", 2: "1a", 3: "3a"},
                                       mode="manual", reason=None, actor=self.reviewer)
-        event = apply_direct_nomenclature(
-            self.db, 1, {1: "2a", 2: "1a", 3: "3a"}, mode="manual",
-            reason="criterio editorial", actor=self.reviewer)
-        self.assertIsNotNone(event)
-        self.assertEqual(self.db.execute("SELECT origin FROM renumber_event WHERE renumber_event_id=?", (event,)).fetchone()[0], "manual")
-        self.assertEqual(self.db.execute("SELECT count(*) FROM renumber_change WHERE renumber_event_id=?", (event,)).fetchone()[0], 2)
+        before = "\n".join(self.db.iterdump())
+        with self.assertRaisesRegex(InvalidNomenclatureError, 'GROUP_CHRONOLOGY_MISMATCH'):
+            apply_direct_nomenclature(self.db, 1, {1: "2a", 2: "1a", 3: "3a"},
+                mode="manual", reason="criterio editorial", actor=self.reviewer)
+        self.assertEqual(before, "\n".join(self.db.iterdump()))
+
+    def test_manual_variant_gap_and_reorder_keep_manual_history(self):
+        self.db.executemany("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(?,?,'CM_1')", [(1,2),(2,3)])
+        self.db.commit()
+        for labels in ({1: '1a', 2: '1d', 3: '1b'}, {1: '1a', 2: '1c', 3: '1d'}):
+            with self.assertRaises(AlternativeAdminError):
+                apply_direct_nomenclature(self.db, 1, labels, mode='manual', reason=None, actor=self.reviewer)
+            event = apply_direct_nomenclature(self.db, 1, labels, mode='manual',
+                reason='criterio editorial', actor=self.reviewer)
+            self.assertEqual(tuple(self.db.execute('SELECT origin,reason FROM renumber_event WHERE renumber_event_id=?', (event,)).fetchone()), ('manual','criterio editorial'))
+            self.assertEqual(dict(self.db.execute('SELECT alternative_id,working_label FROM alternative WHERE concept_id=1')), labels)
+            self.assertGreater(self.db.execute('SELECT count(*) FROM renumber_change WHERE renumber_event_id=?', (event,)).fetchone()[0], 0)
         self.assertEqual(self.db.execute("PRAGMA foreign_key_check").fetchall(), [])
 
 

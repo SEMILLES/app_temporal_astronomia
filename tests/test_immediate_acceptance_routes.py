@@ -465,7 +465,7 @@ class ImmediateAcceptanceRouteTests(unittest.TestCase):
             'proposal_kind':'EXISTING', 'proposed_existing_alternative_id':'1',
             'canonical_decision':'existing', 'collaborator_id':'1'})
         self.assertEqual(200, response.status_code)
-        self.assertIn('Alternativa destino</dt><dd>C-1</dd>', response.get_data(as_text=True))
+        self.assertIn('Alternativa destino</dt><dd>C-1a</dd>', response.get_data(as_text=True))
 
     def test_new_accepts_proposed_groups_despite_obsolete_post_fields(self):
         self.role = 'reviewer'

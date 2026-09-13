@@ -1,10 +1,12 @@
 import sqlite3
+from dataclasses import replace
+
+from lexical_simulation import (LexicalOperation, VirtualAlternative, Relation, ConceptState,
+    simulate_lexical_operation, validate_concept_nomenclature)
 
 from alternative_nomenclature import (
-    InconclusiveNomenclatureError,
     InvalidNomenclatureError,
     apply_nomenclature,
-    calculate_nomenclature_preview,
 )
 from alternative_relations import (
     DuplicateCurrentRelationError,
@@ -296,6 +298,93 @@ def _current_assignment_id(connection, occurrence_id):
     return row[0] if row else None
 
 
+def plan_lexical_review(connection, occurrence_id, concept_id, *, destination=None,
+                        targets=(), nomenclature_mode="automatic", labels=None, reason=None, enforce=True):
+    """Read-only operation shared by ordinary previews and both acceptance paths.
+
+    Legacy manual/adjusted maps belong to the destination. Origin is automatic.
+    """
+    new = VirtualAlternative(concept_id) if destination is None else None
+    ref = new.ref if new else int(destination)
+    for target, _ in targets:
+        if not new or not _valid_alternative(connection, target, concept_id):
+            raise AlternativeWorkflowError("La relación no tiene un destino vigente del mismo concepto.")
+    operation = LexicalOperation(
+        occurrence_id, _current_assignment_id(connection, occurrence_id), ref, concept_id,
+        new_alternatives=(new,) if new else (),
+        added_relations=tuple(Relation(f"new_relation:{i}", ref, target, parameter)
+                              for i, (target, parameter) in enumerate(targets)))
+    plan = simulate_lexical_operation(connection, operation)
+    # Reusing an assignment still validates/recalculates the selected concept once.
+    if concept_id not in plan['affected_concepts']:
+        from lexical_simulation import calculate_concept_nomenclature
+        plan['affected_concepts'][concept_id] = dict(roles=('destination',),
+            **calculate_concept_nomenclature(ConceptState(concept_id, plan['effective_state'])))
+    if nomenclature_mode not in ('automatic', 'manual', 'adjusted'):
+        raise InvalidNomenclatureError("Modo de nomenclatura no válido.")
+    for cid, calculation in plan['affected_concepts'].items():
+        final = calculation['automatic_labels']
+        origin = 'automatic_assisted'
+        event_reason = reason or 'Reordenamiento cronológico asociado a decisión léxica.'
+        if cid == concept_id and nomenclature_mode in ('manual', 'adjusted'):
+            final = {(ref if str(k) in ('new', str(ref)) else int(k)): v for k, v in (labels or {}).items()}
+            final = {k: str(v).strip() for k, v in final.items()}
+            if nomenclature_mode == 'manual' or final != calculation['automatic_labels']:
+                origin, event_reason = 'manual', reason
+                if not (reason or '').strip():
+                    raise InvalidNomenclatureError('La nomenclatura manual exige una justificación.')
+        validation = validate_concept_nomenclature(ConceptState(cid, plan['effective_state']), final)
+        if enforce and not validation['applicable']:
+            raise InvalidNomenclatureError(', '.join(c['code'] for c in validation['conflicts']) or 'INAPPLICABLE_NOMENCLATURE')
+        calculation.update(final_labels=validation['labels'], origin=origin, reason=event_reason)
+    return plan
+
+
+def new_review_preview(connection, occurrence_id, concept_id, targets=()):
+    """Legacy template projection of the same multi-concept operation."""
+    plan = plan_lexical_review(connection, occurrence_id, concept_id, targets=targets, enforce=False)
+    calculation = plan['affected_concepts'][concept_id]
+    def ui_ref(ref):
+        return 'new' if ref == 'new_alternative:1' else ref
+    return dict(conclusive=all(c['applicable'] for c in plan['affected_concepts'].values()),
+        problems=[conflict['code'] for c in plan['affected_concepts'].values() for conflict in c['conflicts']],
+        suggestions={ui_ref(k): v for k, v in calculation['automatic_labels'].items()},
+        rows=[dict(row, alternative_id=ui_ref(row['alternative_id'])) for row in calculation['preview_rows']],
+        affected_concepts=plan['affected_concepts'])
+
+
+def _apply_review_plan(connection, plan, submission_id, reviewed_by, new_id=None, *, collaborator_id=None, access_role=None):
+    """Translate virtual identity; persist the validated maps, never recalculate them."""
+    def ref(value):
+        return new_id if value == 'new_alternative:1' else value
+    state = plan['effective_state']
+    state = replace(state,
+        alternatives=tuple(replace(a, ref=ref(a.ref)) for a in state.alternatives),
+        assignments=tuple(replace(a, alternative_ref=ref(a.alternative_ref)) for a in state.assignments),
+        relations=tuple(replace(r, left=ref(r.left), right=ref(r.right)) for r in state.relations))
+    events = {}
+    # Validate materialized evidence before applying either map. This is a check,
+    # not a replacement calculation: any divergence aborts the whole decision.
+    from alternative_nomenclature import validate_final_labels
+    for cid, calculation in plan['affected_concepts'].items():
+        final = {ref(k): v for k, v in calculation['final_labels'].items()}
+        validate_final_labels(connection, cid, final)
+    for cid, calculation in plan['affected_concepts'].items():
+        final = {ref(k): v for k, v in calculation['final_labels'].items()}
+        events[cid] = apply_nomenclature(connection, cid, final,
+            origin=calculation['origin'], reason=calculation['reason'],
+            submission_id=submission_id, created_by=reviewed_by,
+            concept_state=ConceptState(cid, state))
+        if events[cid] is not None and access_role:
+            record_activity(connection, 'renumber_event_created', entity_type='renumber_event',
+                entity_id=events[cid], collaborator_id=collaborator_id, access_role=access_role)
+        stored = dict(connection.execute(
+            'SELECT alternative_id,working_label FROM alternative WHERE concept_id=? AND retired_at IS NULL', (cid,)))
+        if stored != final:
+            raise InvalidNomenclatureError('MATERIALIZED_PLAN_MISMATCH')
+    return events
+
+
 def _rejected_group(connection, submission_id, table, decision=None, *, reject_rest=False):
     proposed = connection.execute(
         f'SELECT 1 FROM {table} WHERE submission_id=?', (submission_id,)).fetchone()
@@ -325,7 +414,9 @@ def review_as_existing(connection, submission_id, alternative_id, *,
             'alternative_submission_morphology', morphology_resolution)
         before = _current_assignment_id(connection, submission['occurrence_id'])
         conflict_before = connection.execute('SELECT coalesce(max(conflict_id),0) FROM conflict').fetchone()[0]
+        plan = plan_lexical_review(connection, submission["occurrence_id"], concept_id, destination=alternative_id)
         result, changed = create_or_replace_assignment(connection,submission["occurrence_id"],int(alternative_id),created_by=reviewed_by,created_from_submission_id=submission_id)
+        _apply_review_plan(connection, plan, submission_id, reviewed_by, collaborator_id=collaborator_id, access_role=access_role)
         save_decision(connection, submission_id, 'USE_EXISTING',
             concept_resolution_id=current_resolution(connection, submission_id)['submission_concept_resolution_id'],
             resolved_alternative_id=int(alternative_id), assignment_before_id=before,
@@ -385,26 +476,13 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
         approve_morphology = morphology_resolution == 'ACCEPTED'
         before = _current_assignment_id(connection, submission['occurrence_id'])
         conflict_before = connection.execute('SELECT coalesce(max(conflict_id),0) FROM conflict').fetchone()[0]
+        targets = _relation_targets(connection, submission_id) if approve_relations else []
+        plan = plan_lexical_review(connection, submission['occurrence_id'], concept_id,
+            targets=targets, nomenclature_mode=nomenclature_mode, labels=labels, reason=reason)
         new_id=connection.execute("INSERT INTO alternative(concept_id,working_label) VALUES(?,NULL)",(concept_id,)).lastrowid
-        targets=_relation_targets(connection,submission_id) if approve_relations else []
-        edges=[(new_id,target) for target,_ in targets if target != new_id]
-        preview=calculate_nomenclature_preview(connection,concept_id,extra_edges=edges,occurrence_overrides={new_id:submission["occurrence_id"]})
-        supplied={
-            (new_id if str(key) == "new" else int(key)): value
-            for key, value in (labels or {}).items()
-        }
-        if nomenclature_mode == "automatic":
-            if not preview["conclusive"]: raise InconclusiveNomenclatureError("El cálculo no es concluyente; asigne labels manualmente.")
-            final=preview["suggestions"]; origin="automatic_assisted"
-            event_reason=reason or "Reordenamiento cronológico asociado a aprobación de alternativa/relación."
-        elif nomenclature_mode in ("manual","adjusted"):
-            final=supplied; origin="manual"; event_reason=reason
-            if nomenclature_mode == "adjusted" and preview["conclusive"] and final == preview["suggestions"]:
-                origin="automatic_assisted"; event_reason=reason or "Reordenamiento cronológico asociado a aprobación de alternativa/relación."
-        else: raise InvalidNomenclatureError("Modo de nomenclatura no válido.")
-        renumber_id=apply_nomenclature(connection,concept_id,final,origin=origin,reason=event_reason,submission_id=submission_id,created_by=reviewed_by,required_edges=edges)
         if approve_relations: _materialize_relations(connection,new_id,submission_id)
         result, _ = create_or_replace_assignment(connection,submission["occurrence_id"],new_id,created_by=reviewed_by,created_from_submission_id=submission_id)
+        _apply_review_plan(connection, plan, submission_id, reviewed_by, new_id, collaborator_id=collaborator_id, access_role=access_role)
         morphology_id = None
         if approve_morphology:
             morphology_id, _ = materialize_submission_morphology(
@@ -420,7 +498,6 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
         _resolve_submission(connection,submission_id,new_id,reviewed_by,review_note)
         if access_role:
             record_activity(connection,"alternative_created",entity_type="alternative",entity_id=new_id,collaborator_id=collaborator_id,access_role=access_role)
-            record_activity(connection,"renumber_event_created",entity_type="renumber_event",entity_id=renumber_id,collaborator_id=collaborator_id,access_role=access_role)
             for target_id, _ in targets:
                 record_activity(connection,"alternative_relation_created",entity_type="alternative",entity_id=new_id,collaborator_id=collaborator_id,access_role=access_role)
             record_activity(connection,"alternative_submission_accepted",entity_type="submission",entity_id=submission_id,collaborator_id=collaborator_id,access_role=access_role,comment=review_note)

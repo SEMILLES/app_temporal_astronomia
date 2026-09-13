@@ -16,7 +16,7 @@ from alternative_workflow import (
     AlternativeWorkflowError, reject_alternative_submission,
     review_as_existing, review_as_new,
 )
-from alternative_nomenclature import calculate_nomenclature_preview
+from alternative_workflow import new_review_preview
 from alternative_nomenclature import working_label_key
 from alternative_morphology import submission_morphology
 from concept_labels import alternative_display_label
@@ -338,20 +338,18 @@ def _alternative_review_context(db, rows):
             relations_error=str(error)
         previews={}
         if concept_id and row['status']=='pending':
-            previews['REJECTED' if relations else 'NOT_PROPOSED']=calculate_nomenclature_preview(
-                db,concept_id,virtual_occurrences={'new':row['occurrence_id']})
-            edges=[]
+            previews['REJECTED' if relations else 'NOT_PROPOSED']=new_review_preview(
+                db,row['occurrence_id'],concept_id)
             if not relations_error:
                 for target, parameter in resolved_targets:
                     valid=db.execute('SELECT 1 FROM alternative WHERE alternative_id=? AND concept_id=? AND retired_at IS NULL',(target,concept_id)).fetchone()
                     if not valid:
                         relations_error='La relación propuesta ya no tiene un destino vigente del mismo concepto.'
                         break
-                    edges.append(('new',target))
                 else:
                     if relations:
-                        previews['ACCEPTED']=calculate_nomenclature_preview(
-                            db,concept_id,extra_edges=edges,virtual_occurrences={'new':row['occurrence_id']})
+                        previews['ACCEPTED']=new_review_preview(
+                            db,row['occurrence_id'],concept_id,resolved_targets)
         lexical_decision=get_decision(db,row['submission_id'])
         if lexical_decision:
             lexical_decision = dict(lexical_decision)
