@@ -2,6 +2,8 @@ import sqlite3
 import unittest
 
 import database
+from alternative_preconditions import relevant_state
+from edit_concurrency import fingerprint
 from alternative_structural import (
     StructuralAlternativeError, retire_preview, apply_retire, merge_preview,
     apply_merge, split_preview, apply_split, move_preview, apply_move,
@@ -58,6 +60,8 @@ class StructuralAlternativeTests(unittest.TestCase):
         with self.assertRaises(StructuralAlternativeError):split_preview(self.db,2,{3:1},1)
 
     def test_move_preserves_identity_assignment_context_morphology(self):
+        self.db.execute("UPDATE alternative_relation SET is_current=0 WHERE alternative_low_id=1 OR alternative_high_id=1")
+        self.db.commit()
         assignment=self.db.execute("SELECT assignment_id FROM assignment WHERE occurrence_id=1 AND is_current=1").fetchone()[0]
         context=tuple(self.db.execute("SELECT concept_id,concept_proposal_id FROM occurrence_concept_reference WHERE occurrence_id=1 AND is_current=1").fetchone())
         apply_move(self.db,1,2,expected_fingerprint=move_preview(self.db,1,2)["fingerprint"],reason="reclasificaciÃ³n",actor=self.actor)
@@ -67,6 +71,31 @@ class StructuralAlternativeTests(unittest.TestCase):
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology WHERE alternative_id=1 AND is_current=1").fetchone()[0],1)
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE is_current=1 AND (alternative_low_id=1 OR alternative_high_id=1)").fetchone()[0],0)
         with self.assertRaises(StructuralAlternativeError):move_preview(self.db,1,2)
+
+    def test_move_preview_blocks_one_current_relation_without_changes(self):
+        before = "\n".join(self.db.iterdump())
+        with self.assertRaisesRegex(StructuralAlternativeError, "no puede trasladarse individualmente"):
+            move_preview(self.db,1,2)
+        self.assertEqual(before, "\n".join(self.db.iterdump()))
+        self.assertEqual(self.db.execute("SELECT concept_id FROM alternative WHERE alternative_id=1").fetchone()[0],1)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE is_current=1 AND (alternative_low_id=1 OR alternative_high_id=1)").fetchone()[0],2)
+
+    def test_apply_move_blocks_multiple_current_relations_without_events(self):
+        before = "\n".join(self.db.iterdump())
+        expected = fingerprint(relevant_state(self.db, 1, 2))
+        with self.assertRaisesRegex(StructuralAlternativeError, "grupo léxico"):
+            apply_move(self.db,1,2,expected_fingerprint=expected,reason="reclasificaciÃ³n",actor=self.actor)
+        self.assertEqual(before, "\n".join(self.db.iterdump()))
+        self.assertEqual(self.db.execute("SELECT count(*) FROM renumber_event").fetchone()[0],0)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM activity_event").fetchone()[0],0)
+
+    def test_historical_relations_do_not_block_move(self):
+        self.db.execute("UPDATE alternative_relation SET is_current=0 WHERE alternative_low_id=1 OR alternative_high_id=1")
+        self.db.commit()
+        preview = move_preview(self.db,1,2)
+        apply_move(self.db,1,2,expected_fingerprint=preview["fingerprint"],reason="reclasificaciÃ³n",actor=self.actor)
+        self.assertEqual(self.db.execute("SELECT concept_id FROM alternative WHERE alternative_id=1").fetchone()[0],2)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE is_current=0 AND (alternative_low_id=1 OR alternative_high_id=1)").fetchone()[0],2)
 
     def test_rollback_is_atomic(self):
         self.db.execute("CREATE TRIGGER fail_activity BEFORE INSERT ON activity_event WHEN NEW.event_type='alternative_retired' BEGIN SELECT RAISE(ABORT,'synthetic');END");self.db.commit()

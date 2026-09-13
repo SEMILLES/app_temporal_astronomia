@@ -12,6 +12,8 @@ from routes.occurrences import occurrences_bp
 from routes.submissions import submissions_bp
 from routes.alternatives import alternatives_bp
 from routes.concepts import concepts_bp
+from alternative_preconditions import relevant_state
+from edit_concurrency import fingerprint, sign
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -113,6 +115,50 @@ class AlternativeRouteTests(unittest.TestCase):
         second_alternative = page.split("TEST-2a", 1)[1]
         self.assertLess(first_alternative.index("OCC-000004"), first_alternative.index("OCC-000001"))
         self.assertLess(second_alternative.index("OCC-000002"), second_alternative.index("OCC-000003"))
+
+    def test_isolated_alternative_keeps_move_option(self):
+        page = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
+        self.assertIn('name="action" value="preview_move"', page)
+
+    def test_related_alternative_shows_move_block_and_no_preview_form(self):
+        db = self.connect()
+        db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2a')")
+        db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,2,'CM_1')")
+        db.commit(); db.close()
+        page = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
+        self.assertIn("no puede trasladarse individualmente", page)
+        move_section = page.split("<fieldset><legend>Mover a otro concepto</legend>", 1)[1].split("</fieldset>", 1)[0]
+        self.assertNotIn('name="action" value="preview_move"', move_section)
+        self.assertNotIn("Relaciones retiradas", move_section)
+
+    def test_forced_move_post_is_rejected_without_changes(self):
+        db = self.connect()
+        db.execute("INSERT INTO concept(preferred_label) VALUES('DESTINATION')")
+        db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2a')")
+        db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,2,'CM_1')")
+        db.commit()
+        with self.client.application.app_context():
+            token = sign({
+                "purpose": "structural-alternative",
+                "source_id": 1,
+                "spec": {"kind": "move", "destination_concept_id": 2},
+                "fingerprint": fingerprint(relevant_state(db, 1, 2)),
+            })
+        before = "\n".join(db.iterdump())
+        db.close()
+        response = self.client.post("/alternativas/1/gestionar", data={
+            "action": "confirm_move",
+            "destination_concept_id": "2",
+            "preview_token": token,
+            "confirm": "yes",
+            "reason": "Reclasificación",
+        })
+        self.assertEqual(response.status_code, 400)
+        db = self.connect()
+        self.assertEqual(before, "\n".join(db.iterdump()))
+        self.assertEqual(db.execute("SELECT concept_id FROM alternative WHERE alternative_id=1").fetchone()[0], 1)
+        self.assertEqual(db.execute("SELECT is_current FROM alternative_relation WHERE alternative_low_id=1 AND alternative_high_id=2").fetchone()[0], 1)
+        db.close()
 
     def test_analysis_page_progressive_disclosure_and_singular_count(self):
         page=self.client.get("/ocurrencias/2/clasificar").get_data(as_text=True)

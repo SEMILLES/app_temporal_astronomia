@@ -52,6 +52,15 @@ def _relations(connection, alternative_id):
     """, (alternative_id, alternative_id, alternative_id)).fetchall()
 
 
+def _ensure_individual_move_allowed(connection, alternative_id):
+    if _relations(connection, alternative_id):
+        raise StructuralAlternativeError(
+            "Esta Alternative pertenece a una red o grupo léxico y no puede "
+            "trasladarse individualmente. El traslado del grupo completo debe "
+            "realizarse mediante una operación estructural específica."
+        )
+
+
 def _conflict_preflight(connection):
     existing = {row[0] for row in connection.execute(
         "SELECT subject_signature FROM conflict WHERE status='open'")}
@@ -257,10 +266,10 @@ def move_preview(connection,source_id,destination_concept_id):
     source=_active(connection,source_id);destination=connection.execute("SELECT * FROM concept WHERE concept_id=?",(destination_concept_id,)).fetchone()
     if destination is None:raise StructuralAlternativeError("El concepto destino no existe.")
     if source["concept_id"]==int(destination_concept_id):raise StructuralAlternativeError("La alternativa ya pertenece a ese concepto.")
-    relations=_relations(connection,source_id)
+    _ensure_individual_move_allowed(connection, source_id)
     def operation():
-        connection.execute("UPDATE alternative_relation SET is_current=0 WHERE is_current=1 AND (alternative_low_id=? OR alternative_high_id=?)",(source_id,source_id));connection.execute("UPDATE alternative SET concept_id=? WHERE alternative_id=?",(destination_concept_id,source_id))
-        return {"kind":"move","source":dict(source),"destination":dict(destination),"occurrences":[dict(r) for r in _occurrences(connection,source_id)],"relations_retired":[dict(r) for r in relations],"origin_labels":calculate_nomenclature_preview(connection,source["concept_id"])["rows"],"destination_labels":calculate_nomenclature_preview(connection,destination_concept_id)["rows"],"assignments_changed":False,"morphology_transferred":True}
+        connection.execute("UPDATE alternative SET concept_id=? WHERE alternative_id=?",(destination_concept_id,source_id))
+        return {"kind":"move","source":dict(source),"destination":dict(destination),"occurrences":[dict(r) for r in _occurrences(connection,source_id)],"origin_labels":calculate_nomenclature_preview(connection,source["concept_id"])["rows"],"destination_labels":calculate_nomenclature_preview(connection,destination_concept_id)["rows"],"assignments_changed":False,"morphology_transferred":True}
     return _simulate(connection,operation)
 
 
@@ -269,8 +278,8 @@ def apply_move(connection,source_id,destination_concept_id,*,reason,actor,expect
     try:
         if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, source_id, destination_concept_id)):
             raise StaleEdit(STALE_PREVIEW)
-        reason=_reason(reason);move_preview(connection,source_id,destination_concept_id);source=_active(connection,source_id);before=_blocking_ids(connection);old_context={r["occurrence_id"]:{"concept_id":r["reference_concept_id"],"concept_proposal_id":r["reference_concept_proposal_id"]} for r in _occurrences(connection,source_id)}
-        connection.execute("UPDATE alternative_relation SET is_current=0 WHERE is_current=1 AND (alternative_low_id=? OR alternative_high_id=?)",(source_id,source_id));connection.execute("UPDATE alternative SET concept_id=? WHERE alternative_id=?",(destination_concept_id,source_id))
+        source=_active(connection,source_id);_ensure_individual_move_allowed(connection, source_id);reason=_reason(reason);move_preview(connection,source_id,destination_concept_id);before=_blocking_ids(connection);old_context={r["occurrence_id"]:{"concept_id":r["reference_concept_id"],"concept_proposal_id":r["reference_concept_proposal_id"]} for r in _occurrences(connection,source_id)}
+        connection.execute("UPDATE alternative SET concept_id=? WHERE alternative_id=?",(destination_concept_id,source_id))
         origin_event=_nomenclature(connection,source["concept_id"],reason,actor_name(connection,actor.get("collaborator_id")));destination_event=_nomenclature(connection,int(destination_concept_id),reason,actor_name(connection,actor.get("collaborator_id")));_persist_final_conflicts(connection,actor);_reject_new_blocking(connection,before)
         _event(connection,"alternative_moved",source_id,actor,reason,origin_concept_id=source["concept_id"],destination_concept_id=int(destination_concept_id),origin_renumber_event_id=origin_event,destination_renumber_event_id=destination_event,occurrence_context_snapshot=old_context)
         connection.commit();return origin_event,destination_event
