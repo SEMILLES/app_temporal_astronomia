@@ -424,22 +424,22 @@ def actualizar_gestion_alternativa(alternative_id):
         elif action == "preview_retire":
             structural_result = retire_preview(conexion, alternative_id, _occurrence_mapping(request.form, "occurrence_")); message = "Revise el retiro estructural antes de confirmarlo."
         elif action == "confirm_retire":
-            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
+            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisó los cambios.")
             apply_retire(conexion,alternative_id,_occurrence_mapping(request.form,"occurrence_"),reason=request.form.get("reason"),actor=_actor(),expected_fingerprint=expected_fingerprint); return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa retirada."))
         elif action == "preview_merge":
-            structural_result=merge_preview(conexion,alternative_id,int(request.form.get("target_id",0)),request.form.get("relation_mode")); message="Revise la fusiÃ³n antes de confirmarla."
+            structural_result=merge_preview(conexion,alternative_id,int(request.form.get("target_id",0)),request.form.get("relation_mode")); message="Revise la fusión antes de confirmarla."
         elif action == "confirm_merge":
-            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
+            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisó los cambios.")
             target_id=int(request.form.get("target_id"));apply_merge(conexion,alternative_id,target_id,request.form.get("relation_mode"),reason=request.form.get("reason"),actor=_actor(),expected_fingerprint=expected_fingerprint);return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message=f"Alternativa fusionada en {target_id}."))
         elif action == "preview_split":
-            structural_result=split_preview(conexion,alternative_id,_occurrence_mapping(request.form,"split_occurrence_"),request.form.get("new_count"));message="Revise la divisiÃ³n antes de confirmarla."
+            structural_result=split_preview(conexion,alternative_id,_occurrence_mapping(request.form,"split_occurrence_"),request.form.get("new_count"));message="Revise la división antes de confirmarla."
         elif action == "confirm_split":
-            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
+            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisó los cambios.")
             apply_split(conexion,alternative_id,_occurrence_mapping(request.form,"split_occurrence_"),request.form.get("new_count"),reason=request.form.get("reason"),actor=_actor(),expected_fingerprint=expected_fingerprint);return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa dividida."))
         elif action == "preview_move":
             structural_result=move_preview(conexion,alternative_id,int(request.form.get("destination_concept_id",0)));message="Revise el movimiento antes de confirmarlo."
         elif action == "confirm_move":
-            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisÃ³ los cambios.")
+            if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisó los cambios.")
             apply_move(conexion,alternative_id,int(request.form.get("destination_concept_id")),reason=request.form.get("reason"),actor=_actor(),expected_fingerprint=expected_fingerprint);return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa movida."))
         else:
             raise AlternativeAdminError("Acción administrativa no válida.")

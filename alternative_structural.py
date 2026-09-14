@@ -23,7 +23,7 @@ def _active(connection, alternative_id):
         "SELECT a.*,c.preferred_label concept_label FROM alternative a JOIN concept c USING(concept_id) "
         "WHERE alternative_id=? AND retired_at IS NULL", (alternative_id,)).fetchone()
     if row is None:
-        raise StructuralAlternativeError("La alternativa no existe o estÃ¡ retirada.")
+        raise StructuralAlternativeError("La alternativa no existe o está retirada.")
     return row
 
 
@@ -185,7 +185,7 @@ def apply_retire(connection, alternative_id, resolutions, *, reason, actor, expe
 @_read_only_preview
 def merge_preview(connection, source_id, target_id, relation_mode):
     source=_active(connection,source_id); target=_active(connection,target_id)
-    if source_id==target_id or source["concept_id"]!=target["concept_id"]: raise StructuralAlternativeError("La fusiÃ³n exige dos alternativas distintas y vigentes del mismo concepto.")
+    if source_id==target_id or source["concept_id"]!=target["concept_id"]: raise StructuralAlternativeError("La fusión exige dos alternativas distintas y vigentes del mismo concepto.")
     if relation_mode not in ("keep_target","union"): raise StructuralAlternativeError("Seleccione cómo resolver las relaciones.")
     occurrences=_occurrences(connection,source_id); source_relations=_relations(connection,source_id)
     def operation():
@@ -232,8 +232,8 @@ def apply_merge(connection,source_id,target_id,relation_mode,*,reason,actor,expe
 def split_preview(connection,source_id,distribution,new_count):
     source=_active(connection,source_id); occurrences=_occurrences(connection,source_id)
     try:new_count=int(new_count)
-    except (TypeError,ValueError):raise StructuralAlternativeError("La cantidad de alternativas nuevas no es vÃ¡lida.")
-    if new_count<2:raise StructuralAlternativeError("Una divisiÃ³n debe crear al menos dos alternativas.")
+    except (TypeError,ValueError):raise StructuralAlternativeError("La cantidad de alternativas nuevas no es válida.")
+    if new_count<2:raise StructuralAlternativeError("Una división debe crear al menos dos alternativas.")
     distribution={int(k):int(v) for k,v in (distribution or {}).items()}
     if {r["occurrence_id"] for r in occurrences}!=set(distribution) or any(v<1 or v>new_count for v in distribution.values()):raise StructuralAlternativeError("Cada ocurrencia debe asignarse exactamente a una alternativa nueva.")
     def operation():

@@ -131,6 +131,25 @@ class AlternativeRouteTests(unittest.TestCase):
         self.assertNotIn('name="action" value="preview_move"', move_section)
         self.assertNotIn("Relaciones retiradas", move_section)
 
+    def test_structural_operations_render_utf8_texts_and_no_mojibake(self):
+        page = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
+        for text in ("previsualización", "confirmación", "fusión", "división", "—", "→"):
+            self.assertIn(text, page)
+        for bad in ("Ã", "â€”", "â†’"):
+            self.assertNotIn(bad, page)
+
+    def test_move_block_preserves_isolated_alternative_button_text(self):
+        page = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
+        self.assertIn("Previsualizar movimiento", page)
+
+        db = self.connect()
+        db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2a')")
+        db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,2,'CM_1')")
+        db.commit(); db.close()
+        page_related = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
+        self.assertIn("no puede trasladarse individualmente", page_related)
+        self.assertNotIn("Previsualizar movimiento", page_related.split("<fieldset><legend>Mover a otro concepto</legend>", 1)[1].split("</fieldset>", 1)[0])
+
     def test_forced_move_post_is_rejected_without_changes(self):
         db = self.connect()
         db.execute("INSERT INTO concept(preferred_label) VALUES('DESTINATION')")
