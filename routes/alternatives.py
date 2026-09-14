@@ -23,7 +23,7 @@ from alternative_admin import (AlternativeAdminError, apply_direct_nomenclature,
                                update_morphology)
 from alternative_structural import (StructuralAlternativeError, retire_preview,
     apply_retire, merge_preview, apply_merge, split_preview, apply_split,
-    move_preview, apply_move)
+    move_preview, apply_move, lexical_component, component_move_preview, apply_component_move)
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
 
 
@@ -123,9 +123,16 @@ def _management_context(connection, alternative_id, *, message=None, error=None,
         "SELECT rc.*,a.working_label current_label FROM renumber_change rc JOIN alternative a USING(alternative_id) WHERE renumber_event_id=? ORDER BY alternative_id",
         (event["renumber_event_id"],),).fetchall() for event in renumber_history}
     concepts = connection.execute("SELECT concept_id,preferred_label FROM concept WHERE concept_id<>? ORDER BY preferred_label,concept_id", (alternative["concept_id"],)).fetchall()
-    structural_history = connection.execute("SELECT * FROM activity_event WHERE entity_type='alternative' AND entity_id=? AND event_type IN ('alternative_retired','alternative_merged','alternative_split','alternative_moved') ORDER BY occurred_at DESC,activity_event_id DESC", (alternative_id,)).fetchall()
+    structural_history = connection.execute("SELECT * FROM activity_event WHERE entity_type='alternative' AND entity_id=? AND event_type IN ('alternative_retired','alternative_merged','alternative_split','alternative_moved','alternative_component_moved') ORDER BY occurred_at DESC,activity_event_id DESC", (alternative_id,)).fetchall()
     current_occurrences = connection.execute("SELECT o.occurrence_id,o.original_gloss,s.source_name FROM assignment x JOIN occurrence o USING(occurrence_id) JOIN source s USING(source_id) WHERE x.alternative_id=? AND x.is_current=1 ORDER BY o.occurrence_id", (alternative_id,)).fetchall()
-    return dict(edit_token=edit_token(connection, "morphology", alternative_id),
+    component, component_error = None, None
+    if not alternative['retired_at']:
+        try:
+            component = lexical_component(connection, alternative_id)
+        except StructuralAlternativeError as exc:
+            component_error = str(exc)
+    return dict(component=component, component_error=component_error,
+                edit_token=edit_token(connection, "morphology", alternative_id),
                 nomenclature_token=state_token(connection, alternative_id, {"kind": "nomenclature"}),
                 alternative=alternative, morphology=morphology,
                 morphology_history=morphology_history,
@@ -370,7 +377,7 @@ def actualizar_gestion_alternativa(alternative_id):
     structural_result = None
     try:
         expected_fingerprint = None
-        if action in ("confirm_retire", "confirm_merge", "confirm_split", "confirm_move"):
+        if action in ("confirm_retire", "confirm_merge", "confirm_split", "confirm_move", "confirm_component_move"):
             payload = unsign(request.form.get("preview_token"), STALE_PREVIEW)
             if (payload.get("purpose") != "structural-alternative" or
                     payload.get("source_id") != alternative_id or payload.get("spec") != _structural_spec(request.form)):
@@ -436,6 +443,15 @@ def actualizar_gestion_alternativa(alternative_id):
         elif action == "confirm_split":
             if request.form.get("confirm") != "yes": raise StructuralAlternativeError("Confirme que revisó los cambios.")
             apply_split(conexion,alternative_id,_occurrence_mapping(request.form,"split_occurrence_"),request.form.get("new_count"),reason=request.form.get("reason"),actor=_actor(),expected_fingerprint=expected_fingerprint);return redirect(url_for("alternatives.gestionar_alternativa",alternative_id=alternative_id,message="Alternativa dividida."))
+        elif action == "preview_component_move":
+            structural_result = component_move_preview(conexion, alternative_id, int(request.form.get('destination_concept_id', 0)))
+            message = 'Revise el traslado del grupo antes de confirmarlo.'
+        elif action == "confirm_component_move":
+            if request.form.get('confirm') != 'yes':
+                raise StructuralAlternativeError('Confirme que revisó los cambios.')
+            apply_component_move(conexion, alternative_id, int(request.form.get('destination_concept_id', 0)),
+                                 reason=request.form.get('reason'), actor=_actor(), expected_fingerprint=expected_fingerprint)
+            return redirect(url_for('alternatives.gestionar_alternativa', alternative_id=alternative_id, message='Grupo trasladado.'))
         elif action == "preview_move":
             structural_result=move_preview(conexion,alternative_id,int(request.form.get("destination_concept_id",0)));message="Revise el movimiento antes de confirmarlo."
         elif action == "confirm_move":

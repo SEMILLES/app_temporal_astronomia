@@ -1,5 +1,7 @@
 import sqlite3
 import unittest
+import json
+from unittest.mock import patch
 
 import database
 from alternative_preconditions import relevant_state
@@ -7,6 +9,7 @@ from edit_concurrency import fingerprint
 from alternative_structural import (
     StructuralAlternativeError, retire_preview, apply_retire, merge_preview,
     apply_merge, split_preview, apply_split, move_preview, apply_move,
+    component_move_preview, apply_component_move, lexical_component,
 )
 
 
@@ -28,6 +31,112 @@ class StructuralAlternativeTests(unittest.TestCase):
         self.db.commit();self.actor={"access_role":"reviewer","collaborator_id":None}
 
     def tearDown(self):self.db.close()
+
+    def component_apply(self, selected=2, **kwargs):
+        preview = component_move_preview(self.db, selected, 2)
+        return apply_component_move(self.db, selected, 2, reason='Traslado documentado',
+                                    actor=self.actor, expected_fingerprint=preview['fingerprint'], **kwargs)
+
+    def test_component_transitive_middle_preserves_all_evidence_and_labels(self):
+        self.db.execute('UPDATE alternative_relation SET alternative_low_id=2 WHERE alternative_high_id=3')
+        self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'4a')")
+        self.db.execute("INSERT INTO media_asset(storage_key,mime_type) VALUES('synthetic-video','video/mp4')")
+        self.db.execute("INSERT INTO alternative_media(alternative_id,media_asset_id,role,created_access_role) VALUES(2,1,'catalog_video','reviewer')")
+        self.db.execute('INSERT INTO occurrence_media(occurrence_id,media_asset_id) VALUES(1,1)')
+        self.db.execute("INSERT INTO alternative_component(alternative_morphology_id,position,component_label) VALUES(1,1,'test')")
+        self.db.commit()
+        tables = ('assignment', 'occurrence', 'occurrence_concept_reference', 'alternative_morphology',
+                  'alternative_component', 'alternative_relation', 'media_asset', 'alternative_media', 'occurrence_media')
+        before = {t: [tuple(r) for r in self.db.execute('SELECT * FROM '+t)] for t in tables}
+        dump = '\n'.join(self.db.iterdump())
+        preview = component_move_preview(self.db, 2, 2)
+        self.assertEqual(dump, '\n'.join(self.db.iterdump()))
+        self.assertEqual(preview['alternative_ids'], [1, 2, 3])
+        events = self.component_apply()
+        self.assertTrue(all(events))
+        self.assertEqual(dict(self.db.execute('SELECT alternative_id,concept_id FROM alternative')), {1:2,2:2,3:2,4:2,5:1})
+        for t in tables:
+            self.assertEqual(before[t], [tuple(r) for r in self.db.execute('SELECT * FROM '+t)], t)
+        for key in ('origin_labels', 'destination_labels'):
+            for r in preview[key]:
+                self.assertEqual(self.db.execute('SELECT working_label FROM alternative WHERE alternative_id=?', (r['alternative_id'],)).fetchone()[0], r['proposed_label'])
+        event = self.db.execute("SELECT * FROM activity_event WHERE event_type='alternative_component_moved'").fetchone()
+        data = json.loads(event['comment'])
+        self.assertEqual(data['selected_alternative_id'], 2)
+        self.assertEqual(data['alternative_ids'], [1,2,3])
+        self.assertEqual(data['relation_ids'], [1,2])
+        self.assertEqual((data['source_concept_id'],data['destination_concept_id']), (1,2))
+        self.assertEqual((data['origin_renumber_event_id'],data['destination_renumber_event_id']), events)
+        self.assertEqual(data['reason'], 'Traslado documentado')
+
+    def test_component_pair_ignores_history(self):
+        self.db.execute('UPDATE alternative_relation SET is_current=0 WHERE alternative_high_id=3')
+        self.db.commit()
+        self.assertEqual(lexical_component(self.db,2)['alternative_ids'], [1,2])
+        self.component_apply()
+        self.assertEqual(self.db.execute('SELECT concept_id FROM alternative WHERE alternative_id=3').fetchone()[0],1)
+
+    def test_component_allows_empty_origin_and_master(self):
+        self.actor['access_role'] = 'master'
+        self.component_apply()
+        self.assertEqual(self.db.execute('SELECT count(*) FROM alternative WHERE concept_id=1').fetchone()[0],0)
+
+    def test_component_invalid_destination_and_analyst(self):
+        for dest in (1,999):
+            with self.assertRaises(StructuralAlternativeError): component_move_preview(self.db,2,dest)
+        self.actor['access_role']='analyst'
+        before='\n'.join(self.db.iterdump())
+        with self.assertRaises(StructuralAlternativeError): self.component_apply()
+        self.assertEqual(before,'\n'.join(self.db.iterdump()))
+
+    def test_component_cross_concept_and_retired_endpoint_block(self):
+        for sql in ('UPDATE alternative SET concept_id=2 WHERE alternative_id=3',
+                    "UPDATE alternative SET retired_at=CURRENT_TIMESTAMP WHERE alternative_id=3"):
+            self.db.execute(sql)
+            with self.assertRaisesRegex(StructuralAlternativeError, 'inconsistente'):
+                component_move_preview(self.db,2,2)
+            self.db.rollback()
+
+    def test_component_missing_endpoint_blocks(self):
+        self.db.execute('PRAGMA foreign_keys=OFF')
+        self.db.execute('UPDATE alternative_relation SET alternative_high_id=999 WHERE alternative_high_id=3')
+        self.db.commit()
+        with self.assertRaisesRegex(StructuralAlternativeError,'endpoint'):
+            component_move_preview(self.db,2,2)
+
+    def test_component_stale_membership_blocks_without_events(self):
+        from edit_concurrency import StaleEdit
+        preview=component_move_preview(self.db,2,2)
+        self.db.execute('UPDATE alternative_relation SET is_current=0 WHERE alternative_high_id=3')
+        self.db.commit()
+        before='\n'.join(self.db.iterdump())
+        with self.assertRaises(StaleEdit):
+            apply_component_move(self.db,2,2,reason='Cambio',actor=self.actor,expected_fingerprint=preview['fingerprint'])
+        self.assertEqual(before,'\n'.join(self.db.iterdump()))
+
+    def test_component_capacity_blocks(self):
+        for i in range(24):
+            aid=self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'9a')").lastrowid
+            self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,?,'CM_1')",(aid,))
+        self.db.commit()
+        before='\n'.join(self.db.iterdump())
+        with self.assertRaisesRegex(StructuralAlternativeError,'VARIANT_CAPACITY_EXCEEDED'):
+            component_move_preview(self.db,2,2)
+        self.assertEqual(before,'\n'.join(self.db.iterdump()))
+
+    def test_component_rollback_after_partial_update_and_after_events(self):
+        preview=component_move_preview(self.db,2,2)
+        for trigger in (
+            "CREATE TRIGGER fail BEFORE UPDATE OF concept_id ON alternative WHEN NEW.alternative_id=2 BEGIN SELECT RAISE(ABORT,'partial'); END",
+            "CREATE TRIGGER fail BEFORE INSERT ON activity_event WHEN NEW.event_type='alternative_component_moved' BEGIN SELECT RAISE(ABORT,'event'); END"):
+            self.db.execute(trigger);self.db.commit()
+            before='\n'.join(self.db.iterdump())
+            # Bypass only the cloned simulation so the injected failure occurs in the real transaction.
+            with patch('alternative_structural.component_move_preview', return_value=preview):
+                with self.assertRaises(sqlite3.IntegrityError):
+                    apply_component_move(self.db,2,2,reason='Fallo',actor=self.actor,expected_fingerprint=preview['fingerprint'])
+            self.assertEqual(before,'\n'.join(self.db.iterdump()))
+            self.db.execute('DROP TRIGGER fail');self.db.commit()
 
     def test_retire_requires_complete_resolution_and_preserves_history(self):
         with self.assertRaises(StructuralAlternativeError):retire_preview(self.db,1,{1:2})

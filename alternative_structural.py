@@ -18,6 +18,68 @@ class StructuralAlternativeError(AlternativeAdminError):
     pass
 
 
+def lexical_component(connection, alternative_id):
+    """Return the closed current component, independently of working labels."""
+    source = _active(connection, alternative_id)
+    relations = connection.execute(
+        "SELECT * FROM alternative_relation WHERE is_current=1 ORDER BY alternative_relation_id"
+    ).fetchall()
+    graph = {}
+    for row in relations:
+        left, right = row['alternative_low_id'], row['alternative_high_id']
+        graph.setdefault(left, set()).add(right)
+        graph.setdefault(right, set()).add(left)
+    members, pending = set(), [alternative_id]
+    while pending:
+        node = pending.pop()
+        if node not in members:
+            members.add(node)
+            pending.extend(graph.get(node, set()) - members)
+    alternatives = []
+    for node in sorted(members):
+        row = connection.execute('SELECT * FROM alternative WHERE alternative_id=?', (node,)).fetchone()
+        if row is None or row['retired_at'] is not None or row['concept_id'] != source['concept_id']:
+            raise StructuralAlternativeError('No se puede trasladar el grupo: relación vigente inconsistente, endpoint inexistente o retirado, o relación entre conceptos distintos (cross-concept).')
+        alternatives.append(dict(row))
+    internal = [dict(r) for r in relations if r['alternative_low_id'] in members or r['alternative_high_id'] in members]
+    from phonological_parameters import PHONOLOGICAL_PARAMETERS
+    for row in internal:
+        if (row['alternative_low_id'] not in members or row['alternative_high_id'] not in members
+                or row['alternative_low_id'] >= row['alternative_high_id']
+                or row['phonological_parameter'] not in PHONOLOGICAL_PARAMETERS):
+            raise StructuralAlternativeError('No se puede trasladar el grupo: relación vigente inconsistente; no se puede demostrar su integridad.')
+    return {'alternative_ids': sorted(members), 'alternatives': alternatives, 'relations': internal}
+
+
+def _component_move_plan(connection, source_id, destination_concept_id):
+    source = dict(_active(connection, source_id))
+    destination = connection.execute('SELECT * FROM concept WHERE concept_id=?', (destination_concept_id,)).fetchone()
+    if destination is None:
+        raise StructuralAlternativeError('El concepto destino no existe.')
+    if source['concept_id'] == int(destination_concept_id):
+        raise StructuralAlternativeError('El destino debe ser distinto del concepto origen.')
+    component = lexical_component(connection, source_id)
+    return {'kind': 'component_move', 'source': source, 'destination': dict(destination),
+            **component, 'occurrences': [dict(r) for aid in component['alternative_ids'] for r in _occurrences(connection, aid)]}
+
+
+def _execute_component_plan(connection, plan, reason, created_by):
+    """Shared simulation/apply mutation; never edits evidence or relations."""
+    for aid in plan['alternative_ids']:
+        connection.execute('UPDATE alternative SET concept_id=? WHERE alternative_id=?',
+                           (plan['destination']['concept_id'], aid))
+    events = []
+    for key, cid in (('origin_labels', plan['source']['concept_id']),
+                     ('destination_labels', plan['destination']['concept_id'])):
+        preview = calculate_nomenclature_preview(connection, cid)
+        if not preview['conclusive']:
+            raise StructuralAlternativeError('; '.join(c['code'] + ': ' + c['message'] for c in preview['conflicts']))
+        plan[key] = preview['rows']
+        events.append(apply_nomenclature(connection, cid, preview['suggestions'],
+                      origin='automatic_assisted', reason=reason, created_by=created_by))
+    return tuple(events)
+
+
 def _active(connection, alternative_id):
     row = connection.execute(
         "SELECT a.*,c.preferred_label concept_label FROM alternative a JOIN concept c USING(concept_id) "
@@ -133,6 +195,46 @@ def _read_only_preview(function):
         finally:
             clone.close()
     return preview
+
+
+@_read_only_preview
+def component_move_preview(connection, source_id, destination_concept_id):
+    plan = _component_move_plan(connection, source_id, destination_concept_id)
+    _execute_component_plan(connection, plan, 'preview', None)
+    plan['conflicts'] = _conflict_preflight(connection)
+    return plan
+
+
+def apply_component_move(connection, source_id, destination_concept_id, *, reason, actor, expected_fingerprint):
+    if actor.get('access_role') not in ('reviewer', 'master'):
+        raise StructuralAlternativeError('Solo Reviewer y Master pueden trasladar un grupo.')
+    connection.execute('BEGIN IMMEDIATE')
+    try:
+        reason = _reason(reason)
+        if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, source_id, destination_concept_id)):
+            raise StaleEdit(STALE_PREVIEW)
+        preview = component_move_preview(connection, source_id, destination_concept_id)
+        if not expected_fingerprint or expected_fingerprint != preview['fingerprint']:
+            raise StaleEdit(STALE_PREVIEW)
+        if preview['conflicts']['blocking']:
+            raise StructuralAlternativeError('; '.join(preview['conflicts']['blocking']))
+        plan = _component_move_plan(connection, source_id, destination_concept_id)
+        if plan['alternative_ids'] != preview['alternative_ids']:
+            raise StaleEdit(STALE_PREVIEW)
+        before = _blocking_ids(connection)
+        events = _execute_component_plan(connection, plan, reason, actor_name(connection, actor.get('collaborator_id')))
+        _persist_final_conflicts(connection, actor)
+        _reject_new_blocking(connection, before)
+        _event(connection, 'alternative_component_moved', source_id, actor, reason,
+               selected_alternative_id=source_id, alternative_ids=plan['alternative_ids'],
+               source_concept_id=plan['source']['concept_id'], destination_concept_id=int(destination_concept_id),
+               relation_ids=[r['alternative_relation_id'] for r in plan['relations']],
+               origin_renumber_event_id=events[0], destination_renumber_event_id=events[1])
+        connection.commit()
+        return events
+    except Exception:
+        connection.rollback()
+        raise
 
 
 @_read_only_preview

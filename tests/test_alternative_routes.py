@@ -2,6 +2,8 @@ from submission_concept_resolution import save_resolution
 import sqlite3
 import tempfile
 import unittest
+import re
+import html
 from pathlib import Path
 
 from flask import Flask, g
@@ -120,16 +122,62 @@ class AlternativeRouteTests(unittest.TestCase):
         page = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
         self.assertIn('name="action" value="preview_move"', page)
 
-    def test_related_alternative_shows_move_block_and_no_preview_form(self):
+    def test_related_alternative_shows_group_move_and_no_individual_form(self):
         db = self.connect()
         db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2a')")
         db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,2,'CM_1')")
         db.commit(); db.close()
         page = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
-        self.assertIn("no puede trasladarse individualmente", page)
-        move_section = page.split("<fieldset><legend>Mover a otro concepto</legend>", 1)[1].split("</fieldset>", 1)[0]
+        self.assertIn("Mover grupo a otro concepto", page)
+        move_section = page.split("<fieldset><legend>Mover grupo a otro concepto</legend>", 1)[1].split("</fieldset>", 1)[0]
         self.assertNotIn('name="action" value="preview_move"', move_section)
         self.assertNotIn("Relaciones retiradas", move_section)
+        self.assertIn('value="preview_component_move"', move_section)
+        self.assertIn('ID 1', move_section)
+        self.assertIn('ID 2', move_section)
+
+    def group_fixture(self):
+        db=self.connect()
+        db.execute("INSERT INTO concept(preferred_label) VALUES('DESTINATION')")
+        db.executemany("INSERT INTO alternative(concept_id,working_label) VALUES(1,?)", [('2a',),('3a',),('4a',)])
+        db.executemany("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(?,?,'CM_1')", [(1,2),(2,3)])
+        db.commit();db.close()
+
+    def test_group_preview_and_confirmation_end_to_end(self):
+        self.group_fixture()
+        response=self.client.post('/alternativas/2/gestionar',data={'action':'preview_component_move','destination_concept_id':'2'})
+        self.assertEqual(response.status_code,200)
+        page=response.get_data(as_text=True)
+        for text in ('TRASLADO DE GRUPO','Origen: TEST','Destino: DESTINATION','ID 1','ID 2','ID 3','Relaciones preservadas: 2','Confirmar traslado del grupo','VISTA PREVIA DE CAMBIOS — ORIGEN','VISTA PREVIA DE CAMBIOS — DESTINO'):
+            self.assertIn(text,page)
+        token=html.unescape(re.search(r'name="preview_token" value="([^"]+)"',page)[1])
+        data={'action':'confirm_component_move','destination_concept_id':'2','reason':'Traslado','confirm':'yes','preview_token':token}
+        changed=dict(data,destination_concept_id='1')
+        self.assertEqual(self.client.post('/alternativas/2/gestionar',data=changed).status_code,409)
+        self.assertEqual(self.client.post('/alternativas/2/gestionar',data=dict(data,reason='')).status_code,400)
+        self.assertEqual(self.client.post('/alternativas/2/gestionar',data=data).status_code,302)
+        db=self.connect()
+        self.assertEqual(dict(db.execute('SELECT alternative_id,concept_id FROM alternative')),{1:2,2:2,3:2,4:1})
+        self.assertEqual(db.execute('SELECT count(*) FROM alternative_relation WHERE is_current=1').fetchone()[0],2)
+        db.close()
+        self.assertEqual(self.client.post('/alternativas/2/gestionar',data=data).status_code,409)
+
+    def test_group_analyst_cannot_preview_or_confirm(self):
+        self.group_fixture()
+        @self.client.application.before_request
+        def analyst_context():
+            g.current_access_role='analyst'
+        for action in ('preview_component_move','confirm_component_move'):
+            self.assertEqual(self.client.post('/alternativas/2/gestionar',data={'action':action,'destination_concept_id':'2'}).status_code,404)
+
+    def test_group_legacy_integrity_error_renders_without_move_form(self):
+        self.group_fixture()
+        db=self.connect();db.execute('UPDATE alternative SET concept_id=2 WHERE alternative_id=3');db.commit();db.close()
+        response=self.client.get('/alternativas/2/gestionar')
+        self.assertEqual(response.status_code,200)
+        page=response.get_data(as_text=True)
+        self.assertIn('cross-concept',page)
+        self.assertNotIn('value="preview_component_move"',page)
 
     def test_structural_operations_render_utf8_texts_and_no_mojibake(self):
         page = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
@@ -147,8 +195,8 @@ class AlternativeRouteTests(unittest.TestCase):
         db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,2,'CM_1')")
         db.commit(); db.close()
         page_related = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
-        self.assertIn("no puede trasladarse individualmente", page_related)
-        self.assertNotIn("Previsualizar movimiento", page_related.split("<fieldset><legend>Mover a otro concepto</legend>", 1)[1].split("</fieldset>", 1)[0])
+        self.assertIn("Mover grupo a otro concepto", page_related)
+        self.assertNotIn("Previsualizar movimiento", page_related.split("<fieldset><legend>Mover grupo a otro concepto</legend>", 1)[1].split("</fieldset>", 1)[0])
 
     def test_forced_move_post_is_rejected_without_changes(self):
         db = self.connect()
