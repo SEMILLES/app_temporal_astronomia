@@ -110,8 +110,12 @@ class ComparableUITests(unittest.TestCase):
         self.role = 'reviewer'
         for action in ('preview','confirmar'):
             response = self.client.post(self.base+action,data=data)
-            self.assertEqual(400,response.status_code)
-            self.assertIn('todavía no ha sido resuelta',response.text)
+            expected_status = 400 if action == 'preview' else 409
+            self.assertEqual(expected_status,response.status_code)
+            if action == 'preview':
+                self.assertIn('todavía no ha sido resuelta',response.text)
+            else:
+                self.assertIn('estado cambió desde la vista previa',response.text)
         # The actual compact selector also submits correctly without JavaScript conversion.
         data.pop('relation_target_type');data.pop('relation_target_id')
         data.update(relation_target_type_0='alternative',relation_alternative_id=f'submission:{target}')
