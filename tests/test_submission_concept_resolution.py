@@ -296,7 +296,7 @@ class LocalConceptTests(unittest.TestCase):
             self.assertEqual(302,client.post(f'/aportes/{self.a}/concepto',data=form).status_code)
             self.assertEqual([1,0],[r['is_current'] for r in resolution_history(self.db,self.a)])
             self.assertEqual(2,current_resolution(self.db,self.a)['concept_id'])
-            self.assertEqual(302,client.post(f'/aportes/{self.a}/decidir',data={'decision':'rejected','review_note':'Resto rechazado'}).status_code)
+            self.assertEqual(302,client.post(f'/aportes/{self.a}/decidir',data={'decision':'rejected','review_note':'Resto rechazado','lexical_preview_token':hidden(client.get(f'/aportes/{self.a}').get_data(as_text=True),'lexical_preview_token')}).status_code)
             page=client.get(f'/aportes/{self.a}').get_data(as_text=True)
             self.assertIn('Concepto resuelto para esta revisión',page)
             self.db.execute("UPDATE submission SET status='resolved',resolution='rejected' WHERE submission_id=?",(self.b,));self.db.commit()

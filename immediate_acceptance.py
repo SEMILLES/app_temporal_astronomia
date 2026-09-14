@@ -1,3 +1,4 @@
+from lexical_preconditions import lexical_token, check_lexical
 from submission_concept_resolution import save_resolution
 from edit_concurrency import check_edit
 
@@ -32,20 +33,23 @@ def _new_conflicts(connection,before_id):
 
 def preview_operation(connection,operation):
     if connection.in_transaction:raise ImmediateAcceptanceError("El preview exige una conexión sin transacción activa.")
-    before=connection.execute("SELECT coalesce(max(conflict_id),0) FROM conflict").fetchone()[0]
     connection.execute("BEGIN IMMEDIATE")
     try:
+        before=connection.execute("SELECT coalesce(max(conflict_id),0) FROM conflict").fetchone()[0]
+        token = operation.preview_token(connection) if hasattr(operation, "preview_token") else None
         result=operation(connection)
         conflicts=_new_conflicts(connection,before)
-        return {"result":result,"conflicts":conflicts,"blocking":[c for c in conflicts if c["severity"]=="blocking"],"non_blocking":[c for c in conflicts if c["severity"]=="non_blocking"]}
+        return {"preview_token":token,"result":result,"conflicts":conflicts,"blocking":[c for c in conflicts if c["severity"]=="blocking"],"non_blocking":[c for c in conflicts if c["severity"]=="non_blocking"]}
     finally:connection.rollback()
 
 
-def confirm_operation(connection,operation):
+def confirm_operation(connection,operation, *, expected_preview_token=_INTERNAL):
     if connection.in_transaction:raise ImmediateAcceptanceError("La confirmación exige una conexión sin transacción activa.")
-    before=connection.execute("SELECT coalesce(max(conflict_id),0) FROM conflict").fetchone()[0]
     connection.execute("BEGIN IMMEDIATE")
     try:
+        before=connection.execute("SELECT coalesce(max(conflict_id),0) FROM conflict").fetchone()[0]
+        if expected_preview_token is not _INTERNAL:
+            operation.check_preview(connection, expected_preview_token)
         result=operation(connection);conflicts=_new_conflicts(connection,before)
         blocking=[c for c in conflicts if c["severity"]=="blocking"]
         if blocking:raise ImmediateBlockingError(blocking)
@@ -128,6 +132,8 @@ def alternative_operation(occurrence_id,proposal,decision,*,actor_context,review
             alternative_id=review_as_new(connection,submission_id,concept_resolution=concept_resolution,approve_relations=decision.get("approve_relations"),relations_resolution=decision.get("relations_resolution"),morphology_resolution=decision.get("morphology_resolution"),nomenclature_mode=decision.get("nomenclature_mode","automatic"),labels=decision.get("labels"),reason=decision.get("nomenclature_reason"),reviewed_by=reviewed_by,review_note=review_note,approve_morphology=decision.get("approve_morphology"),collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
         else:raise ImmediateAcceptanceError("Es necesario definir si la propuesta se resuelve como alternativa existente o nueva.")
         return {"submission_id":submission_id,"alternative_id":alternative_id}
+    operation.preview_token = lambda db: lexical_token(db, occurrence_id, proposal=proposal, decision=decision)
+    operation.check_preview = lambda db, token: check_lexical(db, token, occurrence_id, proposal=proposal, decision=decision)
     return operation
 
 
@@ -154,9 +160,9 @@ def concept_registration_operation(evidence,proposed_label,decision,*,actor_cont
 
 def run_normal_review(connection,operation,review_note):
     if connection.in_transaction:raise ImmediateAcceptanceError("La revisión exige una conexión sin transacción activa.")
-    before=connection.execute("SELECT coalesce(max(conflict_id),0) FROM conflict").fetchone()[0]
     connection.execute("BEGIN IMMEDIATE")
     try:
+        before=connection.execute("SELECT coalesce(max(conflict_id),0) FROM conflict").fetchone()[0]
         result=operation(connection);blocking=[dict(row) for row in connection.execute("SELECT * FROM conflict WHERE conflict_id>? AND severity='blocking'",(before,)).fetchall()]
         if blocking and not (review_note or "").strip():
             raise ImmediateAcceptanceError("Esta aprobación generaría conflictos bloqueantes. Para continuar, es necesario justificar la aprobación en la nota de revisión.")

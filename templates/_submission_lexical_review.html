@@ -12,6 +12,7 @@
 {% if can_review %}
 <form class="review-decision" method="post" action="{{ url_for('submissions.decidir_aporte',submission_id=aporte['submission_id']) }}"
       data-kind="{{ aporte['proposal_kind'] }}" data-proposed="{{ aporte['proposed_existing_alternative_id'] or '' }}" data-assignment="{{ ctx['assignment']['alternative_id'] if ctx['assignment'] else '' }}">
+<input type="hidden" name="lexical_preview_token" value="{{ ctx.lexical_preview_token }}">
 <h2>DECISIÓN DEL REVISOR</h2>
 {% if not ctx['concept_resolution'] %}<p>Concepto pendiente. Es necesario guardar la resolución del concepto antes de resolver el resto del análisis.</p>{% else %}<p>Concepto resuelto. Ya es posible continuar con la decisión sobre la alternativa.</p>{% endif %}
 <fieldset{% if not ctx['concept_resolution'] %} disabled{% endif %}><legend>Resolución del resto del análisis</legend>

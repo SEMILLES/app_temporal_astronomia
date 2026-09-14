@@ -1,5 +1,6 @@
 import sqlite3
 import unittest
+from flask import Flask
 
 from database import crear_esquema
 from conflicts import detect_conflicts_after_change
@@ -10,6 +11,9 @@ from immediate_acceptance import (ImmediateAcceptanceError,ImmediateBlockingErro
 
 class ImmediateAcceptanceTests(unittest.TestCase):
     def setUp(self):
+        context = Flask(__name__).app_context()
+        context.push()
+        self.addCleanup(context.pop)
         self.db=sqlite3.connect(":memory:");self.db.row_factory=sqlite3.Row;self.db.execute("PRAGMA foreign_keys=ON");crear_esquema(self.db)
         self.db.execute("INSERT INTO source(source_name,start_year,end_year,end_year_status) VALUES('S',2000,2005,'known')")
         self.db.execute("INSERT INTO concept(preferred_label) VALUES('C')")
@@ -17,7 +21,7 @@ class ImmediateAcceptanceTests(unittest.TestCase):
         self.db.execute("INSERT INTO occurrence(source_id,original_gloss,occurrence_year) VALUES(1,'NEW',2001)")
         self.db.execute("INSERT INTO occurrence_concept_reference(occurrence_id,concept_id) VALUES(1,1)")
         self.db.execute("INSERT INTO occurrence_concept_reference(occurrence_id,concept_id) VALUES(2,1)")
-        self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1')")
+        self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1a')")
         self.db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,1)")
         self.db.execute("INSERT INTO collaborator(display_name) VALUES('Reviewer')");self.db.commit()
         self.actor={"collaborator_id":1,"access_role":"reviewer"}
@@ -89,7 +93,7 @@ class ImmediateAcceptanceTests(unittest.TestCase):
     def test_blocking_preflight_and_confirm_rollback_everything(self):
         self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2')");self.db.commit()
         def invalid(connection):
-            connection.execute("UPDATE alternative SET working_label='1' WHERE alternative_id=2")
+            connection.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=2")
             detect_conflicts_after_change(connection,"alternative",2,actor_context=self.actor)
             return 2
         before=[tuple(r) for r in self.db.execute("SELECT alternative_id,working_label FROM alternative ORDER BY alternative_id")]
@@ -104,7 +108,7 @@ class ImmediateAcceptanceTests(unittest.TestCase):
     def test_normal_review_requires_one_comment_for_new_blocking(self):
         self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2')");self.db.commit()
         def invalid(connection):
-            connection.execute("UPDATE alternative SET working_label='1' WHERE alternative_id=2");detect_conflicts_after_change(connection,"alternative",2);return 2
+            connection.execute("UPDATE alternative SET working_label='1a' WHERE alternative_id=2");detect_conflicts_after_change(connection,"alternative",2);return 2
         with self.assertRaisesRegex(ImmediateAcceptanceError,"Para continuar, es necesario justificar la aprobación en la nota de revisión"):run_normal_review(self.db,invalid,"")
         self.assertEqual("2",self.db.execute("SELECT working_label FROM alternative WHERE alternative_id=2").fetchone()[0])
         run_normal_review(self.db,invalid,"Aceptación temporal documentada");self.assertEqual(1,self.db.execute("SELECT count(*) FROM conflict WHERE severity='blocking'").fetchone()[0])

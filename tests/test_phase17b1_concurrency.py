@@ -30,6 +30,9 @@ class ConcurrencyTests(unittest.TestCase):
         self.db = self.connect()
         self.db.execute("UPDATE source SET source_type='OTRO',end_year=2000")
         self.db.execute("INSERT INTO collaborator(display_name) VALUES('Editor')")
+        # A.3 requires one canonical group for the three connected alternatives.
+        self.db.execute("UPDATE alternative SET working_label='1b' WHERE alternative_id=2")
+        self.db.execute("UPDATE alternative SET working_label='1c' WHERE alternative_id=3")
         self.db.commit()
         self.old = database.BASE_DATOS
         database.BASE_DATOS = self.path
@@ -132,6 +135,10 @@ class ConcurrencyTests(unittest.TestCase):
                 'move': dict(destination_concept_id=2)}[kind]
 
     def preview(self, kind):
+        if kind == 'move':
+            # Individual moves have required isolation since phase 18C6G.
+            self.db.execute('UPDATE alternative_relation SET is_current=0 WHERE alternative_low_id=1 OR alternative_high_id=1')
+            self.db.commit()
         before = self.dump()
         response = self.client.post('/alternativas/1/gestionar', data=self.structural_data(kind) | dict(action='preview_'+kind))
         self.assertEqual(response.status_code, 200, response.get_data(as_text=True))
@@ -205,8 +212,8 @@ class ConcurrencyTests(unittest.TestCase):
         mutations = [
             "UPDATE assignment SET is_current=0 WHERE occurrence_id=1",
             "UPDATE occurrence SET occurrence_year=1950 WHERE occurrence_id=3",
-            "UPDATE alternative_relation SET is_current=0 WHERE alternative_relation_id=1",
-            "UPDATE concept SET preferred_label='Changed destination' WHERE concept_id=2",
+            "INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,2,'CM_2')",
+            "INSERT INTO alternative(concept_id,working_label) VALUES(2,'9a')",
             "UPDATE alternative SET retired_at=CURRENT_TIMESTAMP WHERE alternative_id=1",
         ]
         for sql in mutations:
@@ -273,7 +280,7 @@ class ConcurrencyTests(unittest.TestCase):
         retire_preview(self.db, 1, {1: 2, 2: 2})
         merge_preview(self.db, 1, 2, 'union')
         split_preview(self.db, 1, {1: 1, 2: 2}, 2)
-        move_preview(self.db, source_id=1, destination_concept_id=2)
+        move_preview(self.db, source_id=4, destination_concept_id=1)
         self.assertEqual(changes, self.db.total_changes)
 
 

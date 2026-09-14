@@ -45,6 +45,8 @@ class AlternativeRouteTests(unittest.TestCase):
         db=self.connect()
         save_resolution(db,sid,'CONFIRM_REFERENCE',access_role='reviewer')
         db.close()
+        from tests.form_client import hidden
+        kwargs["data"]["lexical_preview_token"] = hidden(self.client.get(path.removesuffix("/decidir")).get_data(as_text=True), "lexical_preview_token")
         return self.client.post(path,**kwargs)
 
     def test_analysis_page_shows_context_canonical_and_pending_proposals(self):

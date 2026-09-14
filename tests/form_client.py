@@ -34,4 +34,14 @@ class FormClient:
             data = data.copy()
             data["edit_token"] = hidden(self.client.get(form_path).get_data(as_text=True), "edit_token")
             kwargs["data"] = data
+        if data is not None and "lexical_preview_token" not in data:
+            page = None
+            if re.fullmatch(r"/aportes/\d+/decidir", path):
+                page = self.client.get(path.removesuffix("/decidir"))
+            elif "/clasificar/aceptacion-inmediata/confirmar" in path:
+                page = self.client.post(path.replace("/confirmar", "/preview"), data=data)
+            if page is not None:
+                data = data.copy()
+                data["lexical_preview_token"] = hidden(page.get_data(as_text=True), "lexical_preview_token")
+                kwargs["data"] = data
         return self.client.post(path, *args, **kwargs)

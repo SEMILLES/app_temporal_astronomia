@@ -149,6 +149,8 @@ def _retire_parts(connection, alternative_id):
 
 def _nomenclature(connection, concept_id, reason, created_by):
     preview = calculate_nomenclature_preview(connection, concept_id)
+    if not preview["conclusive"]:
+        raise StructuralAlternativeError("; ".join(c["code"] + ": " + c["message"] for c in preview["conflicts"]))
     return apply_nomenclature(connection, concept_id, preview["suggestions"],
                               origin="automatic_assisted", reason=reason, created_by=created_by)
 
@@ -189,6 +191,7 @@ def _read_only_preview(function):
             destination = arguments.get("destination_concept_id")
             target = arguments.get("target_id")
             state = fingerprint(relevant_state(clone, source_id, destination, target))
+            lexical_component(clone, source_id)
             result = function(clone, *args, **kwargs)
             result["fingerprint"] = state
             return result
@@ -241,7 +244,7 @@ def apply_component_move(connection, source_id, destination_concept_id, *, reaso
 def retire_preview(connection, alternative_id, resolutions=None):
     source = _active(connection, alternative_id); occurrences = _occurrences(connection, alternative_id)
     resolutions = {int(k): (None if v in (None, "", "unassigned") else int(v)) for k, v in (resolutions or {}).items()}
-    if occurrences and {row["occurrence_id"] for row in occurrences} != set(resolutions):
+    if {row["occurrence_id"] for row in occurrences} != set(resolutions):
         raise StructuralAlternativeError("Indique un destino para cada ocurrencia.")
     for destination in (item for item in resolutions.values() if item is not None):
         row = _active(connection, destination)
@@ -264,6 +267,8 @@ def retire_preview(connection, alternative_id, resolutions=None):
 
 
 def apply_retire(connection, alternative_id, resolutions, *, reason, actor, expected_fingerprint):
+    if actor.get("access_role") not in ("reviewer", "master"):
+        raise StructuralAlternativeError("Solo Reviewer y Master pueden realizar operaciones estructurales.")
     connection.execute("BEGIN IMMEDIATE")
     try:
         if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, alternative_id, None)):
@@ -309,6 +314,8 @@ def merge_preview(connection, source_id, target_id, relation_mode):
 
 
 def apply_merge(connection,source_id,target_id,relation_mode,*,reason,actor,expected_fingerprint):
+    if actor.get("access_role") not in ("reviewer", "master"):
+        raise StructuralAlternativeError("Solo Reviewer y Master pueden realizar operaciones estructurales.")
     connection.execute("BEGIN IMMEDIATE")
     try:
         if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, source_id, None, target_id)):
@@ -348,6 +355,8 @@ def split_preview(connection,source_id,distribution,new_count):
 
 
 def apply_split(connection,source_id,distribution,new_count,*,reason,actor,expected_fingerprint):
+    if actor.get("access_role") not in ("reviewer", "master"):
+        raise StructuralAlternativeError("Solo Reviewer y Master pueden realizar operaciones estructurales.")
     connection.execute("BEGIN IMMEDIATE")
     try:
         if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, source_id, None)):
@@ -376,6 +385,8 @@ def move_preview(connection,source_id,destination_concept_id):
 
 
 def apply_move(connection,source_id,destination_concept_id,*,reason,actor,expected_fingerprint):
+    if actor.get("access_role") not in ("reviewer", "master"):
+        raise StructuralAlternativeError("Solo Reviewer y Master pueden realizar operaciones estructurales.")
     connection.execute("BEGIN IMMEDIATE")
     try:
         if not expected_fingerprint or expected_fingerprint != fingerprint(relevant_state(connection, source_id, destination_concept_id)):

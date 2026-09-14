@@ -146,6 +146,8 @@ def _confirmation(template_kind,occurrence_id,operation):
                      'current_label': before.get(row['alternative_id']), 'proposed_label': row['working_label']}
                     for row in connection.execute('SELECT alternative_id,working_label FROM alternative WHERE concept_id=? AND retired_at IS NULL ORDER BY alternative_id', (destination['concept_id'],))]}
             return outcome
+        if template_kind == "alternative":
+            presentation_operation.preview_token = operation.preview_token
         # Read the result of the existing canonical simulation before its rollback.
         result=preview_operation(db,presentation_operation if template_kind=='alternative' else operation)
         proposed=_alternative_payload(request.form) if template_kind=="alternative" else None
@@ -689,7 +691,8 @@ def confirm_alternative_immediate(occurrence_id):
     db=conectar()
     try:operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
     except ValueError as error:db.close();return str(error),400
-    try:confirm_operation(db,operation)
+    try:confirm_operation(db,operation,expected_preview_token=request.form.get("lexical_preview_token"))
+    except StaleEdit as error:return str(error),409
     except ImmediateBlockingError as error:return str(error),409
     except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
     finally:db.close()

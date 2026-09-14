@@ -6,7 +6,7 @@ import json
 from itsdangerous import BadData
 
 STALE_EDIT = "El registro cambió después de abrir esta página. Es necesario recargarla para revisar los cambios antes de guardar."
-STALE_PREVIEW = "Los datos cambiaron desde la previsualización. Revise nuevamente antes de confirmar."
+STALE_PREVIEW = "El estado cambió desde la vista previa. Vuelve a revisar la decisión antes de confirmarla."
 
 
 class StaleEdit(ValueError):

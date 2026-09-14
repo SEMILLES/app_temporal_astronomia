@@ -1,3 +1,4 @@
+from lexical_preconditions import lexical_token
 from alternative_video_service import get_current_video
 from alternative_workflow import _relation_targets
 import re
@@ -278,6 +279,7 @@ def aportes():
 def revisar_aportes():
     db = conectar()
     try:
+        db.execute("BEGIN")
         rows = _rows(db, True)
         current = {row["occurrence_id"]: db.execute("SELECT * FROM occurrence_grammar WHERE occurrence_id=? AND is_current=1", (row["occurrence_id"],)).fetchone() for row in rows}
         alternative_context = _alternative_review_context(db, rows)
@@ -373,7 +375,7 @@ def _alternative_review_context(db, rows):
                 item["display_label"] = alternative_display_label(label["preferred_label"], label["working_label"]) if label else None
                 components.append(item)
             morphology = morphology[0], components
-        result[row["submission_id"]]=dict(relations_error=relations_error,relations_pending_warning=(
+        result[row["submission_id"]]=dict(lexical_preview_token=lexical_token(db,row["occurrence_id"],row["submission_id"]),relations_error=relations_error,relations_pending_warning=(
             "No se pueden aceptar las relaciones todavía porque al menos una apunta a una propuesta de nueva alternativa pendiente. Resuelva primero esa propuesta, o rechace/deje pendientes las relaciones."
             if pending_target_relations else None
         ),proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),concept_edit_token=edit_token(db,"submission_concept",row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_previews=previews,lexical_decision=lexical_decision,result_current=result_current,morphology_result=morphology_result,proposed_morphology=morphology)
@@ -384,6 +386,7 @@ def _alternative_review_context(db, rows):
 def detalle_aporte(submission_id):
     db=conectar()
     try:
+        db.execute("BEGIN")
         rows=[row for row in _rows(db) if row["submission_id"]==submission_id]
         if not rows: return "El aporte no existe.",404
         current={rows[0]["occurrence_id"]:db.execute("SELECT * FROM occurrence_grammar WHERE occurrence_id=? AND is_current=1",(rows[0]["occurrence_id"],)).fetchone()}
@@ -412,6 +415,7 @@ def resolver_concepto_aporte(submission_id):
 
 
 @submissions_bp.route("/aportes/<int:submission_id>/decidir", methods=["POST"])
+@requires_reviewer
 def decidir_aporte(submission_id):
     decision = {"accept": "accepted", "accept_proposed": "accepted", "reject": "rejected"}.get(request.form.get("decision"), request.form.get("decision"))
     db = conectar(); created_message = None
@@ -434,25 +438,25 @@ def decidir_aporte(submission_id):
         elif decision == "pending":
             return redirect(url_for('submissions.detalle_aporte',submission_id=submission_id))
         elif decision == "rejected":
-            reject_alternative_submission(db,submission_id,reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
+            reject_alternative_submission(db,submission_id,expected_preview_token=request.form.get("lexical_preview_token"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None))
         else:
             concept_resolution=None
             action=request.form.get("concept_resolution_action")
             if action: concept_resolution={"action":action,"concept_id":request.form.get("resolved_concept_id") or None,"label":request.form.get("new_concept_label") or None}
             if decision in ("existing", "existing_proposed"):
                 target_id=request.form.get("alternative_id")
-                if decision == "existing_proposed":
-                    target_id=db.execute("SELECT proposed_existing_alternative_id FROM alternative_submission WHERE submission_id=?",(submission_id,)).fetchone()[0]
-                run_normal_review(db,lambda connection: review_as_existing(connection,submission_id,target_id,concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),relations_resolution=request.form.get("relations_resolution"),morphology_resolution=request.form.get("morphology_resolution"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
+                run_normal_review(db,lambda connection: review_as_existing(connection,submission_id,(connection.execute("SELECT proposed_existing_alternative_id FROM alternative_submission WHERE submission_id=?",(submission_id,)).fetchone()[0] if decision == "existing_proposed" else target_id),expected_preview_token=request.form.get("lexical_preview_token"),concept_resolution=concept_resolution,relation_policy=request.form.get("relation_policy","preserve"),relations_resolution=request.form.get("relations_resolution"),morphology_resolution=request.form.get("morphology_resolution"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
             elif decision == "new":
                 labels={key[6:]:value for key,value in request.form.items() if key.startswith("label_")}
                 before_labels=dict(db.execute("SELECT alternative_id,working_label FROM alternative"))
-                new_id=run_normal_review(db,lambda connection: review_as_new(connection,submission_id,concept_resolution=concept_resolution,approve_relations=(request.form.get("approve_relations")=="yes" if "approve_relations" in request.form else None),relations_resolution=request.form.get("relations_resolution"),morphology_resolution=request.form.get("morphology_resolution"),nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason") or request.form.get("review_note"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=(request.form.get("approve_morphology")=="yes" if "approve_morphology" in request.form else None),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
+                new_id=run_normal_review(db,lambda connection: review_as_new(connection,submission_id,expected_preview_token=request.form.get("lexical_preview_token"),concept_resolution=concept_resolution,approve_relations=(request.form.get("approve_relations")=="yes" if "approve_relations" in request.form else None),relations_resolution=request.form.get("relations_resolution"),morphology_resolution=request.form.get("morphology_resolution"),nomenclature_mode=request.form.get("nomenclature_mode","automatic"),labels=labels,reason=request.form.get("nomenclature_reason") or request.form.get("review_note"),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"),approve_morphology=(request.form.get("approve_morphology")=="yes" if "approve_morphology" in request.form else None),collaborator_id=request.form.get("collaborator_id"),access_role=getattr(g, "current_access_role", None)),request.form.get("review_note"))
                 created=db.execute("SELECT c.preferred_label,a.working_label FROM alternative a JOIN concept c USING(concept_id) WHERE a.alternative_id=?",(new_id,)).fetchone()
                 changes=sum(before_labels[item[0]] != item[1] for item in db.execute("SELECT alternative_id,working_label FROM alternative") if item[0] in before_labels)
                 renumber_message = (f"Se actualizaron {changes} etiquetas de alternativas existentes." if changes != 1 else "Se actualizó 1 etiqueta de una alternativa existente.") if changes else "No fue necesario renumerar alternativas existentes."
                 created_message=f"Nueva alternativa creada como {alternative_display_label(created['preferred_label'],created['working_label'])}. {renumber_message}"
             else: raise AlternativeWorkflowError("Decisión de review no válida.")
+    except StaleEdit as error:
+        return str(error), 409
     except (AlternativeWorkflowError,GrammarWorkflowError,ImmediateAcceptanceError, sqlite3.IntegrityError, ValueError) as error:
         return str(error), 400
     finally:

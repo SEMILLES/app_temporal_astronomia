@@ -1,5 +1,6 @@
 import sqlite3
 from dataclasses import replace
+from lexical_preconditions import check_submission_preview
 
 from lexical_simulation import (LexicalOperation, VirtualAlternative, Relation, ConceptState,
     simulate_lexical_operation, validate_concept_nomenclature)
@@ -25,6 +26,9 @@ from submission_lexical_decision import save_decision, LexicalDecisionError
 
 class AlternativeWorkflowError(ValueError):
     pass
+
+
+_INTERNAL_PREVIEW = object()
 
 
 def _transaction(connection, name):
@@ -400,10 +404,15 @@ def _rejected_group(connection, submission_id, table, decision=None, *, reject_r
 def review_as_existing(connection, submission_id, alternative_id, *,
                        concept_resolution=None, relation_policy="preserve",
                        reviewed_by=None, review_note=None, collaborator_id=None,
-                       access_role=None, relations_resolution=None, morphology_resolution=None):
+                       access_role=None, relations_resolution=None, morphology_resolution=None, expected_preview_token=_INTERNAL_PREVIEW):
     name="review_alternative_existing"; owns=_transaction(connection,name)
     try:
-        submission=_submission(connection,submission_id); concept_id=_resolve_concept(connection,submission,concept_resolution)
+        if expected_preview_token is not _INTERNAL_PREVIEW:
+            check_submission_preview(connection, submission_id, expected_preview_token)
+            if concept_resolution:
+                raise AlternativeWorkflowError('Guarde la resolución conceptual y vuelva a abrir la vista previa.')
+        submission=_submission(connection,submission_id)
+        concept_id=_resolve_concept(connection,submission,concept_resolution)
         if not _valid_alternative(connection,int(alternative_id),concept_id):
             raise AlternativeWorkflowError("La alternative seleccionada no pertenece al concept resuelto o está retirada.")
         if relation_policy != "preserve":
@@ -464,10 +473,15 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
                   approve_relations=None, nomenclature_mode="automatic",
                   labels=None, reason=None, reviewed_by=None, review_note=None,
                   approve_morphology=None, collaborator_id=None, access_role=None,
-                  relations_resolution=None, morphology_resolution=None):
+                  relations_resolution=None, morphology_resolution=None, expected_preview_token=_INTERNAL_PREVIEW):
     name="review_alternative_new"; owns=_transaction(connection,name)
     try:
-        submission=_submission(connection,submission_id); concept_id=_resolve_concept(connection,submission,concept_resolution)
+        if expected_preview_token is not _INTERNAL_PREVIEW:
+            check_submission_preview(connection, submission_id, expected_preview_token)
+            if concept_resolution:
+                raise AlternativeWorkflowError('Guarde la resolución conceptual y vuelva a abrir la vista previa.')
+        submission=_submission(connection,submission_id)
+        concept_id=_resolve_concept(connection,submission,concept_resolution)
         relations_resolution = _new_group_resolution(connection, submission_id,
             'alternative_submission_relation', relations_resolution, approve_relations)
         morphology_resolution = _new_group_resolution(connection, submission_id,
@@ -518,9 +532,11 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
 
 
 def reject_alternative_submission(connection, submission_id, *, reviewed_by=None,
-                                  review_note=None, collaborator_id=None, access_role=None):
+                                  review_note=None, collaborator_id=None, access_role=None, expected_preview_token=_INTERNAL_PREVIEW):
     name="reject_alternative"; owns=_transaction(connection,name)
     try:
+        if expected_preview_token is not _INTERNAL_PREVIEW:
+            check_submission_preview(connection, submission_id, expected_preview_token)
         submission = _submission(connection,submission_id)
         _resolve_concept(connection, submission)
         before = _current_assignment_id(connection, submission['occurrence_id'])
