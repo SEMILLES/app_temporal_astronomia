@@ -26,7 +26,7 @@
 <label data-concept-action="CREATE_NEW" hidden>Nombre del nuevo concepto <input name="concept_label" disabled></label>
 <label>Nota de resolución conceptual <textarea name="concept_note">{{ (resolution['resolution_note'] or '') if resolution else '' }}</textarea></label>
 <p>Cuando la resolución difiere de la referencia o propuesta original, se requiere una explicación. Guardar esta resolución mantiene el aporte pendiente y conserva la clasificación vigente.</p>
-<button type="submit">Guardar resolución del concepto</button>
+<button type="submit" class="button-primary">Guardar resolución del concepto</button>
 </form>
 {% if resolution %}</details>{% endif %}
 <script>

@@ -5,13 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}LeSiCo{% endblock %}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='visual-base.css') }}">
+  {% block extra_head %}{% endblock %}
 </head>
-<body class="visual-pilot">
+<body class="visual-pilot visual-internal">
   <a class="skip-link" href="#main-content">Saltar al contenido</a>
   <main id="main-content" tabindex="-1">
-    {% if g.current_access_role %}
-    <p class="access-context">Rol: <strong>{{ {'analyst': 'Analista', 'reviewer': 'Revisor', 'master': 'Master'}.get(g.current_access_role, g.current_access_role) }}</strong></p>
-    {% endif %}
+    {% include '_internal_role.html' %}
     {% block content %}{% endblock %}
   </main>
 </body>

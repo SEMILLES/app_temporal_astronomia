@@ -258,7 +258,7 @@ class RetirementRouteTests(unittest.TestCase):
     def test_master_preview_and_conflict_choices(self):
         db = database.conectar(); db.execute("UPDATE source SET start_year=2021,end_year=2023,end_year_status='known' WHERE source_id=2"); db.commit(); db.close()
         response = self.preview("master"); self.assertEqual(response.status_code, 200)
-        for text in ("2 occurrences quedan fuera", 'value="expand"', 'value="clear"'):
+        for text in ("2 ocurrencias quedan fuera", 'value="expand"', 'value="clear"'):
             self.assertIn(text, response.get_data(as_text=True))
         result = self.client.post("/test-master/fuentes/1/retirar", data={"action":"confirm", "confirm":"yes", "token":self.token(response), "reason":"Expand", "resolution":"expand"})
         self.assertEqual(result.status_code, 302)

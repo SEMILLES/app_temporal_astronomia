@@ -1,12 +1,9 @@
-<!doctype html>
-<html lang="es">
-<meta charset="utf-8">
-<title>Aportes</title>
-<body>
-
+{% extends "_visual_base.html" %}
+{% block title %}Aportes{% endblock %}
+{% block content %}
 <h1>Aportes</h1>
 
-<table border="1">
+<div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table>
 <tr>
 <th>ID</th>
 <th>Tipo</th>
@@ -87,9 +84,7 @@ Abrir
 </td>
 </tr>
 {% endfor %}
-</table>
+</table></div>
 
 <a href="{{ url_for('submissions.nuevo_aporte') }}">Registrar ocurrencia</a>
-
-</body>
-</html>
+{% endblock %}

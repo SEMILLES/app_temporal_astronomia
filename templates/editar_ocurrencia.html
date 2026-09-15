@@ -1,4 +1,6 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><title>Editar ocurrencia - LeSiCo</title><body>
+{% extends "_visual_base.html" %}
+{% block title %}Editar ocurrencia - LeSiCo{% endblock %}
+{% block content %}
 <h1>Editar ocurrencia</h1><p><strong>ID:</strong> {{ ocurrencia['occurrence_id'] }}</p>
 <form method="post" action="{{ url_for('occurrences.actualizar_ocurrencia',occurrence_id=ocurrencia['occurrence_id']) }}">
 <input type="hidden" name="edit_token" value="{{ edit_token }}">
@@ -13,9 +15,9 @@
 </fieldset>
 <p><label>Nota de procedencia: <textarea name="provenance_note">{{ ocurrencia['provenance_note'] or '' }}</textarea></label></p>
 <p><label>Nota del cambio: <textarea name="change_note"></textarea></label></p>
-<p><button type="submit">Guardar cambios</button></p>
+<p><button type="submit" class="button-primary">Guardar cambios</button></p>
 </form>
 <p><a href="{{ url_for('occurrences.clasificar_ocurrencia',occurrence_id=ocurrencia['occurrence_id']) }}"><strong>Clasificar ocurrencia</strong></a></p>
 <p><small><a href="{{ url_for('occurrences.ocurrencias') }}">Cancelar</a></small></p>
 <script>(function(){const source=document.querySelector('[name=source_id]'),year=document.querySelector('[name=occurrence_year]'),grammar=document.querySelector('[name=grammatical_info_present]'),note=document.getElementById('grammatical-note-field');function limits(){const option=source.options[source.selectedIndex];year.min=option&&option.dataset.minYear||'1';year.max=option&&option.dataset.maxYear||'9999'}function grammarNote(){note.hidden=grammar.value!=='1';if(note.hidden)note.querySelector('textarea').value=''}source.addEventListener('change',limits);grammar.addEventListener('change',grammarNote);limits();grammarNote()})();</script>
-</body></html>
+{% endblock %}

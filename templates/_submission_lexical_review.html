@@ -41,14 +41,14 @@
 <details class="nomenclature-options"><summary>Modificar nomenclatura manualmente</summary><p><strong>Los cambios de nomenclatura se aplicarán al confirmar la decisión del revisor.</strong></p>
 <label>Modo <select name="nomenclature_mode"><option value="automatic">Modo automático</option><option value="manual">Modo manual</option><option value="adjusted">Automático con ajustes</option></select></label>
 <div class="nomenclature-label-list">
-{% for alternative in ctx['alternatives'] %}<div class="nomenclature-label-row"><span class="nomenclature-label-name">{{ alternative['display_label'] }} · ID {{ alternative['alternative_id'] }}</span><input class="nomenclature-label" name="label_{{ alternative['alternative_id'] }}" value="{{ alternative['working_label'] }}" readonly data-alternative-id="{{ alternative['alternative_id'] }}"></div>{% endfor %}
-<div class="nomenclature-label-row"><span class="nomenclature-label-name">Nueva alternativa</span><input class="nomenclature-label" name="label_new" readonly data-alternative-id="new"></div>
+{% for alternative in ctx['alternatives'] %}<div class="nomenclature-label-row"><span class="nomenclature-label-name">{{ alternative['display_label'] }} · ID {{ alternative['alternative_id'] }}</span><input class="nomenclature-label" aria-label="Etiqueta de {{ alternative['display_label'] }}" name="label_{{ alternative['alternative_id'] }}" value="{{ alternative['working_label'] }}" readonly data-alternative-id="{{ alternative['alternative_id'] }}"></div>{% endfor %}
+<div class="nomenclature-label-row"><span class="nomenclature-label-name">Nueva alternativa</span><input class="nomenclature-label" aria-label="Etiqueta de nueva alternativa" name="label_new" readonly data-alternative-id="new"></div>
 </div>
 <p class="manual-nomenclature-note">Al cambiar nomenclatura manualmente, explique la modificación en la nota de revisión.</p></details>
 </fieldset></div>
 <p><label>Nota de revisión <textarea name="review_note"></textarea></label></p>
 <p class="lexical-note-help">Nota opcional al aceptar sin cambios. Obligatoria para cambios, rechazos, incertidumbre y conflictos actuales.</p>
-<p class="lexical-validation" role="alert" hidden></p><button type="submit">Aplicar decisión</button>
+<p class="lexical-validation" role="alert" hidden></p><button type="submit" class="button-primary">Aplicar decisión</button>
 </fieldset></form>
 <p>Dejar pendiente conserva el aporte pendiente sin guardar una decisión ni modificar la clasificación, las alternativas, relaciones, morfología o nomenclatura.</p>
 {% endif %}

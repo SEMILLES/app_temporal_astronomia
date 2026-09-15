@@ -1,4 +1,4 @@
-/* Visual phase 1: loaded only by the internal pilot layout. */
+/* Shared internal presentation. Catalogue content keeps its own scoped styles. */
 :root {
   --ink: #202d38;
   --muted: #536371;
@@ -135,3 +135,75 @@
   .visual-pilot .inline > label { width: 100%; }
   .visual-pilot select { width: 100%; }
 }
+
+/* Phase 2: operational forms, review, sources and administration. */
+.visual-internal main { overflow-wrap: anywhere; }
+.visual-internal .field { display: block; margin: .45rem 0; min-width: 0; }
+.visual-internal .field > span { display: block; margin-bottom: .25rem; }
+.visual-internal .field > input, .visual-internal .field > select,
+.visual-internal .field > textarea { display: block; width: 100%; margin-top: .25rem; }
+.visual-internal .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .5rem 1.25rem; }
+.visual-internal .form-grid > small { grid-column: 1 / -1; }
+.visual-internal .form-grid .field { margin: 0; }
+.visual-internal .source-field-group { margin-block: .8rem; }
+.visual-internal .form-actions, .visual-internal .acciones { display: flex; flex-wrap: wrap; gap: .6rem 1rem; margin: 1rem 0; align-items: center; }
+.visual-internal .inline-form { display: inline-block; margin-left: .5rem; }
+.visual-internal .workspace-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem 1.5rem; }
+.visual-internal .workspace-section { border-top: 2px solid var(--line); padding: .2rem 0 .75rem; }
+.visual-internal .workspace-section ul { padding-left: 1.2rem; }
+.visual-internal .workspace-section li { margin-block: .4rem; }
+.visual-internal .record-list { list-style: none; margin: .8rem 0; padding: 0; }
+.visual-internal .record-list > li { padding: .75rem 0; border-bottom: 1px solid var(--line); }
+.visual-internal .empty-state { padding: 1rem; background: var(--surface); color: var(--muted); }
+.visual-internal .action-list { display: flex; flex-wrap: wrap; list-style: none; padding: 0; gap: .7rem 1.3rem; }
+.visual-internal dt { font-weight: 600; color: var(--muted); }
+.visual-internal dd { margin: .25rem 0 .75rem; }
+.visual-internal .summary-data { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .7rem 1.5rem; margin: 1rem 0; }
+.visual-internal .summary-data > div { border-bottom: 1px solid var(--line); }
+.visual-internal .subject-row { border: 1px solid var(--line); padding: .75rem; margin: .75rem 0; }
+.visual-internal .conflict-form { max-width: 52rem; }
+.visual-internal .nomenclature-label-list { display: grid; gap: .6rem; margin: .8rem 0; }
+.visual-internal .nomenclature-label-row { display: grid; align-items: center; gap: 1rem; grid-template-columns: minmax(0,1fr) 7rem; }
+.visual-internal .nomenclature-label-name { overflow-wrap: anywhere; }
+.visual-internal .nomenclature-label-row input { min-width: 0; width: 100%; }
+.visual-internal .preview-table th:nth-child(1), .visual-internal .preview-table td:nth-child(1),
+.visual-internal .preview-table th:nth-child(4), .visual-internal .preview-table td:nth-child(4) { text-align: right; font-variant-numeric: tabular-nums; }
+.visual-internal .preview-table th:nth-child(2), .visual-internal .preview-table td:nth-child(2),
+.visual-internal .preview-table th:nth-child(3), .visual-internal .preview-table td:nth-child(3) { text-align: center; }
+.visual-internal .preview-cambia { background: #fff8e8; }
+.visual-internal .preview-nueva { background: #eff7f2; }
+.visual-internal .media-management iframe { width: min(100%,640px); aspect-ratio: 16/9; border: 0; }
+.visual-internal .bloque, .visual-internal .historico { border-top: 1px solid var(--line); padding-top: .75rem; margin: 1rem 0; }
+.visual-internal .acciones > form { flex: 1 1 20rem; min-width: 0; }
+.visual-internal p[role="status"] { border-left: 4px solid #4b795b; background: #eff7f2; padding: .7rem; }
+.visual-internal .grammar-analysis-form > p:has(select), .visual-internal .source-detail { display: flex; align-items: end; flex-wrap: wrap; gap: .5rem 1rem; }
+.visual-internal .grammar-analysis-form > p:has(select) > label:first-child { flex: 0 1 22rem; }
+.visual-internal .grammar-analysis-form select { width: 100%; }
+.catalog-internal-context { padding: .6rem 1.5rem; background: var(--surface); border-bottom: 1px solid var(--line); font: 15px/1.5 system-ui,sans-serif; }
+.catalog-internal-context .access-context { margin: 0; }
+@media (max-width: 640px) {
+  .visual-internal .form-grid, .visual-internal .workspace-grid, .visual-internal .summary-data { grid-template-columns: minmax(0, 1fr); }
+  .visual-internal .record-list form { display: flex; flex-wrap: wrap; gap: .5rem; }
+  .visual-internal .inline-form { margin: .4rem 0; }
+  .visual-internal .form-actions { align-items: stretch; }
+}
+
+.visual-internal th { overflow-wrap: normal; }
+.visual-internal .source-table { table-layout: fixed; min-width: 1100px; }
+.visual-internal .source-table th:nth-child(1) { width: 4%; }
+.visual-internal .source-table th:nth-child(2) { width: 14%; }
+.visual-internal .source-table th:nth-child(3) { width: 7%; }
+.visual-internal .source-table th:nth-child(4) { width: 8%; }
+.visual-internal .source-table th:nth-child(5) { width: 8%; }
+.visual-internal .source-table th:nth-child(6) { width: 10%; }
+.visual-internal .source-table th:nth-child(7) { width: 10%; }
+.visual-internal .source-table th:nth-child(8) { width: 9%; }
+.visual-internal .source-table th:nth-child(9) { width: 20%; }
+
+.visual-internal .compact-form { max-width: 44rem; }
+.visual-internal .flow-step { color: var(--muted); font-size: .875rem; margin-bottom: .65rem; }
+.visual-internal .form-grid > p { margin: 0; }
+.visual-internal .form-grid > [role="note"] { grid-column: 1 / -1; }
+.visual-internal .form-grid > p > label { display: block; }
+.visual-internal .form-grid > p > label > input,
+.visual-internal .form-grid > p > label > select { width: 100%; }

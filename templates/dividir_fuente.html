@@ -1,18 +1,20 @@
-<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>Dividir fuente</title></head><body>
+{% extends "_visual_base.html" %}
+{% block title %}Dividir fuente{% endblock %}
+{% block content %}
 <h1>Dividir fuente: {{ source.source_name }} (ID {{ source.source_id }})</h1>
 <form method="post" id="split-form">
 <input type="hidden" name="action" value="preview">
-<p><label>Modo <select name="mode" id="split-mode"><option value="keep">Conservar Source original</option><option value="replace">Reemplazar Source original</option></select></label></p>
-<p>Asigne manualmente un destino a cada occurrence. Conservar requiere mover al menos una. Reemplazar requiere dos o más destinos y retira el origen.</p>
-<section><h2>Sources nuevas</h2><p>Los metadatos del origen se copian como referencia y pueden editarse antes de previsualizar. Cada fuente nueva debe tener un nombre distinto.</p>
-<div id="new-sources"></div><button type="button" id="add-source">Añadir Source destino nueva</button></section>
+<p><label>Modo <select name="mode" id="split-mode"><option value="keep">Conservar Fuente original</option><option value="replace">Reemplazar Fuente original</option></select></label></p>
+<p>Asigne manualmente un destino a cada ocurrencia. Conservar requiere mover al menos una. Reemplazar requiere dos o más destinos y retira el origen.</p>
+<section><h2>Fuentes nuevas</h2><p>Los metadatos del origen se copian como referencia y pueden editarse antes de previsualizar. Cada fuente nueva debe tener un nombre distinto.</p>
+<div id="new-sources"></div><button type="button" id="add-source" class="button-primary">Añadir Fuente destino nueva</button></section>
 <h2>Distribución manual</h2>
-<table border="1" cellpadding="6"><thead><tr><th>ID</th><th>Glosa</th><th>Details / referencia</th><th>Año</th><th>Destino</th></tr></thead><tbody>
+<div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table><thead><tr><th>ID</th><th>Glosa</th><th>detalles / referencia</th><th>Año</th><th>Destino</th></tr></thead><tbody>
 {% for occurrence in occurrences %}<tr><td>{{ occurrence.occurrence_id }}</td><td>{{ occurrence.original_gloss or 'Sin glosa' }}</td>
 <td>{{ occurrence.source_detail_1 if occurrence.source_detail_1 is not none else occurrence.source_detail_1_status }} · {{ occurrence.source_detail_2 if occurrence.source_detail_2 is not none else occurrence.source_detail_2_status }}</td>
-<td>{{ occurrence.occurrence_year or 'Sin año' }}</td><td><select class="occurrence-destination" name="occurrence_{{ occurrence.occurrence_id }}" required><option value="">Seleccione</option>{% for target in fuentes %}<option value="source:{{ target.source_id }}"{% if target.source_id == source.source_id %} data-original="true"{% endif %}>{{ target.source_name }} (ID {{ target.source_id }})</option>{% endfor %}</select></td></tr>{% endfor %}
-</tbody></table>
-<p><button type="submit">Previsualizar división</button></p></form>
+<td>{{ occurrence.occurrence_year or 'Sin año' }}</td><td><select class="occurrence-destination" aria-label="Destino de ocurrencia {{ occurrence.occurrence_id }}" name="occurrence_{{ occurrence.occurrence_id }}" required><option value="">Seleccione</option>{% for target in fuentes %}<option value="source:{{ target.source_id }}"{% if target.source_id == source.source_id %} data-original="true"{% endif %}>{{ target.source_name }} (ID {{ target.source_id }})</option>{% endfor %}</select></td></tr>{% endfor %}
+</tbody></table></div>
+<p><button type="submit" class="button-secondary">Previsualizar división</button></p></form>
 <template id="source-fields">{% include '_source_creation_fields.html' %}</template>
 <script id="source-metadata" type="application/json">{{ metadata|tojson }}</script>
 <script>
@@ -34,4 +36,5 @@ document.getElementById('add-source').addEventListener('click',()=>{
  nameInput.addEventListener('input',()=>document.querySelectorAll('.occurrence-destination option').forEach(o=>{if(o.value===key)o.textContent=nameInput.value+' (nueva)';}));
 });
 document.getElementById('split-mode').addEventListener('change',event=>document.querySelectorAll('option[data-original]').forEach(o=>{o.disabled=event.target.value==='replace';if(o.disabled&&o.selected)o.parentElement.value='';}));
-</script><p><a href="{{ url_for('sources.fuentes') }}">Cancelar</a></p></body></html>
+</script><p><a href="{{ url_for('sources.fuentes') }}">Cancelar</a></p>
+{% endblock %}

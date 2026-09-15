@@ -1,16 +1,21 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><title>Resumen del registro</title><body>
-<p><strong>Paso 4 de 4 — Resumen</strong></p>
+{% extends "_visual_base.html" %}
+{% block title %}Resumen del registro{% endblock %}
+{% block content %}
+<p class="flow-step"><strong>Paso 4 de 4 — Resumen</strong></p>
 <h1>Ocurrencia registrada</h1>
-<p>ID: OCC-{{ '%06d'|format(occurrence.occurrence_id) }}</p>
-<p>Glosa: {{ occurrence.original_gloss }}</p>
-<p>Fuente: {{ occurrence.source_name }}</p>
-{% if occurrence.reference_label %}<p>Concepto contextual: {{ occurrence.reference_label }}</p>{% endif %}
-<p>Estado de Gramática: {{ grammar_status }}</p>
-<p>Estado de Análisis léxico: {{ analysis_status }}</p>
-<nav><ul>
-<li><a href="{{ url_for('occurrences.editar_ocurrencia', occurrence_id=occurrence.occurrence_id) }}">Ver / editar occurrence</a></li>
+<p class="identifier">ID: OCC-{{ '%06d'|format(occurrence.occurrence_id) }}</p>
+<dl class="summary-data">
+<div><dt>Glosa</dt><dd>{{ occurrence.original_gloss }}</dd></div>
+<div><dt>Fuente</dt><dd>{{ occurrence.source_name }}</dd></div>
+{% if occurrence.reference_label %}<div><dt>Concepto contextual</dt><dd>{{ occurrence.reference_label }}</dd></div>{% endif %}
+<div><dt>Estado de Gramática</dt><dd>{{ grammar_status }}</dd></div>
+<div><dt>Estado de Análisis léxico</dt><dd>{{ analysis_status }}</dd></div>
+</dl>
+<nav aria-label="Acciones posteriores"><ul class="action-list">
+<li><a href="{{ url_for('occurrences.editar_ocurrencia', occurrence_id=occurrence.occurrence_id) }}">Ver / editar ocurrencia</a></li>
 <li><a href="{{ url_for('occurrences.mostrar_gramatica', occurrence_id=occurrence.occurrence_id) }}">Gramática</a></li>
-<li><a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=occurrence.occurrence_id) }}">Clasificar occurrence</a></li>
+<li><a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=occurrence.occurrence_id) }}">Clasificar ocurrencia</a></li>
 <li><a href="{{ url_for('occurrences.ocurrencias') }}">Volver a ocurrencias</a></li>
 <li><a href="{{ url_for('main.trabajo') }}">Ir al trabajo</a></li>
-</ul></nav></body></html>
+</ul></nav>
+{% endblock %}

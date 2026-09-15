@@ -1,16 +1,6 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><title>Revisión de aportes</title><style>
-.preview-table{border-collapse:collapse;width:auto}
-.preview-table th,.preview-table td{padding:.35rem .75rem;vertical-align:middle;text-align:left}
-.preview-table th:nth-child(1),.preview-table td:nth-child(1),
-.preview-table th:nth-child(4),.preview-table td:nth-child(4){text-align:right}
-.preview-table th:nth-child(2),.preview-table td:nth-child(2),
-.preview-table th:nth-child(3),.preview-table td:nth-child(3){text-align:center}
-.nomenclature-label-list{display:grid;gap:.6rem;margin:.8rem 0}
-.nomenclature-label-row{align-items:center;display:grid;gap:1rem;grid-template-columns:minmax(0,1fr) 7rem}
-.nomenclature-label-name{overflow-wrap:anywhere}
-.nomenclature-label-row input{box-sizing:border-box;min-width:0;width:100%}
-</style>
-<body>
+{% extends "_visual_base.html" %}
+{% block title %}Revisión de aportes{% endblock %}
+{% block content %}
 <h1>{{ 'Detalle del aporte' if detail else 'Revisión de aportes pendientes' }}</h1>{% if request.args.get('message') %}<p role="status"><strong>{{ request.args.get('message') }}</strong></p>{% endif %}
 {% set can_review = g.current_access_role in ('reviewer','master') %}
 {% for aporte in aportes %}{% set ctx=alternative_context.get(aporte['submission_id']) %}
@@ -44,7 +34,7 @@
 </p>
 {% endif %}
 
-<table>
+<div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table>
 <tr>
 <th>Campo</th>
 <th>Vigente</th>
@@ -60,7 +50,7 @@
 </td>
 </tr>
 {% endfor %}
-</table>
+</table></div>
 
 {% if aporte['status']=='pending' %}
 
@@ -140,8 +130,8 @@ Respuesta del revisor
 
 <p class="grammar-review-validation" role="alert" hidden></p>
 
-<button name="decision" value="accepted">Aceptar</button>
-<button name="decision" value="rejected">Rechazar</button>
+<button name="decision" value="accepted" class="button-primary">Aceptar</button>
+<button name="decision" value="rejected" class="button-secondary">Rechazar</button>
 </form>
 {% endif %}
 
@@ -192,7 +182,7 @@ El aporte fue rechazado y no produjo un nuevo análisis gramatical canónico.
 {% endif %}
 
 <h3>Resultado aceptado</h3>
-<table>
+<div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table>
 <tr>
 <th>Campo</th>
 <th>Propuesto por el analista</th>
@@ -208,7 +198,7 @@ El aporte fue rechazado y no produjo un nuevo análisis gramatical canónico.
 <td>{{ aporte['reviewed_' ~ field] or 'Sin analizar' }}</td>
 </tr>
 {% endfor %}
-</table>
+</table></div>
 
 {% if uncertainty.any %}
 <p>
@@ -326,4 +316,4 @@ document.querySelectorAll('.grammar-review-decision').forEach(form=>{
     refresh();
 });
 </script>
-</body></html>
+{% endblock %}

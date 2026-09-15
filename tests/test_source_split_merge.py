@@ -282,7 +282,7 @@ class SourceDistributionRouteTests(unittest.TestCase):
         self.assertEqual(self.post("dividir",form).status_code,302)
         self.assertEqual(self.post("dividir",form).status_code,400)
         html=self.client.get("/test-reviewer/fuentes/2/historial").get_data(as_text=True)
-        self.assertIn("División de Source",html);self.assertIn("Confirmed",html);self.assertIn("conservada activa",html)
+        self.assertIn("División de fuente",html);self.assertIn("Confirmed",html);self.assertIn("conservada activa",html)
 
     def test_merge_preview_and_history_of_all_origins_and_new_target(self):
         before=self.path.read_bytes();response=self.post("fusionar",self.merge_form(),"master")
@@ -292,5 +292,5 @@ class SourceDistributionRouteTests(unittest.TestCase):
         self.assertEqual(self.post("fusionar",{"action":"confirm","token":token,"reason":"Merge reason","confirm":"yes"},"master").status_code,302)
         for sid in (1,2,3):
             html=self.client.get(f"/test-master/fuentes/{sid}/historial").get_data(as_text=True)
-            self.assertIn("Fusión de Sources",html);self.assertIn("Merge reason",html)
+            self.assertIn("Fusión de fuentes",html);self.assertIn("Merge reason",html)
         self.assertEqual(self.client.get("/test-reviewer/fuentes/1/dividir").status_code,404)

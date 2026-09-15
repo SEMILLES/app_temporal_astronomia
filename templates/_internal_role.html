@@ -1,0 +1,3 @@
+{% if g.current_access_role %}
+<p class="access-context">Rol: <strong>{{ {'analyst': 'Analista', 'reviewer': 'Revisor', 'master': 'Master'}.get(g.current_access_role, g.current_access_role) }}</strong></p>
+{% endif %}

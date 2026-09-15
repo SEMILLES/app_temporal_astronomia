@@ -1,14 +1,12 @@
-<!DOCTYPE html>
-<html lang="es">
-<head><meta charset="UTF-8"><title>Desproteger fuente</title></head>
-<body>
+{% extends "_visual_base.html" %}
+{% block title %}Desproteger fuente{% endblock %}
+{% block content %}
 <h1>Desproteger fuente: {{ fuente['source_name'] }}</h1>
 <p>Los analistas podrán editar esta fuente mientras el permiso general de creación y edición esté activado.</p>
 <form method="post">
     <input type="hidden" name="protected" value="0">
     <input type="hidden" name="confirm" value="1">
     <a href="{{ url_for('sources.fuentes') }}">Cancelar</a>
-    <button type="submit">Desproteger</button>
+    <button type="submit" class="button-secondary">Desproteger</button>
 </form>
-</body>
-</html>
+{% endblock %}

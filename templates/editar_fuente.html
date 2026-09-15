@@ -1,14 +1,7 @@
-<!DOCTYPE html>
-<html lang="es">
-
-<head>
-    <meta charset="UTF-8">
-    <title>Editar fuente - LeSiCo</title>
-</head>
-
-<body>
-
-    <h1>Editar fuente</h1>
+{% extends "_visual_base.html" %}
+{% block title %}Editar fuente - LeSiCo{% endblock %}
+{% block content %}
+<h1>Editar fuente</h1>
 
     <p>
         <strong>ID:</strong>
@@ -25,80 +18,69 @@
         }}"
     >
 <input type="hidden" name="edit_token" value="{{ edit_token }}">
+<div class="form-grid">
 
         <p>
 
-            <label>
+            <label class="field">
                 Nombre:
-            </label>
-
             <input
                 type="text"
                 name="source_name"
                 value="{{ fuente['source_name'] }}"
                 required
-            >
+            ></label>
 
         </p>
 
         <p>
-            <label>Código legacy (opcional):</label>
-            <input type="text" name="legacy_source_code" value="{{ fuente['legacy_source_code'] or '' }}">
+            <label class="field">Código legacy (opcional):<input type="text" name="legacy_source_code" value="{{ fuente['legacy_source_code'] or '' }}"></label>
         </p>
         <p><label>Tipo de fuente: <select name="source_type" required>{% for value,label in source_types.items() %}<option value="{{ value }}"{% if fuente['source_type']==value %} selected{% endif %}>{{ label }}</option>{% endfor %}</select></label></p>
-        {% if occurrence_count %}<p role="note"><strong>Advertencia:</strong> esta Source tiene {{ occurrence_count }} occurrences. Cambiar el tipo cambia la semántica de los Details; no reinterpretará ni borrará sus detalles guardados ni cambiará sus estados.</p>{% endif %}
+        {% if occurrence_count %}<p role="note"><strong>Advertencia:</strong> esta Fuente tiene {{ occurrence_count }} ocurrencias. Cambiar el tipo cambia la semántica de los detalles; no reinterpretará ni borrará sus detalles guardados ni cambiará sus estados.</p>{% endif %}
         <p><label>Referencia (opcional): <input name="source_reference" value="{{ fuente['source_reference'] or '' }}"></label></p>
         <p>
-            <label>Alcance (opcional):</label>
-            <select name="source_scope">
+            <label class="field">Alcance (opcional):<select name="source_scope">
                 <option value="" {% if not fuente['source_scope'] %}selected{% endif %}>Sin especificar</option>
                 <option value="INSTITUTIONAL" {% if fuente['source_scope'] == 'INSTITUTIONAL' %}selected{% endif %}>Institucional</option>
                 <option value="PERSONAL" {% if fuente['source_scope'] == 'PERSONAL' %}selected{% endif %}>Personal</option>
-            </select>
+            </select></label>
         </p>
         <p>
-            <label>Formato original (opcional):</label>
-            <input type="text" name="format_original" value="{{ fuente['format_original'] or '' }}">
+            <label class="field">Formato original (opcional):<input type="text" name="format_original" value="{{ fuente['format_original'] or '' }}"></label>
         </p>
         <p>
-            <label>Detalle del formato (opcional):</label>
-            <input type="text" name="format_detail" value="{{ fuente['format_detail'] or '' }}">
+            <label class="field">Detalle del formato (opcional):<input type="text" name="format_detail" value="{{ fuente['format_detail'] or '' }}"></label>
         </p>
         <p>
-            <label>Región (opcional):</label>
-            <textarea name="region_description">{{ fuente['region_description'] or '' }}</textarea>
+            <label class="field">Región (opcional):<textarea name="region_description">{{ fuente['region_description'] or '' }}</textarea></label>
         </p>
         <p>
-            <label>Caracterización (opcional):</label>
-            <textarea name="characterization">{{ fuente['characterization'] or '' }}</textarea>
+            <label class="field">Caracterización (opcional):<textarea name="characterization">{{ fuente['characterization'] or '' }}</textarea></label>
         </p>
         <p>
-            <label>Número de entradas declarado (opcional):</label>
-            <input type="number" name="reported_entry_count" value="{{ fuente['reported_entry_count'] if fuente['reported_entry_count'] is not none else '' }}" min="0">
+            <label class="field">Número de entradas declarado (opcional):<input type="number" name="reported_entry_count" value="{{ fuente['reported_entry_count'] if fuente['reported_entry_count'] is not none else '' }}" min="0"></label>
         </p>
         <p>
-            <label>Año inicial:</label>
-            <input type="number" name="start_year" value="{{ fuente['start_year'] or '' }}">
+            <label class="field">Año inicial:<input type="number" name="start_year" value="{{ fuente['start_year'] or '' }}"></label>
         </p>
         <p>
-            <label>Año final:</label>
-            <input type="number" name="end_year" value="{{ fuente['end_year'] or '' }}">
+            <label class="field">Año final:<input type="number" name="end_year" value="{{ fuente['end_year'] or '' }}"></label>
         </p>
         <p>
-            <label>Estado del año final:</label>
-            <select name="end_year_status">
+            <label class="field">Estado del año final:<select name="end_year_status">
                 <option value="" {% if not fuente['end_year_status'] %}selected{% endif %}>Sin especificar</option>
                 <option value="known" {% if fuente['end_year_status'] == 'known' %}selected{% endif %}>Conocido</option>
                 <option value="ongoing" {% if fuente['end_year_status'] == 'ongoing' %}selected{% endif %}>En curso</option>
                 <option value="unknown" {% if fuente['end_year_status'] == 'unknown' %}selected{% endif %}>Desconocido</option>
-            </select>
+            </select></label>
         </p>
         <p>
-            <label>Nota del cambio:</label>
-            <textarea name="change_note"></textarea>
+            <label class="field">Nota del cambio:<textarea name="change_note"></textarea></label>
         </p>
 
-        <button type="submit">
+</div>
+        <button type="submit" class="button-primary">
             Guardar cambios
         </button>
 
@@ -109,7 +91,4 @@
             Cancelar
         </a>
     </p>
-
-</body>
-
-</html>
+{% endblock %}

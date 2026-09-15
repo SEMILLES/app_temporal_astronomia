@@ -83,7 +83,7 @@ class RegistrationFlowTests(unittest.TestCase):
     def test_summary_real_current_and_unanalysed_states(self):
         html = self.client.get('/ocurrencias/1/resumen').get_data(as_text=True)
         for text in ('OCC-000001', 'EVIDENCE', 'Synthetic source', 'ASTRONOMIA',
-                     'Estado de Gramática: Sin analizar', 'Sin analizar / sin clasificación'):
+                     'Estado de Gramática</dt><dd>Sin analizar', 'Sin analizar / sin clasificación'):
             self.assertIn(text, html)
         db = self.connect()
         create_or_replace_occurrence_grammar(db, 1, gender='FEM-A')
@@ -100,7 +100,7 @@ class RegistrationFlowTests(unittest.TestCase):
         db.commit()
         db.close()
         html = self.client.get('/ocurrencias/1/resumen').get_data(as_text=True)
-        self.assertIn('Estado de Análisis léxico: Clasificada</p>', html)
+        self.assertIn('Estado de Análisis léxico</dt><dd>Clasificada</dd>', html)
         self.assertEqual(self.client.get('/ocurrencias/999/resumen').status_code, 404)
 
     def test_direct_access_and_invalid_grammar_keep_context(self):
@@ -109,7 +109,7 @@ class RegistrationFlowTests(unittest.TestCase):
             self.assertNotIn('Paso ', html)
             self.assertNotIn('Revisar análisis después', html)
             self.assertNotIn('Revisar gramática después', html)
-            self.assertIn('<button>Mandar a revisión</button>', html)
+            self.assertRegex(html, r'<button[^>]*>Mandar a revisión</button>')
         response = self.client.post('/ocurrencias/1/gramatica?flow=registration', data={'note': 'Only note'})
         self.assertEqual(response.status_code, 400)
         self.assertIn('Paso 2 de 4', response.get_data(as_text=True))

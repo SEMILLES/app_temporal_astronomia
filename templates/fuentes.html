@@ -1,14 +1,7 @@
-<!DOCTYPE html>
-<html lang="es">
-
-<head>
-    <meta charset="UTF-8">
-    <title>Fuentes - LeSiCo</title>
-</head>
-
-<body>
-
-    <h1>Fuentes</h1>
+{% extends "_visual_base.html" %}
+{% block title %}Fuentes - LeSiCo{% endblock %}
+{% block content %}
+<h1>Fuentes</h1>
 
     {% if can_create %}<h2>Registrar nueva fuente</h2>
 
@@ -19,7 +12,7 @@
 
         {% include '_source_creation_fields.html' %}
 
-        <button type="submit">
+        <button type="submit" class="button-primary">
             Guardar fuente
         </button>
 
@@ -29,10 +22,7 @@
     <h2>Fuentes registradas</h2>
     {% if g.current_access_role in ('reviewer','master') %}<p><a href="{{ url_for('sources.source_retirement.retired_sources') }}">Consultar fuentes retiradas</a></p>{% endif %}
 
-    <table
-        border="1"
-        cellpadding="8"
-    >
+    <div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table class="source-table">
 
         <tr>
             <th>ID</th>
@@ -69,7 +59,7 @@
 
                 <td>{{ fuente["reported_entry_count"] if fuente["reported_entry_count"] is not none else "" }}</td>
 
-                <td>
+                <td class="row-actions">
 
                     {% if g.current_access_role in ('reviewer','master') or (can_create and not fuente['analyst_protected']) %}<a href="{{
                         url_for(
@@ -89,7 +79,7 @@
                     <a href="{{ url_for('sources.source_protection', source_id=fuente['source_id']) }}">Desproteger</a>
                     {% else %}
                     <form method="post" action="{{ url_for('sources.source_protection', source_id=fuente['source_id']) }}">
-                        <input type="hidden" name="protected" value="1"><button type="submit">Proteger</button>
+                        <input type="hidden" name="protected" value="1"><button type="submit" class="button-secondary">Proteger</button>
                     </form>
                     {% endif %}{% endif %}
 
@@ -99,7 +89,7 @@
 
         {% endfor %}
 
-    </table>
+    </table></div>
 
 
     <p>
@@ -107,7 +97,4 @@
             Volver al espacio de trabajo
         </a>
     </p>
-
-</body>
-
-</html>
+{% endblock %}

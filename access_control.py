@@ -1,7 +1,7 @@
 import os
 from functools import wraps
 
-from flask import abort, g, request
+from flask import abort, g, request, render_template
 
 from database import conectar
 
@@ -127,23 +127,14 @@ def install_access_context(app):
                 "WHERE active=1 ORDER BY display_name,collaborator_id"
             ).fetchall()
         finally: db.close()
-        options = "".join(
-            f'<option value="{row[0]}">{_escape(row[1])}</option>' for row in collaborators
+        toolbar = render_template(
+            "_internal_header.html",
+            collaborators=collaborators,
+            role=role,
+            root=request.script_root,
+            show_review=ROLE_LEVEL[role] >= ROLE_LEVEL["reviewer"],
+            show_admin=role == "master",
         )
-        root = request.script_root
-        review = (f'<section><strong>REVISIÓN</strong> '
-                  f'<a href="{root}/aportes/pendientes">Aportes pendientes</a> '
-                  f'<a href="{root}/conflictos">Conflictos</a></section>') \
-                 if ROLE_LEVEL[role] >= ROLE_LEVEL["reviewer"] else ""
-        admin = (f'<section><strong>ADMINISTRACIÓN</strong> '
-                 f'<a href="{root}/colaboradores">Colaboradores</a> '
-                 f'<a href="{root}/actualizar-catalogo">Actualizar catálogo</a> '
-                 f'<a href="{root}/publicaciones">Publicaciones</a></section>') \
-                if role == "master" else ""
-        toolbar = f'''<aside id="lesico-internal-context" data-access-role="{role}">
-<label>Trabajando como: <select id="lesico-collaborator"><option value="">Sin identificar</option>{options}</select></label>
-<nav><section><strong>ANÁLISIS</strong> <a href="{root}/trabajo">Inicio</a> <a href="{root}/ocurrencias">Ocurrencias</a> <a href="{root}/borradores">Borradores</a> <a href="{root}/conceptos">Conceptos / Alternativas</a> <a href="{root}/aportes">Aportes</a></section><section><strong>CATÁLOGO</strong> <a href="{root}/catalogo-interno" target="_blank" rel="noopener">Catálogo interno</a></section>{review}{admin}</nav></aside>
-<script>document.addEventListener('DOMContentLoaded',function(){{const key='lesico-collaborator-id';const s=document.getElementById('lesico-collaborator');const saved=localStorage.getItem(key)||'';if([...s.options].some(o=>o.value===saved))s.value=saved;else localStorage.removeItem(key);s.addEventListener('change',()=>localStorage.setItem(key,s.value));document.querySelectorAll('form[method="post"],form[method="POST"]').forEach(f=>{{let i=f.querySelector('input[name="collaborator_id"]');if(!i){{i=document.createElement('input');i.type='hidden';i.name='collaborator_id';f.appendChild(i)}}f.addEventListener('submit',()=>i.value=s.value);i.value=s.value}})}});</script>'''
         body = response.get_data(as_text=True)
         body_start = body.find("<body")
         body_end = body.find(">", body_start) if body_start >= 0 else -1
