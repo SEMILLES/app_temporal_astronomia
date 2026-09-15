@@ -1,1 +1,20 @@
-<!doctype html><html lang="es"><meta charset="utf-8"><title>Ocurrencias</title><body><h1>Ocurrencias</h1><p><a href="{{ url_for('submissions.nuevo_aporte') }}">Registrar nueva ocurrencia</a> · <a href="{{ url_for('submissions.borradores') }}">Borradores</a></p><table border="1"><tr><th>ID</th><th>Fuente</th><th>Glosa</th><th>Marcas gramaticales</th><th>Alternativa</th><th>Acciones</th></tr>{% for o in ocurrencias %}<tr><td>{{ o['occurrence_id'] }}</td><td>{{ o['source_name'] }}</td><td>{{ o['original_gloss'] }}</td><td>{{ o['grammar_status'] }}</td><td>{{ o['alternative_status'] }}{% if o['current_classification'] %}: {{ o['current_classification'] }}{% endif %}</td><td><a href="{{ url_for('occurrences.editar_ocurrencia', occurrence_id=o['occurrence_id']) }}">Editar</a> <a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=o['occurrence_id']) }}">Clasificar</a> <a href="{{ url_for('occurrences.mostrar_gramatica', occurrence_id=o['occurrence_id']) }}">Gramática</a></td></tr>{% endfor %}</table></body></html>
+{% extends "_visual_base.html" %}
+{% block title %}Ocurrencias{% endblock %}
+{% block content %}
+<header class="page-heading"><h1>Ocurrencias</h1><p class="toolbar"><a class="button button-primary" href="{{ url_for('submissions.nuevo_aporte') }}">Registrar nueva ocurrencia</a> <a href="{{ url_for('submissions.borradores') }}">Borradores</a></p></header>
+
+<div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table>
+<tr><th scope="col">ID</th><th scope="col">Fuente</th><th scope="col">Glosa</th><th scope="col">Marcas gramaticales</th><th scope="col">Alternativa</th><th scope="col">Acciones</th>
+</tr>{% for o in ocurrencias %}
+<tr>
+  <td class="identifier">{{ o['occurrence_id'] }}</td>
+  <td>{{ o['source_name'] }}</td>
+  <td><strong>{{ o['original_gloss'] }}</strong></td>
+  <td><span class="status">{{ o['grammar_status'] }}</span></td>
+  <td><span class="status">{{ o['alternative_status'] }}</span>{% if o['current_classification'] %}: {{ o['current_classification'] }}{% endif %}</td>
+  <td class="row-actions"><a href="{{ url_for('occurrences.editar_ocurrencia', occurrence_id=o['occurrence_id']) }}">Editar</a> <a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=o['occurrence_id']) }}">Clasificar</a> <a href="{{ url_for('occurrences.mostrar_gramatica', occurrence_id=o['occurrence_id']) }}">Gramática</a></td>
+</tr>{% else %}
+<tr>
+  <td colspan="6" class="metadata">Sin ocurrencias registradas.</td>
+</tr>{% endfor %}</table></div>
+{% endblock %}

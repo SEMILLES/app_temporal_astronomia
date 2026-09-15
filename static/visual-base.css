@@ -1,0 +1,137 @@
+/* Visual phase 1: loaded only by the internal pilot layout. */
+:root {
+  --ink: #202d38;
+  --muted: #536371;
+  --line: #c8d0d7;
+  --surface: #f2f5f7;
+  --accent: #235978;
+  --danger: #913c35;
+  --radius: 3px;
+  --page-width: 1240px;
+}
+.visual-pilot { margin: 0; color: var(--ink); background: #fff; font: 15px/1.5 system-ui, sans-serif; }
+.visual-pilot *, .visual-pilot *::before, .visual-pilot *::after { box-sizing: border-box; }
+.visual-pilot [hidden] { display: none !important; }
+.visual-pilot main { max-width: var(--page-width); margin: auto; padding: 1rem 1.5rem 2.5rem; }
+.visual-pilot h1 { font-size: 1.8rem; line-height: 1.2; margin: 0 0 1rem; }
+.visual-pilot h2 { font-size: 1.22rem; line-height: 1.3; margin: 1.1rem 0 .55rem; }
+.visual-pilot h3 { font-size: 1.05rem; margin: .9rem 0 .4rem; }
+.visual-pilot h4 { font-size: .95rem; margin: .7rem 0 .35rem; }
+.visual-pilot p { margin: .5rem 0; }
+.visual-pilot a { color: var(--accent); text-underline-offset: .18em; }
+.visual-pilot a:hover { text-decoration-thickness: 2px; }
+.visual-pilot :focus-visible { outline: 3px solid #176eae; outline-offset: 3px; }
+.visual-pilot small, .help-text, .metadata, .access-context,
+.alternative-meta, .relation-id { color: var(--muted); font-size: .875rem; }
+.visual-pilot .access-context { margin: 0 0 .5rem; }
+.identifier { color: var(--muted); font-size: .875rem; font-variant-numeric: tabular-nums; }
+.page-heading, .toolbar, .inline, .alternative-header, .alternative-details {
+  display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem 1rem;
+}
+.page-heading { justify-content: space-between; margin-bottom: .8rem; }
+.page-heading h1, .page-heading p { margin: 0; }
+.toolbar { margin: .75rem 0; }
+.visual-pilot button, .visual-pilot .button {
+  display: inline-block; border: 1px solid #8798a5; border-radius: var(--radius);
+  background: var(--surface); color: var(--ink); padding: .4rem .7rem;
+  font: inherit; line-height: 1.4; text-decoration: none; cursor: pointer;
+}
+.visual-pilot button:hover, .visual-pilot .button:hover { background: #e3eaf0; }
+.visual-pilot .button-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.visual-pilot .button-primary:hover { background: #18445f; }
+.visual-pilot .button-secondary { background: #fff; border-color: var(--accent); color: var(--accent); }
+.visual-pilot .button-danger { background: #fff; border-color: var(--danger); color: var(--danger); }
+.visual-pilot .button-danger:hover { background: #f9ecea; }
+.visual-pilot button:disabled, .visual-pilot .button[aria-disabled="true"] {
+  color: #59636b; background: #e7eaed; border-color: #bbc3c9; cursor: not-allowed;
+}
+.visual-pilot label { font-weight: 600; }
+.visual-pilot label:has(input[type="checkbox"]), .visual-pilot label:has(input[type="radio"]) { font-weight: 400; }
+.visual-pilot input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.visual-pilot select, .visual-pilot textarea {
+  max-width: 100%; min-width: 0; border: 1px solid #8798a5; border-radius: var(--radius);
+  padding: .4rem .5rem; background: #fff; color: var(--ink); font: inherit;
+}
+.visual-pilot textarea { display: block; width: 100%; min-height: 5rem; resize: vertical; margin-top: .3rem; }
+.visual-pilot label > select, .visual-pilot label > input:not([type="radio"]):not([type="checkbox"]):not([type="hidden"]) {
+  display: block; margin-top: .25rem;
+}
+.visual-pilot form > label { display: inline-block; vertical-align: top; max-width: 100%; margin: .35rem .7rem .5rem 0; }
+.visual-pilot input[type="checkbox"], .visual-pilot input[type="radio"] { accent-color: var(--accent); width: 1rem; height: 1rem; vertical-align: middle; }
+.visual-pilot input:disabled, .visual-pilot select:disabled, .visual-pilot textarea:disabled { background: #e7eaed; color: #59636b; }
+.visual-pilot [aria-invalid="true"] { border-color: var(--danger); }
+.visual-pilot label:has(select[required]:not(:disabled), textarea[required]:not(:disabled), input[required]:not([type="radio"]):not([type="checkbox"]):not(:disabled))::before { content: "* "; color: var(--danger); }
+.visual-pilot fieldset { min-width: 0; margin: .8rem 0; padding: .7rem 1rem; border: 1px solid var(--line); border-radius: var(--radius); }
+.visual-pilot legend { font-weight: 650; padding: 0 .35rem; }
+.visual-pilot .relation { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; padding: .65rem 0; border-top: 1px solid var(--line); }
+.visual-pilot main > section { border-top: 1px solid var(--line); margin-top: 1.1rem; padding-top: .55rem; }
+.visual-pilot .context-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem 1.5rem; border-block: 1px solid var(--line); padding: .5rem 0 .8rem; }
+.visual-pilot .context-grid h2 { color: var(--muted); font-size: .875rem; margin-top: .4rem; }
+.visual-pilot .context-grid p { margin: .3rem 0; }
+.visual-pilot .context-grid .evidence-context { grid-column: 1 / -1; }
+.visual-pilot .evidence-context strong { font-size: 1.15rem; }
+.visual-pilot .current-classification { border-left: 3px solid var(--accent); padding-left: .8rem; }
+.visual-pilot table { width: 100%; border-collapse: collapse; border: 0; font-size: .93rem; }
+.visual-pilot th, .visual-pilot td { padding: .55rem .65rem; border: 0; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+.visual-pilot th { background: var(--surface); font-weight: 650; }
+.visual-pilot tbody tr:hover { background: #f7f9fa; }
+.visual-pilot td { overflow-wrap: anywhere; }
+.visual-pilot td input { width: 100%; min-width: 5rem !important; }
+.visual-pilot .numeric { text-align: right; font-variant-numeric: tabular-nums; }
+.table-scroll { max-width: 100%; overflow-x: auto; margin: .7rem 0; }
+.table-scroll table { min-width: 620px; }
+.table-scroll:has(input) table { min-width: 760px; }
+.visual-pilot .row-actions { min-width: 13rem; }
+.row-actions a { display: inline-block; margin: 0 .6rem .3rem 0; }
+.status { display: inline-block; font-weight: 600; font-size: .875rem; }
+.preview-status { min-width: 10rem; font-weight: 600; }
+.visual-pilot .message, .visual-pilot .error, .notice { padding: .7rem 1rem; margin: .8rem 0; border: 1px solid var(--line); border-left-width: 4px; }
+.visual-pilot .message, .notice-success { background: #eff7f2; border-color: #4b795b; }
+.visual-pilot .error, .notice-error { background: #fbf0ee; border-color: var(--danger); }
+.visual-pilot p[role="alert"] { background: #fbf0ee; border-left: 4px solid var(--danger); padding: .6rem .8rem; }
+.visual-pilot #immediate-acceptance { border: 1px solid var(--line); padding: .6rem .9rem; margin-top: 1rem; }
+.notice-warning { background: #fff8e8; border-color: #916a22; }
+.notice-info { background: #edf4f8; border-color: var(--accent); }
+.visual-pilot .notice h2 { margin-top: 0; }
+.visual-pilot details { border-block: 1px solid var(--line); padding: .6rem .75rem; margin: .6rem 0; }
+.visual-pilot summary { font-weight: 600; cursor: pointer; }
+.visual-pilot details[open] > summary { margin-bottom: .6rem; }
+.visual-pilot .history { color: var(--muted); background: #f7f8f9; }
+.visual-pilot .section-nav { display: flex; flex-wrap: wrap; gap: .4rem 1rem; border-bottom: 1px solid var(--line); padding: .6rem 0; }
+.visual-pilot .structural-operations { border-top: 2px solid #95716c; }
+.visual-pilot .preview { border: 1px solid var(--line); padding: .8rem 1rem; margin-top: 1rem; }
+.visual-pilot .transfer-context { padding: .5rem .75rem; background: var(--surface); border-left: 3px solid var(--accent); }
+.alternative-card { border-block: 1px solid var(--line); padding: .8rem 0; margin: .7rem 0; }
+.alternative-header { justify-content: space-between; }
+.visual-pilot .alternative-header h2 { margin: 0; }
+.alternative-section { border-top: 1px solid var(--line); margin-top: .65rem; padding-top: .4rem; }
+.visual-pilot .alternative-section h3 { margin: 0 0 .4rem; }
+.occurrence-card { border-left: 3px solid var(--line); padding-left: .8rem; margin: .65rem 0; }
+.visual-pilot .occurrence-card h4 { color: var(--muted); font-size: .875rem; margin: 0 0 .35rem; }
+.occurrence-metadata { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: .25rem 1rem; margin: 0; }
+.occurrence-field { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.5fr); gap: .4rem; }
+.occurrence-field dt { color: var(--muted); }
+.occurrence-field dd { margin: 0; overflow-wrap: anywhere; }
+.relations-list { display: flex; flex-wrap: wrap; gap: .4rem 1.2rem; list-style: none; margin: 0; padding: 0; }
+.alternative-actions { text-align: right; }
+.visual-pilot #lesico-internal-context { background: var(--surface); border-bottom: 1px solid var(--line); padding: .7rem max(1.5rem, calc((100% - var(--page-width)) / 2 + 1.5rem)); }
+.visual-pilot #lesico-internal-context > label { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; font-size: .875rem; }
+.visual-pilot #lesico-internal-context select { display: inline-block; margin: 0; padding: .25rem .4rem; }
+.visual-pilot #lesico-internal-context nav { display: flex; flex-wrap: wrap; gap: .35rem 1.3rem; margin-top: .5rem; }
+.visual-pilot #lesico-internal-context section { display: flex; flex-wrap: wrap; align-items: baseline; gap: .3rem .75rem; }
+.visual-pilot #lesico-internal-context strong { color: var(--muted); font-size: .72rem; letter-spacing: .04em; }
+.visual-pilot #lesico-internal-context a { font-size: .875rem; padding-block: .15rem; }
+/* The existing testing banner retains its inline, high-visibility presentation. */
+.visual-pilot #lesico-testing-banner span { display: inline-block; }
+.skip-link { position: fixed; left: 1rem; top: -10rem; z-index: 10; background: #fff; padding: .6rem; }
+.skip-link:focus { top: .5rem; }
+@media (max-width: 640px) {
+  .visual-pilot main { padding: .8rem .8rem 2rem; }
+  .visual-pilot #lesico-internal-context { padding: .7rem .8rem; }
+  .visual-pilot .context-grid { grid-template-columns: minmax(0, 1fr); }
+  .visual-pilot h1 { font-size: 1.5rem; }
+  .visual-pilot fieldset { padding: .6rem; }
+  .visual-pilot .inline { align-items: stretch; }
+  .visual-pilot .inline > label { width: 100%; }
+  .visual-pilot select { width: 100%; }
+}

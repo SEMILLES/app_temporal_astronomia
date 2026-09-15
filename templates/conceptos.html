@@ -1,14 +1,7 @@
-<!DOCTYPE html>
-<html lang="es">
-
-<head>
-    <meta charset="UTF-8">
-    <title>Conceptos - LeSiCo</title>
-</head>
-
-<body>
-
-    <h1>Conceptos</h1>
+{% extends "_visual_base.html" %}
+{% block title %}Conceptos - LeSiCo{% endblock %}
+{% block content %}
+<h1>Conceptos</h1>
 
     {% if g.current_access_role in ("reviewer", "master") %}
     <h2>Registrar nuevo concepto</h2>
@@ -18,17 +11,18 @@
         action="{{ url_for('concepts.nuevo_concepto') }}"
     >
 
-        <label>
+        <label for="preferred-label">
             Etiqueta preferida:
         </label>
 
         <input
             type="text"
             name="preferred_label"
+            id="preferred-label"
             required
         >
 
-        <button type="submit">
+        <button type="submit" class="button-primary">
             Guardar concepto
         </button>
 
@@ -36,7 +30,7 @@
     {% endif %}
 
 
-    <form method="get"><label>Ordenar por <select name="sort">
+    <form method="get" class="toolbar"><label>Ordenar por <select name="sort">
     {% for value, label in [('id_asc', 'ID ascendente'), ('id_desc', 'ID descendente'), ('az', 'A–Z')] %}
     <option value="{{ value }}"{% if sort == value %} selected{% endif %}>{{ label }}</option>
     {% endfor %}</select></label><button type="submit">Ordenar</button></form>
@@ -44,10 +38,7 @@
 {% for section_id, title, groups in [('active-concepts', 'Conceptos activos', conceptos), ('empty-concepts', 'Conceptos sin alternativas vigentes', empty_concepts)] %}
 <section id="{{ section_id }}">
     <h2>{{ title }}</h2>
-    <table
-        border="1"
-        cellpadding="8"
-    >
+    <div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table>
 
         <tr>
             <th>ID</th>
@@ -59,15 +50,15 @@
 
             <tr>
 
-                <td>
+                <td class="identifier">
                     {{ concepto["concept_id"] }}
                 </td>
 
                 <td>
-                    {{ concepto["preferred_label"] | human_concept_label }}
+                    <strong>{{ concepto["preferred_label"] | human_concept_label }}</strong>
                 </td>
 
-                <td>
+                <td class="row-actions">
 
                     {% if g.current_access_role in ("reviewer", "master") %}
                     <a href="{{
@@ -95,7 +86,7 @@
 
         {% endfor %}
 
-    </table>
+    </table></div>
 </section>
 {% endfor %}
 
@@ -105,7 +96,4 @@
             Volver al espacio de trabajo
         </a>
     </p>
-
-</body>
-
-</html>
+{% endblock %}

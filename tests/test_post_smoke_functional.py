@@ -216,7 +216,7 @@ class PostSmokeFunctionalTests(unittest.TestCase):
                     for table in tables:
                         for status in ('= Sin cambio', '↻ Cambia', '↻ Cambia de grupo', '+ Nueva', '<th>Estado</th>'):
                             self.assertIn(status, table)
-                        ids = [int(value) for value in re.findall(r'<tr><td>(?:ID )?(\d+)</td>', table)]
+                        ids = [int(value) for value in re.findall(r'<tr><td class="preview-status">.*?</td><td>(?:ID )?(\d+)</td>', table)]
                         self.assertEqual(ids, [75,74,73,72,71])
                     self.assertNotIn('Sin cambios de nomenclatura.', structural)
 
