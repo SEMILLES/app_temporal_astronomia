@@ -243,7 +243,7 @@ class AlternativeRouteTests(unittest.TestCase):
     def test_classification_comparator_id_only_in_summary(self):
         response = self.client.get('/ocurrencias/2/clasificar')
         self.assertEqual(200, response.status_code)
-        comparator = response.text.split('<h2>Alternativas vigentes</h2>')[1].split('</section>')[0]
+        comparator = response.text.split('<h2>Alternativas vigentes del concepto de referencia</h2>')[1].split('</section>')[0]
         self.assertIn('<summary>TEST-1 · ID 1 — 1 ocurrencia</summary>', comparator)
         self.assertNotIn('ID 1', comparator.split('</summary>')[1])
 
@@ -276,7 +276,7 @@ class AlternativeRouteTests(unittest.TestCase):
         expected = db.execute('SELECT alternative_id,working_label FROM alternative ORDER BY working_label').fetchall()
         db.commit(); db.close()
         page = self.client.get('/ocurrencias/2/clasificar').text
-        comparator = page.split('<h2>Alternativas vigentes</h2>')[1].split('</section>')[0]
+        comparator = page.split('<h2>Alternativas vigentes del concepto de referencia</h2>')[1].split('</section>')[0]
         positions = [comparator.index('<summary>TEST-' + row['working_label'] + ' · ID ' + str(row['alternative_id'])) for row in expected]
         self.assertEqual(positions, sorted(positions))
 

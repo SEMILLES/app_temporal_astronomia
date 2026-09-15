@@ -25,11 +25,12 @@ from alternative_structural import (StructuralAlternativeError, retire_preview,
     apply_retire, merge_preview, apply_merge, split_preview, apply_split,
     move_preview, apply_move, lexical_component, component_move_preview, apply_component_move)
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
-from functional_presentation import concept_options, preview_rows, reference_basis_label, has_label_changes
+from functional_presentation import concept_options, preview_rows, reference_basis_label, has_label_changes, preview_status
 
 
 alternatives_bp = Blueprint("alternatives", __name__)
 alternatives_bp.add_app_template_filter(preview_rows, 'preview_rows')
+alternatives_bp.add_app_template_filter(preview_status, 'preview_status')
 alternatives_bp.add_app_template_filter(reference_basis_label, 'reference_basis_label')
 alternatives_bp.add_app_template_filter(has_label_changes, 'has_label_changes')
 

@@ -20,7 +20,7 @@ from alternative_workflow import (
 from alternative_workflow import new_review_preview
 from alternative_nomenclature import working_label_key
 from alternative_morphology import submission_morphology
-from functional_presentation import concept_options
+from functional_presentation import concept_options, relation_target_error
 from concept_labels import alternative_display_label
 from source_period import format_source_period
 from immediate_acceptance import (ImmediateAcceptanceError, run_normal_review,
@@ -347,7 +347,7 @@ def _alternative_review_context(db, rows):
                 for target, parameter in resolved_targets:
                     valid=db.execute('SELECT 1 FROM alternative WHERE alternative_id=? AND concept_id=? AND retired_at IS NULL',(target,concept_id)).fetchone()
                     if not valid:
-                        relations_error='La relación propuesta ya no tiene un destino vigente del mismo concepto.'
+                        relations_error=relation_target_error(db, target, concept_id)
                         break
                 else:
                     if relations:

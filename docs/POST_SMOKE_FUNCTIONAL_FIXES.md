@@ -49,7 +49,35 @@ La ejecución ampliada de 253 pruebas incluyó además `tests.test_submission_le
 
 No se alteraron estas suites ni las garantías de concurrencia para ocultar sus fallos. Queda pendiente actualizar esos fixtures y la instrumentación de la prueba al contrato actual, fuera del cierre de hallazgos del smoke test.
 
-## Pendientes deliberados
+## Cierre final post-smoke — ajustes de presentación
+
+- Las alternativas retiradas se conservan separadas, dentro de un `details` cerrado por defecto con contador. Se mantienen ID, estado, última denominación e información histórica; se omite el bloque cuando está vacío.
+- Las tablas de fusión, retiro, división, traslado individual y traslado de grupo muestran `Actual | Después | Estado`, con la convención existente: `= Sin cambio`, `↻ Cambia`, `↻ Cambia de grupo`, `+ Nueva`. El orden usa la etiqueta actual; las nuevas se ordenan por la propuesta. Solo se ordena una copia de las filas: el cálculo no cambia.
+- Clasificar ocurrencia distingue el concepto de referencia de la clasificación derivada del assignment vigente, con etiqueta completa e ID. Sin assignment muestra `Sin clasificación vigente`. Las alternativas del concepto de referencia se presentan como opciones para una nueva decisión. No se sincronizan referencias ni se alteran asignaciones.
+- Los errores de relaciones indican el ID histórico y distinguen destino retirado, inexistente o de otro concepto. El mismo diagnóstico aparece en revisión y en el bloqueo del POST; las condiciones de validación permanecen intactas.
+- Se reemplazó evidencia por ocurrencia en el enlace de registro, borradores y confirmación inmediata. Se conservaron los identificadores internos y los comentarios históricos.
+- Los conceptos sin alternativas vigentes siguen separados y disponibles como destino; sus pruebas existentes continúan pasando.
+
+### Archivos de este cierre
+
+`functional_presentation.py`, `alternative_workflow.py`, `routes/alternatives.py`, `routes/submissions.py`; plantillas `alternativas.html`, `gestionar_alternativa.html`, `clasificar_ocurrencia.html`, `ocurrencias.html`, `borradores.html`, `confirmar_aceptacion_inmediata.html`; `tests/test_post_smoke_functional.py`, `tests/test_alternative_routes.py` y este documento.
+
+### Pruebas del cierre
+
+Se añadieron cinco pruebas: referencia distinta de clasificación actual y ausencia de assignment; terminología y ausencia de sección vacía; orden de alternativas nuevas sin mutación; relación histórica retirada bloqueada en pantalla y POST sin escrituras; mensajes para destino inexistente o de otro concepto. Se ampliaron dos pruebas para comprobar el plegado/contador y los cuatro estados en las cinco operaciones. Se actualizaron dos expectativas del encabezado del comparador en `test_alternative_routes.py`.
+
+Resultados, usando exclusivamente bases sintéticas temporales:
+
+- `tests.test_post_smoke_functional`: **16/16**, incluidas las pruebas de navegador Edge headless.
+- Suites focalizadas: **165/165** (`test_alternative_routes`, `test_alternative_workflow`, `test_occurrence_submission_decoupling`, `test_submission_concept_resolution`, `test_submission_lexical_decision`, `test_alternative_structural`, `test_canonical_nomenclature`).
+- Regresión representativa: **66/66** (`test_alternative_morphology`, `test_alternative_admin`, `test_immediate_acceptance`, `test_immediate_acceptance_routes`, `test_backend_hardening`).
+- Adicionalmente, `test_occurrence_grammar_routes`: **23 aprobadas y 1 fallo preexistente**. `test_review_lists_alternative_and_reject_does_not_modify_canonical` envía una revisión sin las precondiciones actuales y espera 302, pero recibe 409. Se reprodujo exactamente en una copia temporal de `git archive HEAD`; no se debilitó la validación ni se modificó esa suite.
+
+En total: **247 pruebas aprobadas en las tandas limpias**, más las 23 aprobadas de gramática. El único fallo pendiente es el fixture preexistente descrito. `git diff --check` sin errores. Los dos archivos históricos excluidos se verificaron mediante SHA-256, sin cambios.
+
+No se ejecutaron migraciones ni operaciones sobre bases reales, Railway, staging, commits o push. No quedan hallazgos de presentación solicitados pendientes; los cambios metodológicos siguientes permanecen fuera de alcance.
+
+## Pendientes metodológicos y de alcance
 
 - Alternativas activas con cero ocurrencias, retiro/suspensión automática y retirada de su etiqueta.
 - Traslado parcial de un componente o ruptura de relaciones para trasladar una sola alternativa.

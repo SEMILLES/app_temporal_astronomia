@@ -121,8 +121,9 @@
     <h1>Alternativas de {{ concepto["preferred_label"] | human_concept_label }}</h1>
 
     {% for title, groups in [('Alternativas vigentes', alternative_groups), ('Alternativas retiradas', retired_groups)] %}
+    {% if not loop.last or groups %}
     <section id="{{ 'retired-alternatives' if loop.last else 'active-alternatives' }}">
-    <h2>{{ title }}</h2>
+    {% if loop.last %}<details><summary>{{ title }} ({{ groups|length }})</summary>{% else %}<h2>{{ title }}</h2>{% endif %}
     <div class="alternatives-list">
         {% if groups %}
             {% for group in groups %}
@@ -247,7 +248,9 @@
         {% endif %}
     </div>
 
+    {% if loop.last %}</details>{% endif %}
     </section>
+    {% endif %}
     {% endfor %}
 
     <p>La creación y la renumeración de alternativas se realizan mediante el workflow de análisis y revisión.</p>

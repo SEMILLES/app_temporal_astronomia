@@ -73,6 +73,8 @@ class PostSmokeFunctionalTests(unittest.TestCase):
         before = self.snapshot()
         page = self.client.get('/conceptos/1/alternativas').text
         active, retired = page.split('<section id="retired-alternatives">')
+        self.assertIn('<details><summary>Alternativas retiradas (1)</summary>', retired)
+        self.assertNotRegex(retired, r'<details[^>]*\bopen\b')
         self.assertNotIn('RETIRED-LABEL', active)
         self.assertIn('Última denominación:', retired)
         self.assertIn('TEST-RETIRED-LABEL', retired)
@@ -191,6 +193,8 @@ class PostSmokeFunctionalTests(unittest.TestCase):
         from routes.alternatives import _management_context
         rows = [dict(alternative_id=i, current_label=label, proposed_label='9a')
                 for i, label in ((71, None), (72, '10a'), (73, '2a'), (74, '1b'), (75, '1a'))]
+        rows[-1]['proposed_label'] = '1a'
+        rows[-2]['proposed_label'] = '1c'
         with self.client.application.test_request_context():
             g.current_access_role = 'reviewer'
             db = self.connect()
@@ -210,9 +214,70 @@ class PostSmokeFunctionalTests(unittest.TestCase):
                     tables = re.findall(r'<table>.*?</table>', structural, re.S)
                     self.assertEqual(len(tables), 2 if kind in ('move','component_move') else 1)
                     for table in tables:
+                        for status in ('= Sin cambio', '↻ Cambia', '↻ Cambia de grupo', '+ Nueva', '<th>Estado</th>'):
+                            self.assertIn(status, table)
                         ids = [int(value) for value in re.findall(r'<tr><td>(?:ID )?(\d+)</td>', table)]
                         self.assertEqual(ids, [75,74,73,72,71])
                     self.assertNotIn('Sin cambios de nomenclatura.', structural)
+
+    def test_classification_reference_and_current_assignment_are_independent(self):
+        db = self.connect()
+        db.execute("INSERT INTO concept(preferred_label) VALUES('ACTUAL')")
+        db.execute("UPDATE alternative SET concept_id=2, working_label='6b' WHERE alternative_id=1")
+        db.commit(); db.close()
+        before = self.snapshot()
+        page = self.client.get('/ocurrencias/1/clasificar')
+        self.assertEqual(page.status_code, 200)
+        self.assertIn('<h2>Concepto de referencia</h2><p>TEST</p>', page.text)
+        self.assertIn('<h2>Clasificación vigente</h2><p>ACTUAL-6b · ID 1</p>', page.text)
+        self.assertIn('Alternativas vigentes del concepto de referencia', page.text)
+        self.assertNotIn('No fue posible guardar el análisis', page.text)
+        self.assertIn('Sin clasificación vigente', self.client.get('/ocurrencias/2/clasificar').text)
+        self.assertEqual(before, self.snapshot())
+
+    def test_occurrence_terminology_and_no_empty_retired_section(self):
+        page = self.client.get('/ocurrencias').text
+        self.assertIn('Registrar nueva ocurrencia', page)
+        self.assertNotIn('Registrar nueva evidencia', page)
+        self.assertNotIn('retired-alternatives', self.client.get('/conceptos/1/alternativas').text)
+
+    def test_new_preview_rows_follow_proposed_label_without_mutation(self):
+        rows = [dict(alternative_id=i, current_label=None, proposed_label=label)
+                for i, label in ((1, '10a'), (2, '2b'), (3, '2a'))]
+        before = json.dumps(rows)
+        self.assertEqual([r['alternative_id'] for r in preview_rows(rows)], [3, 2, 1])
+        self.assertEqual(before, json.dumps(rows))
+
+    def test_retired_proposed_relation_is_explicit_and_cannot_be_accepted(self):
+        response = self.client.post('/ocurrencias/2/clasificar', data=dict(
+            proposal_kind='NEW', phonological_relation_answer='YES',
+            relation_target_type_0='alternative', relation_alternative_id='1',
+            relation_parameter='CM_1', morphology_component_count='N/A'))
+        self.assertEqual(response.status_code, 302, response.text)
+        db = self.connect()
+        from submission_concept_resolution import save_resolution
+        save_resolution(db, 1, 'CONFIRM_REFERENCE', access_role='reviewer')
+        db.execute("UPDATE assignment SET is_current=0 WHERE alternative_id=1")
+        db.execute("UPDATE alternative SET retired_at='2026-01-01' WHERE alternative_id=1")
+        db.commit(); db.close()
+        before = self.snapshot()
+        page = self.client.get('/aportes/1').text
+        message = 'No se puede aceptar esta relación porque la Alternativa destino ID 1 fue retirada.'
+        self.assertIn(message, page)
+        self.assertIn('value="ACCEPTED" data-blocked="true" disabled', page)
+        response = self.client.post('/aportes/1/decidir', data=dict(
+            decision='new', relations_resolution='ACCEPTED', morphology_resolution='ACCEPTED',
+            lexical_preview_token=hidden(page, 'lexical_preview_token')))
+        self.assertEqual(response.status_code, 400, response.text)
+        self.assertIn(message, response.text)
+        self.assertEqual(before, self.snapshot())
+
+    def test_invalid_relation_messages_distinguish_missing_and_other_concept(self):
+        from functional_presentation import relation_target_error
+        db = self.connect()
+        self.assertIn('ID 999 no existe', relation_target_error(db, 999, 1))
+        self.assertIn('ID 1 pertenece a otro concepto', relation_target_error(db, 1, 2))
+        db.close()
 
     def test_browser_morphology_error_keeps_dynamic_inputs_and_can_be_corrected(self):
         with sync_playwright() as pw:

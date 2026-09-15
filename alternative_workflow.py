@@ -283,8 +283,9 @@ def _materialize_relations(connection, source_id, submission_id):
             WHERE source.alternative_id=? AND target.alternative_id=?
         """, (source_id, target_id)).fetchone()
         if pair is None or pair[2] is not None or pair[0] != pair[1]:
+            from functional_presentation import relation_target_error
             raise AlternativeWorkflowError(
-                "La relación propuesta ya no tiene un destino vigente del mismo concept."
+                relation_target_error(connection, target_id, pair[0] if pair else None)
             )
         if current_relation(connection, source_id, target_id, parameter) is None:
             create_current_relation(connection, source_id, target_id, parameter, created_from_submission_id=submission_id)
@@ -312,7 +313,8 @@ def plan_lexical_review(connection, occurrence_id, concept_id, *, destination=No
     ref = new.ref if new else int(destination)
     for target, _ in targets:
         if not new or not _valid_alternative(connection, target, concept_id):
-            raise AlternativeWorkflowError("La relación no tiene un destino vigente del mismo concepto.")
+            from functional_presentation import relation_target_error
+            raise AlternativeWorkflowError(relation_target_error(connection, target, concept_id))
     operation = LexicalOperation(
         occurrence_id, _current_assignment_id(connection, occurrence_id), ref, concept_id,
         new_alternatives=(new,) if new else (),
