@@ -346,6 +346,28 @@ class IntegrityAuditTests(unittest.TestCase):
         self.db.execute("INSERT INTO activity_event(event_type,entity_type,entity_id,access_role) VALUES('changed','alternative',999,'analyst')")
         self.assertCode('ACTIVITY_ENTITY_REFERENCE')
 
+    def test_catalog_publication_activity_reference_exists(self):
+        self.snapshot(version=1)
+        self.db.execute("INSERT INTO activity_event(event_type,entity_type,entity_id,access_role) VALUES('catalog_published','catalog_publication',1,'master')")
+        self.assertEqual(self.audit()['by_code'].get('ACTIVITY_ENTITY_REFERENCE'), None)
+
+    def test_catalog_publication_activity_reference_missing_fails(self):
+        self.db.execute("INSERT INTO activity_event(event_type,entity_type,entity_id,access_role) VALUES('catalog_published','catalog_publication',999,'master')")
+        self.assertCode('ACTIVITY_ENTITY_REFERENCE')
+
+    def test_existing_occurrence_draft_activity_reference_passes(self):
+        self.db.execute("INSERT INTO occurrence_draft(source_id,original_gloss) VALUES(1,'Draft')")
+        self.db.execute("INSERT INTO activity_event(event_type,entity_type,entity_id,access_role) VALUES('occurrence_draft_created','occurrence_draft',1,'analyst')")
+        self.assertEqual(self.audit()['by_code'].get('ACTIVITY_ENTITY_REFERENCE'), None)
+
+    def test_deleted_occurrence_draft_activity_reference_is_historical(self):
+        self.db.execute("INSERT INTO activity_event(event_type,entity_type,entity_id,access_role) VALUES('occurrence_draft_deleted','occurrence_draft',999,'analyst')")
+        self.assertEqual(self.audit()['by_code'].get('ACTIVITY_ENTITY_REFERENCE'), None)
+
+    def test_unknown_activity_entity_type_fails(self):
+        self.db.execute("INSERT INTO activity_event(event_type,entity_type,entity_id,access_role) VALUES('changed','unknown_entity',1,'analyst')")
+        self.assertCode('ACTIVITY_ENTITY_REFERENCE')
+
     def test_no_app_import_in_cli(self):
         result = subprocess.run([sys.executable, '-c',
             "import sys; import integrity_audit; assert 'app' not in sys.modules; assert 'database' not in sys.modules"],

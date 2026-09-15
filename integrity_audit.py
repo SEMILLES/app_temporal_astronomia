@@ -102,6 +102,22 @@ REQUIRED = {
     'application_setting': 'setting_key',
 }
 
+PERSISTENT_ACTIVITY_ENTITIES = {
+    'application_setting': ('application_setting', 'setting_key'),
+    'alternative': ('alternative', 'alternative_id'),
+    'alternative_relation': ('alternative_relation', 'alternative_relation_id'),
+    'catalog_publication': ('catalog_publication', 'publication_id'),
+    'collaborator': ('collaborator', 'collaborator_id'),
+    'concept': ('concept', 'concept_id'),
+    'concept_proposal': ('concept_proposal', 'concept_proposal_id'),
+    'conflict': ('conflict', 'conflict_id'),
+    'occurrence': ('occurrence', 'occurrence_id'),
+    'renumber_event': ('renumber_event', 'renumber_event_id'),
+    'source': ('source', 'source_id'),
+    'submission': ('submission', 'submission_id'),
+}
+EPHEMERAL_ACTIVITY_ENTITIES = {'occurrence_draft'}
+
 
 class Auditor:
     def __init__(self, connection, preflight=False):
@@ -308,10 +324,21 @@ class Auditor:
 
     def activity_orphans(self):
         for row in self.db.execute('SELECT activity_event_id,entity_type,entity_id FROM activity_event WHERE entity_id IS NOT NULL'):
-            table = row['entity_type']
-            if table in self.columns and table + '_id' in self.columns[table]:
-                if not self.db.execute(f'SELECT 1 FROM {quote(table)} WHERE {quote(table + "_id") }=?', (row['entity_id'],)).fetchone():
+            entity_type = row['entity_type']
+            if entity_type in PERSISTENT_ACTIVITY_ENTITIES:
+                table, key = PERSISTENT_ACTIVITY_ENTITIES[entity_type]
+                if not self.db.execute(
+                    f'SELECT 1 FROM {quote(table)} WHERE {quote(key)}=?',
+                    (row['entity_id'],),
+                ).fetchone():
                     yield dict(row)
+            elif entity_type in EPHEMERAL_ACTIVITY_ENTITIES:
+                table, key = 'occurrence_draft', 'draft_id'
+                if self.db.execute(
+                    f'SELECT 1 FROM {quote(table)} WHERE {quote(key)}=?',
+                    (row['entity_id'],),
+                ).fetchone() is None:
+                    continue
             else:
                 yield dict(row, reason='Unknown polymorphic entity type; cannot verify')
 
