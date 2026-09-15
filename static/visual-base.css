@@ -99,6 +99,9 @@
 .visual-pilot .history { color: var(--muted); background: #f7f8f9; }
 .visual-pilot .section-nav { display: flex; flex-wrap: wrap; gap: .4rem 1rem; border-bottom: 1px solid var(--line); padding: .6rem 0; }
 .visual-pilot .structural-operations { border-top: 2px solid #95716c; }
+.visual-internal .structural-operations fieldset form { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem 1rem; }
+.visual-internal .structural-operations fieldset form > label { flex: 1 1 15rem; min-width: min(100%, 15rem); }
+.visual-internal .structural-operations fieldset form > button { flex: 0 0 auto; margin-top: .25rem; }
 .visual-pilot .preview { border: 1px solid var(--line); padding: .8rem 1rem; margin-top: 1rem; }
 .visual-pilot .transfer-context { padding: .5rem .75rem; background: var(--surface); border-left: 3px solid var(--accent); }
 .alternative-card { border-block: 1px solid var(--line); padding: .8rem 0; margin: .7rem 0; }

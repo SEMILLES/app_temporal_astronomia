@@ -316,7 +316,14 @@ class AlternativeRouteTests(unittest.TestCase):
         for text in ("Estado","= Sin cambio","+ Nueva","0 alternativas existentes cambian. Se creará 1 alternativa nueva."):
             self.assertIn(text,page)
         self.assertIn("Los cambios de nomenclatura se aplicarán al confirmar la decisión del revisor.",page)
-        self.assertIn('class="nomenclature-label" name="label_1" value="1a" readonly',page)
+        for attribute in (
+            'class="nomenclature-label"',
+            'name="label_1"',
+            'value="1a"',
+            'readonly',
+            'aria-label="Etiqueta de TEST-1a"',
+        ):
+            self.assertIn(attribute, page)
         self.assertIn("input.readOnly=!editable",page)
 
     def test_existing_reviewer_decisions_and_changed_nomenclature_warning(self):

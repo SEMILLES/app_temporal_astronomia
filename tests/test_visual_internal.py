@@ -60,7 +60,7 @@ class InternalVisualTests(unittest.TestCase):
         return result
 
     def test_navigation_exact_links_for_each_role_and_restricted_routes(self):
-        shared = ['/trabajo', '/ocurrencias', '/borradores', '/conceptos', '/aportes', '/catalogo-interno']
+        shared = ['/trabajo', '/ocurrencias', '/borradores', '/fuentes', '/conceptos', '/aportes', '/catalogo-interno']
         review = ['/aportes/pendientes', '/conflictos']
         admin = ['/colaboradores', '/actualizar-catalogo', '/publicaciones']
         before = self.snapshot()

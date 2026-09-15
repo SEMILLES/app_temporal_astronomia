@@ -86,6 +86,16 @@ class AlternativeWorkflowTests(unittest.TestCase):
         self.assertEqual(resolved,2); current=self.db.execute("SELECT * FROM assignment WHERE occurrence_id=5 AND is_current=1").fetchone()
         self.assertEqual((current["alternative_id"],current["created_from_submission_id"]),(2,sid)); sub=self.db.execute("SELECT s.status,s.resolution,a.resolved_alternative_id FROM submission s JOIN alternative_submission a USING(submission_id) WHERE submission_id=?",(sid,)).fetchone(); self.assertEqual(tuple(sub),("resolved","accepted",2))
 
+    def test_reassigning_last_occurrence_retires_origin(self):
+        sid=self.create(occurrence=1, kind="EXISTING", proposed_existing_alternative_id=2)
+        review_as_existing(self.db, sid, 2, access_role="reviewer", review_note="Reasignación documentada")
+        alternative = self.db.execute("SELECT alternative_id,working_label,retired_at FROM alternative WHERE alternative_id=1").fetchone()
+        self.assertEqual(alternative[0], 1)
+        self.assertEqual(alternative[1], "1a")
+        self.assertIsNotNone(alternative[2])
+        self.assertEqual(self.db.execute("SELECT count(*) FROM assignment WHERE alternative_id=1 AND is_current=1").fetchone()[0], 0)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM activity_event WHERE event_type='alternative_auto_retired' AND entity_id=1").fetchone()[0], 1)
+
     def test_review_existing_supersedes_previous(self):
         self.db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(5,1)"); self.db.commit(); old=self.db.execute("SELECT assignment_id FROM assignment WHERE occurrence_id=5").fetchone()[0]
         sid=self.create(kind="EXISTING",proposed_existing_alternative_id=2); review_as_existing(self.db,sid,2, access_role="reviewer", review_note="Revision documentada"); rows=self.db.execute("SELECT * FROM assignment WHERE occurrence_id=5 ORDER BY assignment_id").fetchall()

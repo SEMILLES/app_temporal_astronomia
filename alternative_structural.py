@@ -147,6 +147,32 @@ def _retire_parts(connection, alternative_id):
     connection.execute("UPDATE alternative_relation SET is_current=0 WHERE is_current=1 AND (alternative_low_id=? OR alternative_high_id=?)", (alternative_id, alternative_id))
 
 
+def retire_empty_alternatives(connection, alternative_ids, *, reason, actor=None):
+    """Retire active alternatives empty in the transaction's final state."""
+    ids = sorted({int(alternative_id) for alternative_id in alternative_ids if alternative_id is not None})
+    if not ids:
+        return []
+    marks = ','.join('?' for _ in ids)
+    rows = connection.execute(f"""
+        SELECT alternative_id FROM alternative
+        WHERE alternative_id IN ({marks}) AND retired_at IS NULL
+          AND NOT EXISTS (
+              SELECT 1 FROM assignment
+              WHERE assignment.alternative_id=alternative.alternative_id
+                AND assignment.is_current=1
+          )
+        ORDER BY alternative_id
+    """, ids).fetchall()
+    retired = []
+    for row in rows:
+        alternative_id = row['alternative_id']
+        _retire_parts(connection, alternative_id)
+        retired.append(alternative_id)
+        if actor and actor.get('access_role'):
+            _event(connection, 'alternative_auto_retired', alternative_id, actor, reason)
+    return retired
+
+
 def _nomenclature(connection, concept_id, reason, created_by):
     preview = calculate_nomenclature_preview(connection, concept_id)
     if not preview["conclusive"]:

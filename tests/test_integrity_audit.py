@@ -96,10 +96,10 @@ class IntegrityAuditTests(unittest.TestCase):
         report = self.assertCode('NOMENCLATURE:1')
         self.assertIn('VARIANT_CAPACITY_EXCEEDED', str(report))
 
-    def test_empty_alternative_warn_only_and_preflight(self):
+    def test_empty_alternative_fails_and_preflight_excludes_nonblocking_checks(self):
         self.db.execute('DELETE FROM assignment')
-        report = self.assertCode('EMPTY_ACTIVE_ALTERNATIVE', 'WARN')
-        self.assertEqual(report['status'], 'WARN')
+        report = self.assertCode('EMPTY_ACTIVE_ALTERNATIVE', 'FAIL')
+        self.assertEqual(report['status'], 'FAIL')
         report = self.audit(preflight=True)
         self.assertEqual(report['status'], 'PASS')
         self.assertNotIn('EMPTY_ACTIVE_ALTERNATIVE', [r['code'] for r in report['results']])
@@ -186,11 +186,11 @@ class IntegrityAuditTests(unittest.TestCase):
         self.assertFalse(missing.exists())
         self.assertEqual(self.cli().returncode, 2)
 
-    def test_warn_exit_zero(self):
+    def test_empty_active_exit_fails(self):
         self.db.execute('DELETE FROM assignment')
         result = self.cli(self.path, '--json')
-        self.assertEqual(result.returncode, 0)
-        self.assertEqual(json.loads(result.stdout)['status'], 'WARN')
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(json.loads(result.stdout)['status'], 'FAIL')
 
     def test_invalid_file_unchanged(self):
         bad = self.path.parent / 'not-sqlite.db'

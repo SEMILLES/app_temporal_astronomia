@@ -18,6 +18,7 @@ from alternative_relations import (
 from assignments import create_or_replace_assignment
 from phonological_parameters import validate_phonological_parameter
 from alternative_morphology import store_submission_morphology,materialize_submission_morphology
+from alternative_structural import retire_empty_alternatives
 from activity import record_activity
 from conflicts import detect_conflicts_after_change
 from submission_concept_resolution import current_resolution
@@ -311,6 +312,17 @@ def plan_lexical_review(connection, occurrence_id, concept_id, *, destination=No
     """
     new = VirtualAlternative(concept_id) if destination is None else None
     ref = new.ref if new else int(destination)
+    current = connection.execute(
+        'SELECT alternative_id FROM assignment WHERE occurrence_id=? AND is_current=1',
+        (occurrence_id,)).fetchone()
+    validity_changes = ()
+    if current is not None and current[0] != ref:
+        assignment_count = connection.execute(
+            'SELECT count(*) FROM assignment WHERE alternative_id=? AND is_current=1',
+            (current[0],)).fetchone()[0]
+        if assignment_count == 1:
+            from lexical_simulation import ValidityChange
+            validity_changes = (ValidityChange(current[0], False),)
     for target, _ in targets:
         if not new or not _valid_alternative(connection, target, concept_id):
             from functional_presentation import relation_target_error
@@ -318,6 +330,7 @@ def plan_lexical_review(connection, occurrence_id, concept_id, *, destination=No
     operation = LexicalOperation(
         occurrence_id, _current_assignment_id(connection, occurrence_id), ref, concept_id,
         new_alternatives=(new,) if new else (),
+        validity_changes=validity_changes,
         added_relations=tuple(Relation(f"new_relation:{i}", ref, target, parameter)
                               for i, (target, parameter) in enumerate(targets)))
     plan = simulate_lexical_operation(connection, operation)
@@ -424,9 +437,15 @@ def review_as_existing(connection, submission_id, alternative_id, *,
         morphology_resolution = _rejected_group(connection, submission_id,
             'alternative_submission_morphology', morphology_resolution)
         before = _current_assignment_id(connection, submission['occurrence_id'])
+        previous_alternative = connection.execute(
+            'SELECT alternative_id FROM assignment WHERE assignment_id=?', (before,)
+        ).fetchone()
         conflict_before = connection.execute('SELECT coalesce(max(conflict_id),0) FROM conflict').fetchone()[0]
         plan = plan_lexical_review(connection, submission["occurrence_id"], concept_id, destination=alternative_id)
         result, changed = create_or_replace_assignment(connection,submission["occurrence_id"],int(alternative_id),created_by=reviewed_by,created_from_submission_id=submission_id)
+        retire_empty_alternatives(connection, (previous_alternative[0],) if previous_alternative else (),
+                       reason='Retiro automático por pérdida de la última occurrence.',
+                       actor={'access_role': access_role, 'collaborator_id': collaborator_id})
         _apply_review_plan(connection, plan, submission_id, reviewed_by, collaborator_id=collaborator_id, access_role=access_role)
         save_decision(connection, submission_id, 'USE_EXISTING',
             concept_resolution_id=current_resolution(connection, submission_id)['submission_concept_resolution_id'],
@@ -491,6 +510,9 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
         approve_relations = relations_resolution == 'ACCEPTED'
         approve_morphology = morphology_resolution == 'ACCEPTED'
         before = _current_assignment_id(connection, submission['occurrence_id'])
+        previous_alternative = connection.execute(
+            'SELECT alternative_id FROM assignment WHERE assignment_id=?', (before,)
+        ).fetchone()
         conflict_before = connection.execute('SELECT coalesce(max(conflict_id),0) FROM conflict').fetchone()[0]
         targets = _relation_targets(connection, submission_id) if approve_relations else []
         plan = plan_lexical_review(connection, submission['occurrence_id'], concept_id,
@@ -498,6 +520,9 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
         new_id=connection.execute("INSERT INTO alternative(concept_id,working_label) VALUES(?,NULL)",(concept_id,)).lastrowid
         if approve_relations: _materialize_relations(connection,new_id,submission_id)
         result, _ = create_or_replace_assignment(connection,submission["occurrence_id"],new_id,created_by=reviewed_by,created_from_submission_id=submission_id)
+        retire_empty_alternatives(connection, (previous_alternative[0],) if previous_alternative else (),
+                       reason='Retiro automático por pérdida de la última occurrence.',
+                       actor={'access_role': access_role, 'collaborator_id': collaborator_id})
         _apply_review_plan(connection, plan, submission_id, reviewed_by, new_id, collaborator_id=collaborator_id, access_role=access_role)
         morphology_id = None
         if approve_morphology:

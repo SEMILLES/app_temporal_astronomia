@@ -242,7 +242,7 @@ class Auditor:
         if not self.preflight:
             self.query('EMPTY_ACTIVE_ALTERNATIVE', '''SELECT alternative_id,concept_id,working_label FROM alternative al
                 WHERE retired_at IS NULL AND NOT EXISTS(SELECT 1 FROM assignment a JOIN occurrence o USING(occurrence_id)
-                    WHERE a.alternative_id=al.alternative_id AND a.is_current=1)''', 'WARN')
+                    WHERE a.alternative_id=al.alternative_id AND a.is_current=1)''')
             self.query('OCCURRENCE_WITHOUT_CURRENT_ASSIGNMENT', '''SELECT occurrence_id FROM occurrence o
                 WHERE NOT EXISTS(SELECT 1 FROM assignment a WHERE a.occurrence_id=o.occurrence_id AND a.is_current=1)''', 'WARN')
 

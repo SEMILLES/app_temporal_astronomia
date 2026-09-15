@@ -10,6 +10,7 @@ from alternative_structural import (
     StructuralAlternativeError, retire_preview, apply_retire, merge_preview,
     apply_merge, split_preview, apply_split, move_preview, apply_move,
     component_move_preview, apply_component_move, lexical_component,
+    retire_empty_alternatives,
 )
 
 
@@ -148,6 +149,40 @@ class StructuralAlternativeTests(unittest.TestCase):
         self.assertEqual(self.db.execute("SELECT count(*) FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0],0)
         self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE is_current=1 AND (alternative_low_id=1 OR alternative_high_id=1)").fetchone()[0],0)
         self.assertEqual(self.db.execute("SELECT is_current FROM alternative_morphology WHERE alternative_id=1").fetchone()[0],0)
+
+    def test_empty_alternative_is_retired_after_final_assignment_state(self):
+        self.db.execute("UPDATE assignment SET alternative_id=2,is_current=1 WHERE occurrence_id=1 AND is_current=1")
+        self.db.execute("UPDATE assignment SET is_current=0 WHERE occurrence_id=2 AND is_current=1")
+        self.db.commit()
+        retired = retire_empty_alternatives(
+            self.db, (1,), reason="Última occurrence reasignada.",
+            actor=self.actor)
+        self.assertEqual(retired, [1])
+        row = self.db.execute("SELECT alternative_id,working_label,retired_at FROM alternative WHERE alternative_id=1").fetchone()
+        self.assertEqual(row[0], 1)
+        self.assertEqual(row[1], "1a")
+        self.assertIsNotNone(row[2])
+        self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE is_current=1 AND (alternative_low_id=1 OR alternative_high_id=1)").fetchone()[0], 0)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE is_current=0 AND (alternative_low_id=1 OR alternative_high_id=1)").fetchone()[0], 2)
+        self.assertEqual(self.db.execute("SELECT count(*) FROM activity_event WHERE event_type='alternative_auto_retired' AND entity_id=1").fetchone()[0], 1)
+
+    def test_alternative_with_remaining_assignment_stays_active(self):
+        self.db.execute("UPDATE assignment SET alternative_id=2,is_current=1 WHERE occurrence_id=1 AND is_current=1")
+        self.db.commit()
+        self.assertEqual(retire_empty_alternatives(self.db, (1,), reason="No retirar."), [])
+        self.assertIsNone(self.db.execute("SELECT retired_at FROM alternative WHERE alternative_id=1").fetchone()[0])
+
+    def test_empty_retirement_rolls_back_with_parent_operation(self):
+        self.db.execute("CREATE TRIGGER fail_auto_retirement BEFORE INSERT ON activity_event WHEN NEW.event_type='alternative_auto_retired' BEGIN SELECT RAISE(ABORT,'synthetic'); END")
+        self.db.execute("UPDATE assignment SET alternative_id=2,is_current=1 WHERE occurrence_id=1 AND is_current=1")
+        self.db.execute("UPDATE assignment SET is_current=0 WHERE occurrence_id=2 AND is_current=1")
+        self.db.commit()
+        self.db.execute("BEGIN IMMEDIATE")
+        with self.assertRaises(sqlite3.IntegrityError):
+            retire_empty_alternatives(self.db, (1,), reason="Fallo.", actor=self.actor)
+        self.db.rollback()
+        self.assertIsNone(self.db.execute("SELECT retired_at FROM alternative WHERE alternative_id=1").fetchone()[0])
+        self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_relation WHERE is_current=1 AND (alternative_low_id=1 OR alternative_high_id=1)").fetchone()[0], 2)
 
     def test_merge_union_reassigns_deduplicates_and_keeps_target_morphology(self):
         self.db.execute("INSERT INTO alternative_morphology(alternative_id,component_count,free_permutation) VALUES(2,2,'NO')")
