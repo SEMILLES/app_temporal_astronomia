@@ -267,18 +267,80 @@ class IntegrityAuditTests(unittest.TestCase):
         self.db.execute("INSERT INTO alternative_submission(submission_id,proposal_kind,reference_concept_id,resolved_alternative_id) VALUES(1,'UNSURE',1,1)")
         self.assertCode('LEXICAL_SUBMISSION_RESULT')
 
-    def test_accepted_submission_to_retired_alternative(self):
+    def historical_decision(self):
+        self.db.row_factory = sqlite3.Row
         self.db.execute("INSERT INTO submission(occurrence_id,submission_type,status,resolution) VALUES(1,'ALTERNATIVE','resolved','accepted')")
         self.db.execute("INSERT INTO alternative_submission(submission_id,proposal_kind,reference_concept_id,resolved_alternative_id) VALUES(1,'UNSURE',1,1)")
-        self.db.execute("UPDATE alternative SET retired_at='2026-01-01'")
-        self.assertCode('LEXICAL_SUBMISSION_RESULT')
+        self.db.execute("""INSERT INTO submission_concept_resolution(submission_id,concept_id,resolution_action,access_role)
+            VALUES(1,1,'CONFIRM_REFERENCE','reviewer')""")
+        self.db.execute("""INSERT INTO submission_lexical_decision(submission_id,concept_resolution_id,
+            decision_action,resolved_alternative_id,concept_id_at_decision,concept_label_snapshot,
+            alternative_label_snapshot,assignment_result_id,assignment_effect,relations_resolution,
+            morphology_resolution,access_role)
+            VALUES(1,1,'CREATE_NEW',1,1,'ONE','1a',1,'CREATED','NOT_PROPOSED','NOT_PROPOSED','reviewer')""")
 
-    def test_renumber_change_must_match_event_concept(self):
-        self.db.execute("INSERT INTO renumber_event(concept_id,origin) VALUES(2,'automatic_assisted')")
-        event_id = self.db.execute('SELECT last_insert_rowid()').fetchone()[0]
-        self.db.execute("INSERT INTO renumber_change(renumber_event_id,alternative_id,new_working_label) VALUES(?,?,?)",
-                         (event_id, 1, '1a'))
-        self.assertCode('REN_NUMBER_CONCEPT_MISMATCH')
+    def test_historical_renumber_and_decision_then_move(self):
+        from alternative_nomenclature import apply_nomenclature
+        from alternative_structural import move_preview, apply_move
+        self.historical_decision()
+        self.db.execute('UPDATE alternative SET working_label=NULL WHERE alternative_id=1')
+        event = apply_nomenclature(self.db, 1, {1: '1a'}, origin='automatic_assisted')
+        self.add_alternative(2, '1a', concept=2)
+        self.db.execute('UPDATE occurrence SET occurrence_year=1900 WHERE occurrence_id=2')
+        self.db.commit()
+        preview = move_preview(self.db, 1, 2)
+        apply_move(self.db, 1, 2, reason='Historical move test', actor={'access_role': 'reviewer'},
+                   expected_fingerprint=preview['fingerprint'])
+        self.assertEqual(self.db.execute('SELECT concept_id FROM renumber_event WHERE renumber_event_id=?', (event,)).fetchone()[0], 1)
+        self.assertEqual(self.db.execute('SELECT concept_id FROM alternative WHERE alternative_id=1').fetchone()[0], 2)
+        self.assertEqual(self.audit()['status'], 'PASS')
+        # Destination chronology also changes the label after the decision.
+        self.assertNotEqual(self.db.execute('SELECT working_label FROM alternative WHERE alternative_id=1').fetchone()[0], '1a')
+        for preflight in (False, True):
+            report = self.audit(preflight=preflight)
+            self.assertEqual(report['status'], 'PASS')
+
+    def test_historical_decision_then_merge(self):
+        from alternative_structural import merge_preview, apply_merge
+        self.historical_decision()
+        self.add_alternative(2, '2a')
+        self.db.commit()
+        preview = merge_preview(self.db, 1, 2, 'keep_target')
+        apply_merge(self.db, 1, 2, 'keep_target', reason='Historical merge test',
+                    actor={'access_role': 'reviewer'}, expected_fingerprint=preview['fingerprint'])
+        self.assertEqual(self.db.execute('SELECT is_current FROM assignment WHERE assignment_id=1').fetchone()[0], 0)
+        self.assertEqual(self.audit()['status'], 'PASS')
+
+    def test_historical_decision_then_retire(self):
+        from alternative_structural import retire_preview, apply_retire
+        self.historical_decision()
+        self.add_alternative(2, '2a')
+        self.db.commit()
+        preview = retire_preview(self.db, 1, {1: 2})
+        apply_retire(self.db, 1, {1: 2}, reason='Historical retirement test',
+                     actor={'access_role': 'reviewer'}, expected_fingerprint=preview['fingerprint'])
+        self.assertEqual(self.audit()['status'], 'PASS')
+
+    def test_missing_historical_alternative_fails(self):
+        self.historical_decision()
+        self.db.execute('DELETE FROM alternative WHERE alternative_id=1')
+        self.assertCode('REFERENCE:submission_lexical_decision.resolved_alternative_id')
+        self.assertCode('REFERENCE:alternative_submission.resolved_alternative_id')
+
+    def test_missing_historical_assignment_fails(self):
+        self.historical_decision()
+        self.db.execute('DELETE FROM assignment WHERE assignment_id=1')
+        self.assertCode('REFERENCE:submission_lexical_decision.assignment_result_id')
+
+    def test_historical_assignment_wrong_occurrence_fails(self):
+        self.historical_decision()
+        self.db.execute('INSERT INTO occurrence(occurrence_id,source_id) VALUES(2,1)')
+        self.db.execute('UPDATE assignment SET occurrence_id=2 WHERE assignment_id=1')
+        self.assertCode('DECISION_ASSIGNMENT_RESULT')
+
+    def test_missing_renumber_event_fails(self):
+        self.db.execute("INSERT INTO renumber_change(renumber_event_id,alternative_id,new_working_label) VALUES(999,1,'1a')")
+        self.assertCode('REFERENCE:renumber_change.renumber_event_id')
 
     def test_known_activity_entity_orphan_fails(self):
         self.db.execute("INSERT INTO activity_event(event_type,entity_type,entity_id,access_role) VALUES('changed','alternative',999,'analyst')")

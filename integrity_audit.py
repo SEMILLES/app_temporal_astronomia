@@ -154,11 +154,10 @@ class Auditor:
                     f'SELECT c.rowid AS rowid,c.{quote(column)} AS missing_id FROM {quote(table)} c '
                     f'LEFT JOIN {quote(parent)} p ON p.{quote(key)}=c.{quote(column)} '
                     f'WHERE c.{quote(column)} IS NOT NULL AND p.{quote(key)} IS NULL')
-        self.query('REN_NUMBER_CONCEPT_MISMATCH', '''SELECT c.renumber_change_id,c.alternative_id,e.concept_id,
-                a.concept_id AS alternative_concept_id
-            FROM renumber_change c JOIN renumber_event e USING(renumber_event_id)
-            JOIN alternative a USING(alternative_id)
-            WHERE a.concept_id!=e.concept_id''')
+        # Renumber events describe membership at the time of the event. Moves
+        # preserve alternative IDs and history; current membership cannot prove
+        # historical membership. The reference checks above still require the
+        # event, concept and alternative to exist.
 
     def relations(self):
         base = '''SELECT r.*,a.concept_id AS concept_a,b.concept_id AS concept_b
@@ -274,12 +273,11 @@ class Auditor:
             WHERE (s.submission_type='ALTERNATIVE' AND (a.submission_id IS NULL OR g.submission_id IS NOT NULL))
                OR (s.submission_type='GRAMMAR' AND (g.submission_id IS NULL OR a.submission_id IS NOT NULL))
                OR s.submission_type NOT IN ('ALTERNATIVE','GRAMMAR')''')
+        # Accepted results are historical references, including after retirement
+        # or merge. Existence is checked by references(), not current activity.
         self.query('LEXICAL_SUBMISSION_RESULT', '''SELECT s.submission_id FROM submission s JOIN alternative_submission a USING(submission_id)
             WHERE (s.status='resolved' AND s.resolution='accepted' AND a.resolved_alternative_id IS NULL)
-               OR (s.status='pending' AND a.resolved_alternative_id IS NOT NULL)
-               OR (s.status='resolved' AND s.resolution='accepted' AND EXISTS(
-                   SELECT 1 FROM alternative target WHERE target.alternative_id=a.resolved_alternative_id
-                   AND target.retired_at IS NOT NULL))''')
+               OR (s.status='pending' AND a.resolved_alternative_id IS NOT NULL)''')
         self.query('LEXICAL_DECISION_STATE', '''SELECT d.submission_id FROM submission_lexical_decision d
             JOIN submission s USING(submission_id) LEFT JOIN alternative_submission a USING(submission_id)
             LEFT JOIN submission_concept_resolution c ON c.submission_concept_resolution_id=d.concept_resolution_id
