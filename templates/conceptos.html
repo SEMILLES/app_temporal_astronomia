@@ -36,12 +36,14 @@
     {% endif %}
 
 
-    <h2>Conceptos registrados</h2>
     <form method="get"><label>Ordenar por <select name="sort">
     {% for value, label in [('id_asc', 'ID ascendente'), ('id_desc', 'ID descendente'), ('az', 'A–Z')] %}
     <option value="{{ value }}"{% if sort == value %} selected{% endif %}>{{ label }}</option>
     {% endfor %}</select></label><button type="submit">Ordenar</button></form>
 
+{% for section_id, title, groups in [('active-concepts', 'Conceptos activos', conceptos), ('empty-concepts', 'Conceptos sin alternativas vigentes', empty_concepts)] %}
+<section id="{{ section_id }}">
+    <h2>{{ title }}</h2>
     <table
         border="1"
         cellpadding="8"
@@ -53,7 +55,7 @@
             <th>Acciones</th>
         </tr>
 
-        {% for concepto in conceptos %}
+        {% for concepto in groups %}
 
             <tr>
 
@@ -94,6 +96,8 @@
         {% endfor %}
 
     </table>
+</section>
+{% endfor %}
 
 
     <p>

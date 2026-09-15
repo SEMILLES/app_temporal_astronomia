@@ -5,7 +5,7 @@
 <label class="field"><span>Descripción</span><textarea name="description" rows="4" required>{{ form.description if form else '' }}</textarea></label>
 <fieldset><legend>Elementos afectados</legend>
 {% for index in range(5) %}<div class="subject-row" {% if index>0 %}hidden{% endif %}>
-<label class="field"><span>Tipo</span><select name="subject_type" class="subject-type" {% if index==0 %}required{% endif %}><option value="">Seleccione</option><option value="occurrence">Ocurrencia</option><option value="concept">Concept</option><option value="alternative">Alternative</option><option value="submission">Aporte</option><option value="alternative_relation">Relación</option></select></label>
+<label class="field"><span>Tipo</span><select name="subject_type" class="subject-type" {% if index==0 %}required{% endif %}><option value="">Seleccione</option><option value="occurrence">Ocurrencia</option><option value="concept">Concepto</option><option value="alternative">Alternativa</option><option value="submission">Aporte</option><option value="alternative_relation">Relación</option></select></label>
 <label class="field"><span>Elemento</span><select name="subject_id" class="subject-item" {% if index==0 %}required{% endif %}><option value="">Seleccione</option>{% for choice in choices %}<option value="{{ choice.id }}" data-subject-type="{{ choice.type }}">{{ choice.label }}</option>{% endfor %}</select></label>
 </div>{% endfor %}
 <button type="button" id="add-subject">+ Agregar otro elemento afectado</button></fieldset>

@@ -25,9 +25,13 @@ from alternative_structural import (StructuralAlternativeError, retire_preview,
     apply_retire, merge_preview, apply_merge, split_preview, apply_split,
     move_preview, apply_move, lexical_component, component_move_preview, apply_component_move)
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
+from functional_presentation import concept_options, preview_rows, reference_basis_label, has_label_changes
 
 
 alternatives_bp = Blueprint("alternatives", __name__)
+alternatives_bp.add_app_template_filter(preview_rows, 'preview_rows')
+alternatives_bp.add_app_template_filter(reference_basis_label, 'reference_basis_label')
+alternatives_bp.add_app_template_filter(has_label_changes, 'has_label_changes')
 
 
 def _occurrence_temporal_key(occurrence):
@@ -122,7 +126,7 @@ def _management_context(connection, alternative_id, *, message=None, error=None,
     renumber_changes = {event["renumber_event_id"]: connection.execute(
         "SELECT rc.*,a.working_label current_label FROM renumber_change rc JOIN alternative a USING(alternative_id) WHERE renumber_event_id=? ORDER BY alternative_id",
         (event["renumber_event_id"],),).fetchall() for event in renumber_history}
-    concepts = connection.execute("SELECT concept_id,preferred_label FROM concept WHERE concept_id<>? ORDER BY preferred_label,concept_id", (alternative["concept_id"],)).fetchall()
+    concepts = concept_options(connection, alternative["concept_id"])
     structural_history = connection.execute("SELECT * FROM activity_event WHERE entity_type='alternative' AND entity_id=? AND event_type IN ('alternative_retired','alternative_merged','alternative_split','alternative_moved','alternative_component_moved') ORDER BY occurred_at DESC,activity_event_id DESC", (alternative_id,)).fetchall()
     current_occurrences = connection.execute("SELECT o.occurrence_id,o.original_gloss,s.source_name FROM assignment x JOIN occurrence o USING(occurrence_id) JOIN source s USING(source_id) WHERE x.alternative_id=? AND x.is_current=1 ORDER BY o.occurrence_id", (alternative_id,)).fetchall()
     component, component_error = None, None
@@ -351,7 +355,8 @@ def alternativas(concept_id):
     return render_template(
         "alternativas.html",
         concepto=concepto,
-        alternative_groups=alternative_groups,
+        alternative_groups=[group for group in alternative_groups if not group['alternative']['retired_at']],
+        retired_groups=[group for group in alternative_groups if group['alternative']['retired_at']],
         access_role=getattr(g,"current_access_role",None)
     )
 
@@ -376,6 +381,9 @@ def actualizar_gestion_alternativa(alternative_id):
     relation_result = None
     structural_result = None
     try:
+        if action in ('preview_move', 'preview_component_move', 'confirm_move', 'confirm_component_move'):
+            if not request.form.get('destination_concept_id', '').strip():
+                raise StructuralAlternativeError('Seleccione un concepto destino.')
         expected_fingerprint = None
         if action in ("confirm_retire", "confirm_merge", "confirm_split", "confirm_move", "confirm_component_move"):
             payload = unsign(request.form.get("preview_token"), STALE_PREVIEW)

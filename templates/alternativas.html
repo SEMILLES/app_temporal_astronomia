@@ -120,13 +120,17 @@
 <body>
     <h1>Alternativas de {{ concepto["preferred_label"] | human_concept_label }}</h1>
 
+    {% for title, groups in [('Alternativas vigentes', alternative_groups), ('Alternativas retiradas', retired_groups)] %}
+    <section id="{{ 'retired-alternatives' if loop.last else 'active-alternatives' }}">
+    <h2>{{ title }}</h2>
     <div class="alternatives-list">
-        {% if alternative_groups %}
-            {% for group in alternative_groups %}
+        {% if groups %}
+            {% for group in groups %}
                 {% set alternativa = group["alternative"] %}
                 <article class="alternative-card">
                     <header class="alternative-header">
                         <h2>
+                            {% if alternativa["retired_at"] %}Última denominación: {% endif %}
                             {% if alternativa["working_label"] %}
                                 {{ concepto["preferred_label"] | alternative_display_label(alternativa["working_label"]) }}
                             {% else %}
@@ -239,9 +243,12 @@
                 </article>
             {% endfor %}
         {% else %}
-            <p>No hay alternativas registradas.</p>
+            <p>Sin alternativas en esta sección.</p>
         {% endif %}
     </div>
+
+    </section>
+    {% endfor %}
 
     <p>La creación y la renumeración de alternativas se realizan mediante el workflow de análisis y revisión.</p>
 

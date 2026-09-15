@@ -20,6 +20,7 @@ from alternative_workflow import (
 from alternative_workflow import new_review_preview
 from alternative_nomenclature import working_label_key
 from alternative_morphology import submission_morphology
+from functional_presentation import concept_options
 from concept_labels import alternative_display_label
 from source_period import format_source_period
 from immediate_acceptance import (ImmediateAcceptanceError, run_normal_review,
@@ -48,7 +49,7 @@ def preview_group_changed(row):
 def _context(db, draft=None, error=None):
     return dict(
         fuentes=db.execute("SELECT source_id, source_name, source_type, start_year, end_year, end_year_status FROM source WHERE retired_at IS NULL ORDER BY source_name").fetchall(),
-        conceptos=db.execute("SELECT concept_id, preferred_label FROM concept ORDER BY preferred_label").fetchall(),
+        conceptos=concept_options(db),
         propuestas=db.execute("SELECT concept_proposal_id, proposed_label FROM concept_proposal WHERE status='pending' ORDER BY proposed_label").fetchall(),
         draft=draft, error=error,
     )
@@ -290,7 +291,7 @@ def revisar_aportes():
 
 def _alternative_review_context(db, rows):
     result={}
-    concepts=db.execute("SELECT concept_id,preferred_label FROM concept ORDER BY preferred_label").fetchall()
+    concepts=concept_options(db)
     for row in rows:
         if row["submission_type"] != "ALTERNATIVE": continue
         concept_id=row["local_concept_id"]

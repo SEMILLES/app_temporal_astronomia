@@ -38,7 +38,9 @@ def conceptos():
     conceptos = conexion.execute(f"""
         SELECT
             concept_id,
-            preferred_label
+            preferred_label,
+            EXISTS(SELECT 1 FROM alternative a WHERE a.concept_id=concept.concept_id
+                   AND a.retired_at IS NULL) AS has_active_alternatives
 
         FROM concept
 
@@ -49,7 +51,8 @@ def conceptos():
 
     return render_template(
         "conceptos.html",
-        conceptos=conceptos, sort=sort
+        conceptos=[c for c in conceptos if c['has_active_alternatives']],
+        empty_concepts=[c for c in conceptos if not c['has_active_alternatives']], sort=sort
     )
 
 

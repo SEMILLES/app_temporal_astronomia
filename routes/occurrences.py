@@ -16,6 +16,7 @@ from phonological_parameters import PHONOLOGICAL_PARAMETERS
 from source_period import validate_occurrence_year
 from access_control import requires_reviewer
 from source_details import normalize_occurrence_details
+from functional_presentation import concept_options
 from immediate_acceptance import (ImmediateAcceptanceError,ImmediateBlockingError,
     alternative_operation,confirm_operation,grammar_operation,preview_operation)
 
@@ -159,7 +160,10 @@ def _confirmation(template_kind,occurrence_id,operation):
             destination_label=simulated['destination_label']
             nomenclature_preview=simulated.get('preview')
     except StaleEdit as error:return str(error),409
-    except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
+    except (ValueError,sqlite3.IntegrityError) as error:
+        if template_kind == 'alternative':
+            return _render_classification_page(occurrence_id, error=str(error), form_values=request.form, status=400)
+        return str(error),400
     finally:db.close()
     summary={"occurrence":dict(occurrence) if occurrence else None,"current":dict(current) if current else None,"proposed":_grammar_values(request.form) if template_kind=="grammar" else proposed,"decision":decision if template_kind=="alternative" else None,"concept_label":concept_label,"destination_label":destination_label,"review_note":request.form.get("review_note")}
     return render_template("confirmar_aceptacion_inmediata.html",kind=template_kind,occurrence_id=occurrence_id,payload=list(request.form.lists()),preflight=result,summary=summary,nomenclature_preview=nomenclature_preview)
@@ -585,11 +589,7 @@ def _load_classification_page_data(conexion, occurrence_id):
         ORDER BY c.preferred_label,a.working_label
     """).fetchall()
 
-    concepts = conexion.execute("""
-        SELECT concept_id,preferred_label
-        FROM concept
-        ORDER BY preferred_label
-    """).fetchall()
+    concepts = concept_options(conexion)
 
     history = conexion.execute("""
         SELECT a.assignment_id, a.alternative_id, a.is_current,
@@ -630,6 +630,8 @@ def _render_classification_page(
     if context is None:
         return "La ocurrencia no existe.", 404
 
+    if error and form_values and form_values.get('proposal_kind') == 'NEW' and not form_values.get('morphology_component_count'):
+        error = 'Morfología: seleccione la cantidad de componentes o N/A. ' + error
     context["error"] = error
     context["form_values"] = form_values or {}
 
@@ -680,7 +682,8 @@ def guardar_clasificacion(occurrence_id):
 @requires_reviewer
 def preview_alternative_immediate(occurrence_id):
     try: operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
-    except ValueError as error:return str(error),400
+    except ValueError as error:
+        return _render_classification_page(occurrence_id, error=str(error), form_values=request.form, status=400)
     return _confirmation("alternative",occurrence_id,operation)
 
 
@@ -690,11 +693,14 @@ def confirm_alternative_immediate(occurrence_id):
     if request.form.get("confirm_immediate")!="yes":return "Se requiere confirmación explícita de la aceptación inmediata.",400
     db=conectar()
     try:operation=alternative_operation(occurrence_id,_alternative_payload(request.form),_alternative_decision(request.form),actor_context=_actor(request.form),reviewed_by=request.form.get("reviewed_by"),review_note=request.form.get("review_note"))
-    except ValueError as error:db.close();return str(error),400
+    except ValueError as error:
+        db.close()
+        return _render_classification_page(occurrence_id, error=str(error), form_values=request.form, status=400)
     try:confirm_operation(db,operation,expected_preview_token=request.form.get("lexical_preview_token"))
     except StaleEdit as error:return str(error),409
     except ImmediateBlockingError as error:return str(error),409
-    except (ValueError,sqlite3.IntegrityError) as error:return str(error),400
+    except (ValueError,sqlite3.IntegrityError) as error:
+        return _render_classification_page(occurrence_id, error=str(error), form_values=request.form, status=400)
     finally:db.close()
     if _registration_flow():
         return redirect(url_for("occurrences.resumen_registro", occurrence_id=occurrence_id))

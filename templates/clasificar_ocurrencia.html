@@ -19,7 +19,7 @@
 <section><h2>Propuesta pendiente #{{ existing_pending['submission_id'] }}</h2><p>Ya existe un análisis pendiente de revisión.</p>{% if g.current_access_role in ('reviewer','master') %}<a href="{{ url_for('submissions.revisar_aportes') }}#submission-{{ existing_pending['submission_id'] }}">Ir a revisión</a>{% endif %}</section>
 
 {% else %}
-<form novalidate method="post">
+<form novalidate method="post" action="{{ url_for('occurrences.guardar_clasificacion', occurrence_id=occurrence['occurrence_id']) }}">
 {% if registration_flow %}<input type="hidden" name="flow" value="registration">{% endif %}
 
 <h2>Decisión del analista</h2>
@@ -185,7 +185,7 @@
 <p id="immediate-concept-status">Concepto que se usará: <strong>{{ occurrence['reference_label'] or 'Referencia conceptual vigente' }}</strong></p>
 
 <p><label>Nota de revisión (opcional)
-<textarea name="review_note" id="immediate-review-note"></textarea>
+<textarea name="review_note" id="immediate-review-note">{{ form_values.get('review_note', '') }}</textarea>
 </label></p>
 
 
@@ -217,7 +217,7 @@
           addButton=document.getElementById('add-component'),
           removeButton=document.getElementById('remove-last-component');
 
-    function componentType(row){
+    function componentType(row, preserveValues=false){
         const selected=row.querySelector('[data-component-type]:checked');
 
         row.querySelector('.existing-component').hidden=
@@ -225,7 +225,7 @@
 
         row.querySelector('.unapproved-component').hidden=false;
 
-        if(selected&&selected.value==='unapproved'){
+        if(!preserveValues&&selected&&selected.value==='unapproved'){
             row.querySelector('select').value='';
         }
     }
@@ -363,6 +363,22 @@
         updateRemoveButton();
     };
 
+    // Recover all dynamic rows after canonical server validation fails.
+    const savedValues = {{ (form_values.to_dict(flat=False) if form_values.to_dict is defined else {})|tojson }};
+    const savedRows = savedValues.component_row_id || [];
+    savedRows.forEach((savedId, index)=>{
+        addComponent();
+        const row=list.lastElementChild;
+        ['position','type','alternative_id','note'].forEach(field=>{
+            const value=(savedValues['component_'+savedId+'_'+field]||[''])[0];
+            const inputs=row.querySelectorAll('[name="component_'+index+'_'+field+'"]');
+            inputs.forEach(input=>{
+                if(input.type==='radio')input.checked=input.value===value;
+                else input.value=value;
+            });
+        });
+        componentType(row, true);
+    });
     toggle();
 })();
 </script>
@@ -399,6 +415,7 @@
         }
         if(!message){
             const invalid=[...form.elements].find(input=>{
+                if(input.closest('#morphology'))return false; // Canonical server validation reports the specific error.
                 if(!immediate&&input.closest('#immediate-acceptance'))return false;
                 return input.willValidate&&!input.validity.valid;
             });

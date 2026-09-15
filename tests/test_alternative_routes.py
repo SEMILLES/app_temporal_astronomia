@@ -190,7 +190,7 @@ class AlternativeRouteTests(unittest.TestCase):
 
     def test_move_block_preserves_isolated_alternative_button_text(self):
         page = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
-        self.assertIn("Previsualizar movimiento", page)
+        self.assertIn("Previsualizar traslado", page)
 
         db = self.connect()
         db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2a')")
