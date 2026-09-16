@@ -23,6 +23,7 @@
 {% if registration_flow %}<input type="hidden" name="flow" value="registration">{% endif %}
 
 <h2>Decisión del analista</h2>
+{% include '_concept_metadata_fields.html' %}
 {% if error|default(None) %}
 <section role="alert" class="notice notice-error" id="classification-error">
 <h2>No fue posible guardar el análisis</h2>

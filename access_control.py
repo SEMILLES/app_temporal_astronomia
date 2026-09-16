@@ -102,6 +102,7 @@ def install_access_context(app):
             "conflicts.validate_conflicts",
         }
         master_endpoints = {
+            "concepts.administrar_clasificaciones",
             "collaborators.collaborators", "collaborators.create_collaborator",
             "collaborators.rename_collaborator",
             "catalog.publication_update", "catalog.publish_catalog_route",

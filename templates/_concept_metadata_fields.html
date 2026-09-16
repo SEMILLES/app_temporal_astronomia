@@ -1,0 +1,29 @@
+<fieldset class="concept-metadata">
+<legend>Campos Semánticos y Collections</legend>
+<p>Hasta dos categorías, sin repetición. Las posiciones solo indican el orden de presentación.</p>
+<p>Marque «Aplicar selección» para cambiar un sistema. Ambas posiciones vacías eliminan sus selecciones; sin marcar se conserva el estado vigente.</p>
+{% set values = form_values|default(request.form) %}
+{% for collection in metadata.collections %}
+<p><label>{{ collection.name }}{% if not collection.active %} (inactiva){% endif %}
+<select name="collection_action_{{ collection.collection_id }}">
+<option value="">Conservar membresía actual</option>
+{% if collection.active %}<option value="join"{% if values.get('collection_action_' ~ collection.collection_id) == 'join' %} selected{% endif %}>Incorporar / mantener miembro</option>{% endif %}
+<option value="leave"{% if values.get('collection_action_' ~ collection.collection_id) == 'leave' %} selected{% endif %}>Retirar de esta Collection</option>
+</select></label></p>
+{% endfor %}
+{% for system in metadata.systems %}
+<fieldset><legend>{{ system.name }}{% if not system.active %} (inactivo){% endif %}{% if system.collection_id %} · {% for c in metadata.collections if c.collection_id == system.collection_id %}{{ c.name }}{% endfor %}{% endif %}</legend>
+<label><input type="checkbox" name="classification_apply_{{ system.system_id }}" value="yes"{% if values.get('classification_apply_' ~ system.system_id) == 'yes' %} checked{% endif %}> Aplicar selección</label>
+{% for position in (1,2) %}
+{% set key = 'category_' ~ system.system_id ~ '_' ~ position %}
+{% set selected = values.get(key, system.selection[position-1] or '')|string %}
+<label>{{ 'Campo Semántico' if not system.collection_id else 'Área' if system.code == 'knowledge-areas' else 'Categoría' }} {{ position }}
+<select name="{{ key }}"><option value="">Vacío</option>
+{% for category in system.categories %}
+{% if category.active or (system.current and category.category_id in [system.current.category_1_id, system.current.category_2_id]) or (system.proposal and category.category_id in [system.proposal.category_1_id, system.proposal.category_2_id]) %}
+<option value="{{ category.category_id }}"{% if selected == category.category_id|string %} selected{% endif %}>{{ category.name }}{% if not category.active %} (inactiva; solo conservar usos anteriores){% endif %}</option>
+{% endif %}{% endfor %}</select></label>
+{% endfor %}
+</fieldset>
+{% endfor %}
+</fieldset>

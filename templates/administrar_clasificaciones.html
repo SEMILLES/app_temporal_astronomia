@@ -1,0 +1,22 @@
+{% extends '_visual_base.html' %}
+{% block title %}Catálogos controlados{% endblock %}
+{% block content %}
+<h1>Catálogos controlados</h1>
+<p>Desactivar impide nuevas selecciones y conserva los usos anteriores. Los códigos y ámbitos son permanentes.</p>
+{% for kind,table,key,title in [('collection','collection','collection_id','Collections'),('system','classification_system','system_id','Sistemas'),('category','classification_category','category_id','Categorías')] %}
+<section><h2>{{ title }}</h2>
+<form method="post">
+<input type="hidden" name="edit_token" value="{{ edit_token }}"><input type="hidden" name="kind" value="{{ kind }}">
+{% if kind != 'collection' %}<label>{{ 'Collection' if kind == 'system' else 'Sistema' }}
+<select name="parent_id" required><option value="">Seleccione</option>{% for parent in catalogs.collection if kind == 'system' and parent.active %}<option value="{{ parent.collection_id }}">{{ parent.name }}</option>{% endfor %}{% for parent in catalogs.classification_system if kind == 'category' and parent.active %}<option value="{{ parent.system_id }}">{{ parent.name }} · {{ parent.code }}</option>{% endfor %}</select></label>{% endif %}
+<label>Código <input name="code" required pattern="[A-Za-z0-9][A-Za-z0-9_-]*"></label>
+<label>Nombre <input name="name" required></label><button type="submit">Crear</button>
+</form>
+{% for item in catalogs[table] %}
+<form method="post">
+<input type="hidden" name="edit_token" value="{{ edit_token }}"><input type="hidden" name="kind" value="{{ kind }}"><input type="hidden" name="identifier" value="{{ item[key] }}">
+<span>{{ item.code }}{% if kind == 'category' %} · {% for s in catalogs.classification_system if s.system_id == item.system_id %}{{ s.name }}{% endfor %}{% endif %}</span>
+<label>Nombre <input name="name" value="{{ item.name }}" required></label>
+<label>Estado <select name="active"><option value="1"{% if item.active %} selected{% endif %}>Activo</option><option value="0"{% if not item.active %} selected{% endif %}>Inactivo</option></select></label><button type="submit">Guardar</button>
+</form>{% endfor %}</section>{% endfor %}
+{% endblock %}

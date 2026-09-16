@@ -76,14 +76,16 @@ def proposed_concept_decision(connection, submission):
 
 def save_resolution(connection, submission_id, action, *, concept_id=None,
                     label=None, note=None, collaborator_id=None,
-                    access_role, expected_edit_token=None):
+                    access_role, expected_edit_token=None, concept_metadata=None,
+                    metadata_reviewed=False, metadata_target=None):
     if access_role not in ('reviewer', 'master'):
         raise ConceptResolutionError('La resolución del concepto requiere permisos de revisión.')
     owns = not connection.in_transaction
     connection.execute('BEGIN IMMEDIATE' if owns else 'SAVEPOINT local_concept')
     try:
+        signed_scope = None
         if expected_edit_token is not None:
-            check_edit(connection, 'submission_concept', submission_id, expected_edit_token)
+            signed_scope = check_edit(connection, 'submission_concept', submission_id, expected_edit_token)
         submission = connection.execute("""SELECT s.*,a.reference_concept_id,
             a.reference_concept_proposal_id,c.preferred_label AS reference_label,
             p.proposed_label FROM submission s JOIN alternative_submission a USING(submission_id)
@@ -112,7 +114,15 @@ def save_resolution(connection, submission_id, action, *, concept_id=None,
             concept_id = None
         else:
             raise ConceptResolutionError('La acción de resolución conceptual no es válida.')
-        if (previous is not None and previous['concept_id'] == concept_id
+        if signed_scope is not None:
+            if metadata_target not in (None, '') and str(metadata_target) != str(signed_scope['target_concept_id']):
+                raise ConceptResolutionError('El destino mostrado no coincide con el token firmado. Consulte el destino antes de guardar.')
+            if action == 'CREATE_NEW':
+                if not signed_scope['allows_new']:
+                    raise ConceptResolutionError('El formulario no permite crear un Concept nuevo.')
+            elif (concept_id != signed_scope['target_concept_id'] or concept_id not in signed_scope['concept_ids']):
+                raise ConceptResolutionError('Consulte el Concept de destino para obtener un token que lo cubra antes de guardar.')
+        if (not concept_metadata and previous is not None and previous['concept_id'] == concept_id
                 and ((previous['resolution_note'] or '').strip() or None) == note):
             connection.commit() if owns else connection.execute('RELEASE SAVEPOINT local_concept')
             return previous['submission_concept_resolution_id']
@@ -124,6 +134,15 @@ def save_resolution(connection, submission_id, action, *, concept_id=None,
             raise ConceptResolutionError('Explique el cambio de concepto en la nota de resolución.')
         if action == 'CREATE_NEW':
             concept_id = connection.execute('INSERT INTO concept(preferred_label) VALUES(?)', (decided_label,)).lastrowid
+        if concept_metadata:
+            from concept_classification import check_proposal_base
+            if metadata_reviewed:
+                if expected_edit_token is None:
+                    raise ConceptResolutionError('La revisión explícita requiere el estado actualizado del formulario.')
+                if action != 'CREATE_NEW' and str(metadata_target or '') != str(concept_id):
+                    raise ConceptResolutionError('Consulte las clasificaciones del Concept de destino antes de guardar.')
+            else:
+                check_proposal_base(connection, submission_id, concept_id)
         actor_id, actor_name = resolve_collaborator(connection, collaborator_id)
         previous_id = previous['submission_concept_resolution_id'] if previous else None
         if previous_id:
@@ -132,6 +151,12 @@ def save_resolution(connection, submission_id, action, *, concept_id=None,
             (submission_id,concept_id,resolution_action,resolution_note,collaborator_id,
              collaborator_name_snapshot,access_role,supersedes_submission_concept_resolution_id)
             VALUES(?,?,?,?,?,?,?,?)""", (submission_id,concept_id,action,note,actor_id,actor_name,access_role,previous_id)).lastrowid
+        if concept_metadata:
+            from concept_classification import apply_metadata
+            decision = apply_metadata(connection, concept_id, concept_metadata,
+                access_role=access_role, collaborator_id=collaborator_id, resolution_id=identifier)
+            connection.execute('UPDATE submission_concept_resolution SET classification_decision_json=? WHERE submission_concept_resolution_id=?',
+                (json.dumps(decision, ensure_ascii=False), identifier))
         reference = connection.execute('SELECT * FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1', (submission['occurrence_id'],)).fetchone()
         reference_id = reference['occurrence_concept_reference_id'] if reference else None
         if reference_id:

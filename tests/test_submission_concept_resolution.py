@@ -292,7 +292,8 @@ class LocalConceptTests(unittest.TestCase):
             self.assertIn('<option value="1" selected>X</option>',page)
             self.assertIn('Concepto resuelto. Ya es posible continuar con la decisión sobre la alternativa.',page)
             self.assertIn('<fieldset><legend>Resolución del resto del análisis',page)
-            form={'concept_edit_token':hidden(page,'concept_edit_token'),'concept_action':'USE_EXISTING','concept_id':'2','concept_note':'Corrección'}
+            destination_page=client.get(f'/aportes/{self.a}?metadata_target=2').get_data(as_text=True)
+            form={'concept_edit_token':hidden(destination_page,'concept_edit_token'),'concept_action':'USE_EXISTING','concept_id':'2','metadata_target':'2','concept_note':'Corrección'}
             self.assertEqual(302,client.post(f'/aportes/{self.a}/concepto',data=form).status_code)
             self.assertEqual([1,0],[r['is_current'] for r in resolution_history(self.db,self.a)])
             self.assertEqual(2,current_resolution(self.db,self.a)['concept_id'])

@@ -18,6 +18,9 @@ else:
 
 
 REQUIRED_APPLICATION_TABLES = frozenset({
+    "collection", "classification_system", "classification_category",
+    "collection_membership", "concept_classification_revision",
+    "submission_classification_proposal", "submission_collection_proposal",
     "source",
     "concept",
     "occurrence",
@@ -873,3 +876,5 @@ def crear_esquema(conexion):
     install_concept_resolution(conexion)
     from submission_lexical_decision import install as install_lexical_decision
     install_lexical_decision(conexion)
+    from classification_schema import install as install_classification
+    install_classification(conexion)

@@ -2,12 +2,14 @@ from lexical_preconditions import lexical_token
 from alternative_video_service import get_current_video
 from alternative_workflow import _relation_targets
 import re
+import json
 from submission_lexical_decision import get_decision
 from submission_concept_resolution import save_resolution, current_resolution, resolution_history
-from edit_concurrency import edit_token, StaleEdit
+from concept_classification import editor_context, parse_form as parse_concept_metadata
+from edit_concurrency import edit_token, StaleEdit, submission_concept_scope
 import sqlite3
 
-from flask import Blueprint, redirect, render_template, request, url_for, g
+from flask import Blueprint, redirect, render_template, request, url_for, g, has_request_context
 
 from database import conectar
 from grammar_workflow import GrammarWorkflowError, resolve_grammar_submission
@@ -379,7 +381,18 @@ def _alternative_review_context(db, rows):
         result[row["submission_id"]]=dict(lexical_preview_token=lexical_token(db,row["occurrence_id"],row["submission_id"]),relations_error=relations_error,relations_pending_warning=(
             "No se pueden aceptar las relaciones todavía porque al menos una apunta a una propuesta de nueva alternativa pendiente. Resuelva primero esa propuesta, o rechace/deje pendientes las relaciones."
             if pending_target_relations else None
-        ),proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),concept_edit_token=edit_token(db,"submission_concept",row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_previews=previews,lexical_decision=lexical_decision,result_current=result_current,morphology_result=morphology_result,proposed_morphology=morphology)
+        ),proposed_alternative_matches=any(a["alternative_id"] == row["proposed_existing_alternative_id"] for a in alternatives),concept_resolution=current_resolution(db,row["submission_id"]),concept_history=resolution_history(db,row["submission_id"]),alternatives=alternatives,relations=relations,assignment=assignment,pending=pending,concepts=concepts,nomenclature_previews=previews,lexical_decision=lexical_decision,result_current=result_current,morphology_result=morphology_result,proposed_morphology=morphology)
+    for row in rows:
+        if row['submission_id'] not in result:
+            continue
+        ctx = result[row['submission_id']]
+        requested_target = request.args.get('metadata_target', type=int) if has_request_context() else None
+        target = submission_concept_scope(db, row['submission_id'], requested_target)['target_concept_id']
+        ctx['concept_edit_token'] = edit_token(db, 'submission_concept', row['submission_id'], metadata_target=target)
+        ctx['metadata_target'] = target
+        ctx['metadata'] = editor_context(db,target,row['submission_id'])
+        ctx['metadata_decisions'] = [json.loads(r['classification_decision_json'])
+            for r in ctx['concept_history'] if r['classification_decision_json']]
     return result
 
 
@@ -405,6 +418,9 @@ def resolver_concepto_aporte(submission_id):
             concept_id=request.form.get("concept_id") or None,
             label=request.form.get("concept_label"), note=request.form.get("concept_note"),
             collaborator_id=request.form.get("collaborator_id"), access_role=g.current_access_role,
+            concept_metadata=parse_concept_metadata(request.form),
+            metadata_reviewed=request.form.get('metadata_reviewed')=='yes',
+            metadata_target=request.form.get('metadata_target'),
             expected_edit_token=request.form.get("concept_edit_token", ""))
     except StaleEdit as error:
         return str(error), 409

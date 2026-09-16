@@ -32,11 +32,13 @@
 
         </p>
 
+        {% include '_concept_metadata_fields.html' %}
         <button type="submit" class="button-primary">
             Guardar cambios
         </button>
 
     </form>
+    {% include '_concept_metadata_history.html' %}
 
     <p>
         <a href="{{ url_for('concepts.conceptos') }}">

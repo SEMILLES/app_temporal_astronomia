@@ -72,6 +72,10 @@ def lexical_state(db, occurrence_id, submission_id=None, proposal=None, decision
         state['endpoints'].extend(data)
         concepts.update(r['concept_id'] for r in data)
     state['concepts'] = [relevant_state(db, -1, cid) for cid in sorted(concepts)]
+    if proposal.get('concept_metadata'):
+        from concept_classification import catalog_state, concept_state
+        state['controlled_catalogs'] = catalog_state(db)
+        state['concept_metadata'] = [concept_state(db,cid) for cid in sorted(concepts)]
     return state
 
 

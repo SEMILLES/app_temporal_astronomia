@@ -136,7 +136,7 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
                                   phonological_relation_answer=None,
                                   relations=(), analysis_note=None,
                                   submitted_by=None,morphology=None,
-                                  collaborator_id=None,access_role=None):
+                                  collaborator_id=None,access_role=None,concept_metadata=None):
     proposal_kind = (proposal_kind or "").upper()
     if proposal_kind not in ("EXISTING", "NEW", "UNSURE"):
         raise AlternativeWorkflowError("Tipo de propuesta no válido.")
@@ -197,6 +197,10 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
             ) VALUES(?,?,?,?,?,?,?,0)
         """, (submission_id, proposal_kind, concept_id, proposal_id,
               proposed_existing_alternative_id, answer, note))
+        if concept_metadata:
+            from concept_classification import store_proposal
+            store_proposal(connection, submission_id, concept_metadata,
+                           concept_id=resolved_concept, access_role=access_role)
         if morphology is not None:
             normalized_morphology = store_submission_morphology(
                 connection,submission_id,**morphology

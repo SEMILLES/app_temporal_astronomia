@@ -1,0 +1,7 @@
+{% extends '_visual_base.html' %}
+{% block title %}Clasificaciones de Concept{% endblock %}
+{% block content %}
+<h1>{{ concepto.preferred_label|human_concept_label }}</h1>
+{% include '_concept_metadata_history.html' %}
+<p><a href="{{ url_for('concepts.conceptos') }}">Volver a Concepts</a></p>
+{% endblock %}

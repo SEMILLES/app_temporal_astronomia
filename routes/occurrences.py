@@ -1,4 +1,5 @@
 from alternative_video_service import get_current_video
+from concept_classification import parse_form as parse_concept_metadata, editor_context
 from alternative_workflow import comparable_pending_proposals
 from activity import record_activity, resolve_collaborator
 from edit_concurrency import edit_token, check_edit, StaleEdit
@@ -107,7 +108,7 @@ def _alternative_payload(form):
     if proposal_kind=="NEW":
         choice=form.get("morphology_component_count");components=_component_rows(form)
         morphology={"component_count":None if choice in (None,"","N/A") else choice,"component_count_not_applicable":choice=="N/A","free_permutation":form.get("free_permutation"),"note":form.get("morphology_note"),"components":components}
-    return {"proposal_kind":proposal_kind,"proposed_existing_alternative_id":form.get("proposed_existing_alternative_id") or None,"phonological_relation_answer":form.get("phonological_relation_answer"),"relations":relations,"analysis_note":form.get("analysis_note"),"morphology":morphology}
+    return {"proposal_kind":proposal_kind,"proposed_existing_alternative_id":form.get("proposed_existing_alternative_id") or None,"phonological_relation_answer":form.get("phonological_relation_answer"),"relations":relations,"analysis_note":form.get("analysis_note"),"morphology":morphology,"concept_metadata":parse_concept_metadata(form)}
 
 
 def _alternative_decision(form):
@@ -611,6 +612,7 @@ def _load_classification_page_data(conexion, occurrence_id):
         "history": history,
         "component_alternatives": component_alternatives,
         "concepts": concepts,
+        "metadata": editor_context(conexion, context_concept_id),
     }
 
 

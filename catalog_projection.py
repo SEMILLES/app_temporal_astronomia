@@ -146,6 +146,9 @@ def project_nomenclature_history(connection, alternative_id):
 
 def build_catalog_projection(connection):
     """Return only current canonical lexical state, using JSON-safe values."""
+    # Phase 19A compatibility option B: retain legacy arrays until an explicit
+    # data migration switches their source. Never merge them with structured rows.
+    # Existing immutable publications and their names/order remain untouched.
     all_alternatives = [dict(row) for row in connection.execute("""
         SELECT a.alternative_id, a.concept_id, a.original_code, a.working_label,
                a.created_at, a.retired_at, c.preferred_label,

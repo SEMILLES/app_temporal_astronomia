@@ -1,0 +1,12 @@
+<section><h2>Clasificaciones estructuradas vigentes</h2>
+{% for system in metadata.systems %}<p><strong>{{ system.name }}:</strong>
+{% if system.current %}{{ system.current_names[0] or 'Vacío' }}{% if system.current_names[1] %} · {{ system.current_names[1] }}{% endif %}
+{% else %}Sin clasificación estructurada{% endif %}</p>{% endfor %}
+<h3>Membresías</h3>
+{% for member in metadata.memberships %}<p>{{ member.collection_name_snapshot }} · #{{ member.membership_id }} · {{ member.started_at }} → {{ member.ended_at or 'Vigente' }}</p>{% else %}<p>Sin membresías.</p>{% endfor %}
+<details><summary>Historial de clasificaciones</summary>
+{% for revision in metadata.history %}<p>#{{ revision.revision_id }} · {{ revision.system_name_snapshot }}:
+{{ revision.category_1_name or 'Vacío' }}{% if revision.category_2_name %} · {{ revision.category_2_name }}{% endif %}
+· {{ revision.started_at }} → {{ revision.ended_at or 'Vigente' }} · {{ revision.collaborator_name_snapshot or 'Sin colaborador identificado' }}
+{% if not revision.semantic_changed %} · Sin cambio semántico{% endif %}</p>{% else %}<p>Sin revisiones.</p>{% endfor %}
+</details></section>

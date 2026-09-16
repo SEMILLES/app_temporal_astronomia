@@ -64,6 +64,13 @@ def quote(identifier):
 
 # Columns used by semantic checks. Missing coverage fails closed, including preflight.
 REQUIRED = {
+    'collection': 'collection_id code name name_key active',
+    'classification_system': 'system_id collection_id code name active',
+    'classification_category': 'category_id system_id code name name_key active',
+    'collection_membership': 'membership_id concept_id collection_id started_at ended_at resolution_id ended_resolution_id',
+    'concept_classification_revision': 'revision_id concept_id system_id membership_id category_1_id category_2_id category_1_name category_1_code category_2_name category_2_code started_at ended_at supersedes_revision_id resolution_id ended_resolution_id',
+    'submission_classification_proposal': 'submission_id system_id category_1_id category_2_id category_1_name category_1_code category_2_name category_2_code base_state_json',
+    'submission_collection_proposal': 'submission_id collection_id action base_state_json',
     'source': 'source_id start_year end_year end_year_status source_name source_reference retired_at',
     'concept': 'concept_id',
     'alternative': 'alternative_id concept_id working_label created_at retired_at',
@@ -73,7 +80,7 @@ REQUIRED = {
     'submission': 'submission_id occurrence_id submission_type status resolution resolved_at',
     'alternative_submission': 'submission_id resolved_alternative_id is_legacy',
     'grammar_submission': 'submission_id',
-    'submission_concept_resolution': 'submission_concept_resolution_id submission_id concept_id is_current',
+    'submission_concept_resolution': 'submission_concept_resolution_id submission_id concept_id is_current classification_decision_json',
     'submission_lexical_decision': 'submission_id concept_resolution_id decision_action resolved_alternative_id assignment_result_id concept_id_at_decision',
     'occurrence_grammar': 'occurrence_grammar_id occurrence_id is_current created_from_submission_id',
     'alternative_morphology': 'alternative_morphology_id alternative_id is_current',
@@ -103,6 +110,9 @@ REQUIRED = {
 }
 
 PERSISTENT_ACTIVITY_ENTITIES = {
+    'collection': ('collection','collection_id'),
+    'classification_system': ('classification_system','system_id'),
+    'classification_category': ('classification_category','category_id'),
     'application_setting': ('application_setting', 'setting_key'),
     'alternative': ('alternative', 'alternative_id'),
     'alternative_relation': ('alternative_relation', 'alternative_relation_id'),
@@ -365,6 +375,75 @@ class Auditor:
                 problems.append(dict(publication_id=row['publication_id'], error=str(exc)))
         self.record('INVALID_PUBLICATION_SNAPSHOT', problems)
 
+    def classifications(self):
+        self.query('DUPLICATE_OPEN_MEMBERSHIP', '''SELECT concept_id,collection_id,count(*) AS n
+            FROM collection_membership WHERE ended_at IS NULL GROUP BY concept_id,collection_id HAVING count(*)>1''')
+        self.query('DUPLICATE_OPEN_CLASSIFICATION', '''SELECT concept_id,system_id,count(*) AS n
+            FROM concept_classification_revision WHERE ended_at IS NULL GROUP BY concept_id,system_id HAVING count(*)>1''')
+        for table in ('concept_classification_revision','submission_classification_proposal'):
+            self.query('INVALID_CATEGORY_PAIR:' + table, f'''SELECT r.* FROM {table} r
+                LEFT JOIN classification_category a ON a.category_id=r.category_1_id
+                LEFT JOIN classification_category b ON b.category_id=r.category_2_id
+                WHERE (r.category_1_id IS NULL AND r.category_2_id IS NOT NULL)
+                OR r.category_1_id=r.category_2_id
+                OR (r.category_1_id IS NOT NULL AND (a.category_id IS NULL OR a.system_id!=r.system_id
+                    OR r.category_1_name IS NULL OR r.category_1_code IS NULL))
+                OR (r.category_2_id IS NOT NULL AND (b.category_id IS NULL OR b.system_id!=r.system_id
+                    OR r.category_2_name IS NULL OR r.category_2_code IS NULL))
+                OR (r.category_1_id IS NULL AND (r.category_1_name IS NOT NULL OR r.category_1_code IS NOT NULL))
+                OR (r.category_2_id IS NULL AND (r.category_2_name IS NOT NULL OR r.category_2_code IS NOT NULL))''')
+        self.query('INVALID_CLASSIFICATION_SCOPE', '''SELECT r.revision_id FROM concept_classification_revision r
+            LEFT JOIN classification_system s ON s.system_id=r.system_id
+            LEFT JOIN collection_membership m ON m.membership_id=r.membership_id
+            WHERE s.system_id IS NULL OR (s.collection_id IS NULL AND r.membership_id IS NOT NULL)
+            OR (s.collection_id IS NOT NULL AND (m.membership_id IS NULL OR m.collection_id!=s.collection_id
+                OR m.concept_id!=r.concept_id OR (r.ended_at IS NULL AND m.ended_at IS NOT NULL)
+                OR r.started_at<m.started_at OR (m.ended_at IS NOT NULL AND r.ended_at>m.ended_at)))''')
+        self.query('INVALID_CLASSIFICATION_CHAIN', '''SELECT r.revision_id FROM concept_classification_revision r
+            LEFT JOIN concept_classification_revision p ON p.revision_id=r.supersedes_revision_id
+            WHERE r.ended_at<r.started_at OR (r.supersedes_revision_id IS NOT NULL AND
+                (p.revision_id IS NULL OR p.revision_id>=r.revision_id OR p.concept_id!=r.concept_id
+                 OR p.system_id!=r.system_id OR p.membership_id IS NOT r.membership_id
+                 OR p.ended_at IS NULL OR p.ended_at>r.started_at))''')
+        self.query('BRANCHED_CLASSIFICATION_HISTORY', '''SELECT supersedes_revision_id,count(*) AS n
+            FROM concept_classification_revision WHERE supersedes_revision_id IS NOT NULL
+            GROUP BY supersedes_revision_id HAVING count(*)>1''')
+        for table in ('collection_membership','concept_classification_revision'):
+            self.query('INVALID_CLASSIFICATION_ORIGIN:' + table, f'''SELECT r.* FROM {table} r
+                LEFT JOIN submission_concept_resolution d ON d.submission_concept_resolution_id=r.resolution_id
+                LEFT JOIN submission_concept_resolution e ON e.submission_concept_resolution_id=r.ended_resolution_id
+                WHERE (r.resolution_id IS NOT NULL AND (d.submission_concept_resolution_id IS NULL OR d.concept_id!=r.concept_id))
+                   OR (r.ended_resolution_id IS NOT NULL AND (e.submission_concept_resolution_id IS NULL OR e.concept_id!=r.concept_id))''')
+        self.query('INVALID_MEMBERSHIP_PERIOD', 'SELECT membership_id FROM collection_membership WHERE ended_at<started_at')
+        self.query('INVALID_CLASSIFICATION_SYSTEM', """SELECT system_id FROM classification_system
+            WHERE (code='semantic-fields' AND collection_id IS NOT NULL)
+               OR (code!='semantic-fields' AND collection_id IS NULL)""")
+        self.query('INVALID_CONTROLLED_CATEGORY', """SELECT category_id FROM classification_category
+            WHERE lower(trim(name))='n/a' OR lower(trim(code))='n/a' OR name_key='n/a' OR trim(name)=''""")
+        for table in ('submission_classification_proposal','submission_collection_proposal'):
+            self.query('INVALID_CLASSIFICATION_SUBMISSION:' + table, f'''SELECT p.submission_id FROM {table} p
+                LEFT JOIN submission s ON s.submission_id=p.submission_id
+                WHERE s.submission_id IS NULL OR s.submission_type!='ALTERNATIVE' ''')
+            invalid=[]
+            for r in self.db.execute(f'SELECT submission_id,base_state_json FROM {table}'):
+                try:
+                    value=json.loads(r['base_state_json'])
+                    if not isinstance(value,dict) or not isinstance(value['memberships'],list) or not isinstance(value['revisions'],list):
+                        raise ValueError('Invalid proposal base')
+                except (ValueError,KeyError,TypeError):
+                    invalid.append(dict(submission_id=r['submission_id']))
+            self.record('INVALID_CLASSIFICATION_PROPOSAL_BASE:' + table,invalid)
+        problems=[]
+        if 'classification_decision_json' in self.columns['submission_concept_resolution']:
+            for r in self.db.execute('SELECT * FROM submission_concept_resolution WHERE classification_decision_json IS NOT NULL'):
+                try:
+                    value=json.loads(r['classification_decision_json'])
+                    if value['concept_id']!=r['concept_id'] or not isinstance(value['classifications'],list) or not isinstance(value['collections'],list):
+                        raise ValueError('Invalid conceptual decision')
+                except (ValueError,KeyError,TypeError):
+                    problems.append(dict(resolution_id=r['submission_concept_resolution_id']))
+        self.record('INVALID_CLASSIFICATION_DECISION',problems)
+
     def run(self):
         self.record('SCHEMA_COVERAGE', (
             dict(table=t, missing_columns=sorted(set(cols.split()) - self.columns.get(t, set())))
@@ -378,6 +457,7 @@ class Auditor:
             self.nomenclature()
             self.workflow()
             self.publications()
+            self.classifications()
         return self.results
 
 

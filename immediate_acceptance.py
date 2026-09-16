@@ -113,7 +113,7 @@ def grammar_operation(
 
 def alternative_operation(occurrence_id,proposal,decision,*,actor_context,reviewed_by=None,review_note=None):
     def operation(connection):
-        submission_id=create_alternative_submission(connection,occurrence_id,proposal["proposal_kind"],proposed_existing_alternative_id=proposal.get("proposed_existing_alternative_id"),phonological_relation_answer=proposal.get("phonological_relation_answer"),relations=proposal.get("relations",()),analysis_note=proposal.get("analysis_note"),submitted_by=reviewed_by,morphology=proposal.get("morphology"),collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"))
+        submission_id=create_alternative_submission(connection,occurrence_id,proposal["proposal_kind"],proposed_existing_alternative_id=proposal.get("proposed_existing_alternative_id"),phonological_relation_answer=proposal.get("phonological_relation_answer"),relations=proposal.get("relations",()),analysis_note=proposal.get("analysis_note"),submitted_by=reviewed_by,morphology=proposal.get("morphology"),collaborator_id=actor_context.get("collaborator_id"),access_role=actor_context.get("access_role"),concept_metadata=proposal.get('concept_metadata'))
         canonical=decision.get("decision")
         concept_resolution=decision.get("concept_resolution")
         reference = connection.execute("SELECT reference_concept_id FROM alternative_submission WHERE submission_id=?", (submission_id,)).fetchone()[0]
@@ -124,6 +124,7 @@ def alternative_operation(occurrence_id,proposal,decision,*,actor_context,review
         save_resolution(connection, submission_id, action,
             concept_id=resolution.get("concept_id"), label=resolution.get("label"),
             note=resolution.get("note") or review_note,
+            concept_metadata=proposal.get('concept_metadata'),
             collaborator_id=actor_context.get("collaborator_id"), access_role=actor_context.get("access_role"))
         concept_resolution=None
         if canonical=="existing":

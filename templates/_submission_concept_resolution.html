@@ -4,6 +4,15 @@
 {% if aporte['reference_concept_id'] %}Concepto de referencia: {{ aporte['context_label'] }}
 {% elif aporte['reference_concept_proposal_id'] %}Propuesta conceptual: {{ aporte['context_label'] }}
 {% else %}Sin referencia conceptual original registrada.{% endif %}</p>
+{% set metadata = ctx['metadata'] %}
+<details><summary>Clasificaciones y membresías propuestas originalmente</summary>
+{% for proposal in metadata.proposals %}<p>{{ proposal.system_name_snapshot }}: {{ proposal.category_1_name or 'Vacío' }}{% if proposal.category_2_name %} · {{ proposal.category_2_name }}{% endif %}</p>{% else %}<p>Sin cambios de clasificación propuestos.</p>{% endfor %}
+{% for proposal in metadata.membership_proposals %}<p>{{ proposal.collection_name_snapshot }}: {{ 'Incorporar' if proposal.action == 'join' else 'Retirar' }}</p>{% endfor %}
+</details>
+{% for decision in ctx.metadata_decisions %}<details><summary>Clasificaciones decididas · Concept #{{ decision.concept_id }}</summary>
+{% for item in decision.classifications %}<p>{{ item.system_name }}: {{ item.names[0] or 'Vacío' }}{% if item.names[1] %} · {{ item.names[1] }}{% endif %}</p>{% endfor %}
+{% for item in decision.collections %}<p>{{ item.name }}: {{ 'Incorporar' if item.action == 'join' else 'Retirar' }}</p>{% endfor %}
+</details>{% endfor %}
 {% if ctx['concept_resolution'] %}
 <p><strong>Concepto resuelto para esta revisión:</strong> {{ ctx['concept_resolution']['preferred_label'] }}</p>
 <p><strong>Estado: Resuelto</strong></p>
@@ -13,11 +22,15 @@
 {% elif aporte['status']=='pending' %}<p>Concepto pendiente.</p>
 {% else %}<p>No existe resolución conceptual local registrada para este aporte histórico.</p>{% endif %}
 {% if aporte['status']=='pending' and can_review %}
+<form method="get" action="{{ url_for('submissions.detalle_aporte',submission_id=aporte['submission_id']) }}">
+<label>Consultar estado del Concept de destino <select name="metadata_target"><option value="">Referencia actual / Concept nuevo</option>{% for concept in ctx.concepts %}<option value="{{ concept.concept_id }}"{% if ctx.metadata_target == concept.concept_id %} selected{% endif %}>{{ concept.preferred_label }}</option>{% endfor %}</select></label><button type="submit">Consultar antes de editar</button></form>
+{% include '_concept_metadata_history.html' %}
 {% set resolution = ctx['concept_resolution'] %}
 {% set selected_action = ('CONFIRM_REFERENCE' if resolution['resolution_action']=='CONFIRM_REFERENCE' else 'USE_EXISTING') if resolution else ('ACCEPT_PROPOSAL' if aporte['reference_concept_proposal_id'] else 'CONFIRM_REFERENCE' if aporte['reference_concept_id'] else 'USE_EXISTING') %}
 {% if resolution %}<details class="concept-resolution-editor"><summary>Modificar resolución</summary>{% endif %}
 <form class="concept-resolution-form" method="post" action="{{ url_for('submissions.resolver_concepto_aporte',submission_id=aporte['submission_id']) }}">
 <input type="hidden" name="concept_edit_token" value="{{ ctx['concept_edit_token'] }}">
+<input type="hidden" name="metadata_target" value="{{ ctx.metadata_target or '' }}">
 <label>Acción <select name="concept_action" required>
 {% if aporte['reference_concept_proposal_id'] %}<option value="ACCEPT_PROPOSAL"{% if selected_action=='ACCEPT_PROPOSAL' %} selected{% endif %}>Aceptar el concepto propuesto por el analista</option>{% endif %}
 {% if aporte['reference_concept_id'] %}<option value="CONFIRM_REFERENCE"{% if selected_action=='CONFIRM_REFERENCE' %} selected{% endif %}>Confirmar el concepto de referencia original</option>{% endif %}
@@ -25,6 +38,9 @@
 <label data-concept-action="USE_EXISTING"{% if selected_action!='USE_EXISTING' %} hidden{% endif %}>Concepto existente <select name="concept_id"{% if selected_action!='USE_EXISTING' %} disabled{% else %} required{% endif %}><option value="">Seleccione</option>{% for concept in ctx['concepts'] %}<option value="{{ concept['concept_id'] }}"{% if resolution and resolution['concept_id']==concept['concept_id'] %} selected{% endif %}>{{ concept['preferred_label'] }}{% if not concept.has_active_alternatives %} — sin alternativas vigentes{% endif %}</option>{% endfor %}</select></label>
 <label data-concept-action="CREATE_NEW" hidden>Nombre del nuevo concepto <input name="concept_label" disabled></label>
 <label>Nota de resolución conceptual <textarea name="concept_note">{{ (resolution['resolution_note'] or '') if resolution else '' }}</textarea></label>
+{% include '_concept_metadata_fields.html' %}
+<p><label><input type="checkbox" name="metadata_reviewed" value="yes"> Revisé las selecciones frente al estado del Concept de destino mostrado arriba.</label></p>
+<p>Los cambios marcados se guardan ahora en el Concept. Un rechazo léxico posterior no los revierte.</p>
 <p>Cuando la resolución difiere de la referencia o propuesta original, se requiere una explicación. Guardar esta resolución mantiene el aporte pendiente y conserva la clasificación vigente.</p>
 <button type="submit" class="button-primary">Guardar resolución del concepto</button>
 </form>
