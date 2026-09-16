@@ -3,7 +3,7 @@ import sqlite3
 
 SEMANTIC_FIELDS = (
     'Actividades y acciones', 'Alimentación', 'Animales', 'Antropónimos',
-    'Áreas de conocimiento', 'Calima', 'Cantidad y medición', 'Colores',
+    'Áreas de conocimiento', 'Clima', 'Cantidad y medición', 'Colores',
     'Comunicación y afines', 'Cortesía', 'Cualidades', 'Cuerpo humano',
     'Cultura sorda', 'Deporte', 'Educación', 'Expresiones de Tiempo',
     'Gobierno y sociedad', 'Hogar y vivienda', 'Lugares', 'Objetos y materiales',
