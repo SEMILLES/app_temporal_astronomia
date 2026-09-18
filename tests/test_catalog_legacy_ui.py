@@ -73,7 +73,7 @@ class LegacyCatalogUITests(unittest.TestCase):
         self.assertEqual(html.count("Información técnica e historial"),1);self.assertNotIn("<summary>Historial de nomenclatura</summary>",html);self.assertNotIn("Información técnica y trazabilidad",html)
         self.assertGreater(html.index("Historial de nomenclatura"),html.index("Morfología"))
         self.assertLess(html.index('class="identificador-alternativa"'),html.index('class="media-alternativa"') if 'class="media-alternativa"' in html else html.index("Ocurrencias y fuentes"))
-        self.assertNotIn("Campo semántico",html)
+        self.assertIn("Campo semántico",html)
     def test_occurrence_documentation_is_inside_source_details_and_note_is_conditional(self):
         html=self.client.get("/ana/catalogo-interno/alternativas/1").get_data(as_text=True)
         source_start=html.index("<summary>Acerca de esta fuente</summary>")

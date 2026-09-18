@@ -4,4 +4,6 @@ __pycache__/
 *.db
 uploads/
 .env
+/.test-tmp/
+/validation/
 import_inputs/astronomia/

@@ -1,0 +1,39 @@
+{
+  "changes": 0,
+  "events": [],
+  "satisfied": [
+    {
+      "legacy": "10787-EMPANADA",
+      "alternative_id": 802,
+      "status": "assignment_already_satisfied"
+    },
+    {
+      "legacy": "10540-COLOMBIA",
+      "alternative_id": 647,
+      "status": "assignment_already_satisfied"
+    },
+    {
+      "legacy": "10787-COLOMBIA",
+      "alternative_id": 1459,
+      "status": "assignment_already_satisfied"
+    },
+    {
+      "legacy": "3155-SUPERIORIDAD EN UNA CUALIDAD",
+      "alternative_id": 1460,
+      "status": "assignment_already_satisfied"
+    },
+    {
+      "legacy": "9567-PREGUNTAR",
+      "alternative_id": 1253,
+      "status": "assignment_already_satisfied"
+    },
+    {
+      "legacy": "10973-PREGUNTAR",
+      "alternative_id": 1254,
+      "status": "assignment_already_satisfied"
+    }
+  ],
+  "validated_cases": 6,
+  "mode": "apply",
+  "backup": null
+}

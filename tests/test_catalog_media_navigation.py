@@ -76,7 +76,7 @@ class CatalogMediaNavigationTests(unittest.TestCase):
         self.assertEqual(coordinates(two_card),coordinates(variation_network_groups(renamed)[0]))
     def test_video_filter_markup_detail_network_and_standalone(self):
         html=self.client.get("/ana/catalogo-interno/conceptos/1").get_data(as_text=True)
-        self.assertIn("Solo video",html); self.assertIn('data-has-video="true"',html); self.assertIn('data-has-video="false"',html)
+        self.assertIn("Solo conceptos con video",html); self.assertIn('data-has-video="true"',html); self.assertIn('data-has-video="false"',html)
         self.assertGreaterEqual(html.count("Alternativa léxica 1"),2); self.assertGreaterEqual(html.count("Alternativa léxica 2"),2); self.assertEqual(html.count('class="linea-red"'),2)
         self.assertIn("Red de variación léxica y fonológica",html); self.assertNotIn('bloque-red-variacion" open',html); self.assertNotIn("Mostrar",html); self.assertNotIn("Ocultar",html)
         self.assertIn("Alternativa léxica 1",html); self.assertIn("Alternativa léxica 2",html); self.assertIn('class="grupo-red grupo-red-0"',html); self.assertIn('class="grupo-red grupo-red-1"',html)

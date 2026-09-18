@@ -1,0 +1,17 @@
+{
+  "rows_read": 262,
+  "created": 0,
+  "matching": 262,
+  "updated": 0,
+  "null_fields": 2491,
+  "resolved_ids": {
+    "MAPA-COLOMBIA-1b": 1459,
+    "MÁS/MENOS-QUÉ-1a": 1460
+  },
+  "changes": 0,
+  "errors": [],
+  "total_profiles": 262,
+  "mode": "apply",
+  "backup": null,
+  "workbook_sha256": "40ab388966fec68110cf2383fe2c7b4f93728ba4092b15b22dffd93ee46b7c0f"
+}

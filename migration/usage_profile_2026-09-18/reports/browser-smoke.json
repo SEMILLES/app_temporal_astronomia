@@ -1,0 +1,9 @@
+{
+  "browser": "Chromium",
+  "javascript_errors": [],
+  "filters_combined": true,
+  "all_alternatives_retained": true,
+  "conditional_profile_tab": true,
+  "semantic_multiselect_search": true,
+  "navigation_and_clear": true
+}

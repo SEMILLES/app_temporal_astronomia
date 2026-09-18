@@ -3,6 +3,13 @@
 import math
 
 
+def variation_type(concept):
+    groups = variation_groups(concept)
+    lexical = len(groups) > 1
+    phonological = any(len(group) > 1 for group in groups)
+    return 'both' if lexical and phonological else 'lexical' if lexical else 'phonological' if phonological else 'none'
+
+
 def variation_groups(concept):
     """Return connected components from explicit relations, plus singletons."""
     alternatives = {item["alternative_id"]: item for item in concept.get("alternatives", [])}

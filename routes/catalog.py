@@ -10,10 +10,28 @@ from catalog_publication import (IdenticalPublication, PublicationBlocked,
                                  PublicationError, publication_preview,
                                  publish_catalog)
 from catalog_projection import build_catalog_projection
+from catalog_context import enrich_catalog
+from usage_profile import display_profile, normalize
+from catalog_presentation import variation_type
 from database import conectar
 from conflict_presentation import local_timestamp
 
 catalog_bp = Blueprint("catalog", __name__)
+
+
+@catalog_bp.app_template_global()
+def catalog_variation_type(concept):
+    return variation_type(concept)
+
+
+@catalog_bp.app_template_global()
+def usage_context_fields(alternative):
+    return display_profile(alternative.get('usage_profile'))
+
+
+@catalog_bp.app_template_global()
+def catalog_fields(values):
+    return list(dict.fromkeys(value for raw in values or [] if (value := normalize(raw))))[:2]
 
 
 def _presentation(concept):
@@ -46,7 +64,7 @@ def _matches(concept, query):
 def _load():
     db = conectar()
     try:
-        projection = build_catalog_projection(db)
+        projection = enrich_catalog(db, build_catalog_projection(db))
         blocking = db.execute(
             "SELECT count(*) FROM conflict "
             "WHERE status='open' AND severity='blocking'"

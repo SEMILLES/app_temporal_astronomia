@@ -1,0 +1,95 @@
+{
+  "changes": 10,
+  "events": [
+    {
+      "action": "assign",
+      "legacy": "10787-EMPANADA",
+      "assignment_id": 2516,
+      "alternative_id": 802
+    },
+    {
+      "action": "locator",
+      "legacy": "10787-EMPANADA",
+      "before": [
+        null,
+        null
+      ],
+      "after": "1:20"
+    },
+    {
+      "action": "locator",
+      "legacy": "10540-COLOMBIA",
+      "before": [
+        null,
+        "01:16"
+      ],
+      "after": "1:18"
+    },
+    {
+      "action": "create_alternative",
+      "alternative_id": 1459,
+      "name": "MAPA-COLOMBIA-1b"
+    },
+    {
+      "action": "assign",
+      "legacy": "10787-COLOMBIA",
+      "assignment_id": 2517,
+      "alternative_id": 1459
+    },
+    {
+      "action": "locator",
+      "legacy": "10787-COLOMBIA",
+      "before": [
+        null,
+        null
+      ],
+      "after": "1:21"
+    },
+    {
+      "action": "create_concept",
+      "concept_id": 1399,
+      "name": "MÁS/MENOS-QUÉ"
+    },
+    {
+      "action": "create_alternative",
+      "alternative_id": 1460,
+      "name": "MÁS/MENOS-QUÉ-1a"
+    },
+    {
+      "action": "assign",
+      "legacy": "3155-SUPERIORIDAD EN UNA CUALIDAD",
+      "assignment_id": 2518,
+      "alternative_id": 1460
+    },
+    {
+      "action": "relation",
+      "low": 1089,
+      "high": 1459,
+      "parameter": "N_MANOS"
+    }
+  ],
+  "satisfied": [
+    {
+      "legacy": "10540-COLOMBIA",
+      "alternative_id": 647,
+      "status": "assignment_already_satisfied"
+    },
+    {
+      "legacy": "9567-PREGUNTAR",
+      "alternative_id": 1253,
+      "status": "assignment_already_satisfied"
+    },
+    {
+      "legacy": "10973-PREGUNTAR",
+      "alternative_id": 1254,
+      "status": "assignment_already_satisfied"
+    }
+  ],
+  "validated_cases": 6,
+  "mode": "apply",
+  "backup": "C:\\Users\\jucer\\Documents\\app_temporal_astronomia\\.worktrees\\usage-context\\validation\\usage-context-candidate.20260918T065409377262Z.backup.db",
+  "ledger": {
+    "reconciliation_run": "6686a59ea4cae80552753020e6715c078948ce7ae90cd9630278bb731a8f690f",
+    "reconciliation_operation": "1f55d241e83e3dcef42497766e2fd1338ee33db377043239e4bb8201aa5abd0a"
+  }
+}

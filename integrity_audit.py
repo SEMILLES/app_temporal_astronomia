@@ -11,6 +11,7 @@ from alternative_nomenclature import canonical_concept_state, connected_componen
 from lexical_simulation import calculate_concept_nomenclature, validate_concept_nomenclature
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
 from youtube_media import parse_youtube_url
+from usage_profile import FIELDS as USAGE_FIELDS, normalize as normalize_usage
 
 
 class AuditAccessError(Exception):
@@ -64,6 +65,7 @@ def quote(identifier):
 
 # Columns used by semantic checks. Missing coverage fails closed, including preflight.
 REQUIRED = {
+    'alternative_usage_profile': 'profile_id alternative_id frequency_impressionistic geographic_zone_general geographic_zone_detail age_group socioeconomic_group popular_etymology iconicity_notes register_notes semantic_pragmatic_nuance spanish_relations additional_notes created_at updated_at',
     'collection': 'collection_id code name name_key active',
     'classification_system': 'system_id collection_id code name active',
     'classification_category': 'category_id system_id code name name_key active',
@@ -444,6 +446,15 @@ class Auditor:
                     problems.append(dict(resolution_id=r['submission_concept_resolution_id']))
         self.record('INVALID_CLASSIFICATION_DECISION',problems)
 
+    def usage_profiles(self):
+        self.query('DUPLICATE_USAGE_PROFILE', '''SELECT alternative_id,count(*) AS count
+            FROM alternative_usage_profile GROUP BY alternative_id HAVING count(*)>1''')
+        self.record('ARTIFICIAL_USAGE_ABSENCE', (
+            dict(profile_id=row['profile_id'], field=field)
+            for row in self.db.execute('SELECT * FROM alternative_usage_profile')
+            for field in USAGE_FIELDS if row[field] is not None and normalize_usage(row[field]) is None
+        ))
+
     def run(self):
         self.record('SCHEMA_COVERAGE', (
             dict(table=t, missing_columns=sorted(set(cols.split()) - self.columns.get(t, set())))
@@ -458,6 +469,7 @@ class Auditor:
             self.workflow()
             self.publications()
             self.classifications()
+            self.usage_profiles()
         return self.results
 
 

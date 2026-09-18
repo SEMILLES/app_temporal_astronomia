@@ -1,0 +1,88 @@
+[
+  {
+    "concept": "A-VECES",
+    "groups": 1,
+    "variation": "none",
+    "fields": [
+      "Expresiones de Tiempo",
+      "Comunicación y afines"
+    ],
+    "alternatives": [
+      "A-VECES-1a"
+    ]
+  },
+  {
+    "concept": "EMPANADA",
+    "groups": 2,
+    "variation": "lexical",
+    "fields": [
+      "Alimentación"
+    ],
+    "alternatives": [
+      "EMPANADA-1a",
+      "EMPANADA-2a"
+    ]
+  },
+  {
+    "concept": "MAPA-COLOMBIA",
+    "groups": 1,
+    "variation": "phonological",
+    "fields": [
+      "Lugares",
+      "Gobierno y sociedad"
+    ],
+    "alternatives": [
+      "MAPA-COLOMBIA-1a",
+      "MAPA-COLOMBIA-1b"
+    ]
+  },
+  {
+    "concept": "MORADO",
+    "groups": 5,
+    "variation": "both",
+    "fields": [
+      "Colores"
+    ],
+    "alternatives": [
+      "MORADO-1a",
+      "MORADO-1b",
+      "MORADO-1c",
+      "MORADO-1d",
+      "MORADO-2a",
+      "MORADO-2b",
+      "MORADO-3a",
+      "MORADO-4a",
+      "MORADO-5a"
+    ],
+    "profile_4a": {
+      "geographic_zone_general": "Caribe",
+      "geographic_zone_detail": "Córdoba",
+      "semantic_pragmatic_nuance": "Significa moretón."
+    }
+  },
+  {
+    "concept": "MÁS/MENOS-QUÉ",
+    "groups": 1,
+    "variation": "none",
+    "fields": [],
+    "alternatives": [
+      "MÁS/MENOS-QUÉ-1a"
+    ]
+  },
+  {
+    "concept": "PREGUNTAR",
+    "groups": 4,
+    "variation": "both",
+    "fields": [
+      "Actividades y acciones",
+      "Comunicación y afines"
+    ],
+    "alternatives": [
+      "PREGUNTAR-1a",
+      "PREGUNTAR-1b",
+      "PREGUNTAR-1c",
+      "PREGUNTAR-2a",
+      "PREGUNTAR-3a"
+    ]
+  }
+]

@@ -52,7 +52,8 @@ def build_catalog_diff(previous, current):
         old_parent, old = old_alt[identifier]; new_parent, new = new_alt[identifier]
         if ((old_parent, old.get("working_label"), old.get("name")) !=
                 (new_parent, new.get("working_label"), new.get("name")) or
-                old.get("media", []) != new.get("media", [])):
+                old.get("media", []) != new.get("media", []) or
+                old.get("usage_profile", {}) != new.get("usage_profile", {})):
             summary["alternatives_changed"].append({"alternative_id": identifier, "name": new.get("name")})
         if old.get("morphology") != new.get("morphology"):
             summary["morphology_changed"].append({"alternative_id": identifier, "name": new.get("name")})

@@ -1,0 +1,35 @@
+{
+  "database_unchanged": true,
+  "concepts": [
+    {
+      "concept": "MORADO",
+      "http": 200,
+      "all_alternatives_rendered": true
+    },
+    {
+      "concept": "A-VECES",
+      "http": 200,
+      "all_alternatives_rendered": true
+    },
+    {
+      "concept": "MAPA-COLOMBIA",
+      "http": 200,
+      "all_alternatives_rendered": true
+    },
+    {
+      "concept": "EMPANADA",
+      "http": 200,
+      "all_alternatives_rendered": true
+    },
+    {
+      "concept": "MÁS/MENOS-QUÉ",
+      "http": 200,
+      "all_alternatives_rendered": true
+    },
+    {
+      "concept": "PREGUNTAR",
+      "http": 200,
+      "all_alternatives_rendered": true
+    }
+  ]
+}

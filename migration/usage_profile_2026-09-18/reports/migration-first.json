@@ -1,0 +1,10 @@
+{
+  "migration": "023",
+  "changes": 1,
+  "mode": "apply",
+  "backup": "C:\\Users\\jucer\\Documents\\app_temporal_astronomia\\.worktrees\\usage-context\\validation\\usage-context-candidate.20260918T065408156799Z.backup.db",
+  "ledger": {
+    "reconciliation_run": "6686a59ea4cae80552753020e6715c078948ce7ae90cd9630278bb731a8f690f",
+    "reconciliation_operation": "1f55d241e83e3dcef42497766e2fd1338ee33db377043239e4bb8201aa5abd0a"
+  }
+}

@@ -1,0 +1,33 @@
+{
+  "before": {
+    "PASS": 1691,
+    "WARN": 8,
+    "FAIL": 18
+  },
+  "after": {
+    "PASS": 1693,
+    "WARN": 8,
+    "FAIL": 18
+  },
+  "new_failures": {},
+  "baseline_failure_codes": [
+    "NOMENCLATURE:1134",
+    "NOMENCLATURE:1137",
+    "NOMENCLATURE:1145",
+    "NOMENCLATURE:1156",
+    "NOMENCLATURE:1274",
+    "NOMENCLATURE:1383",
+    "NOMENCLATURE:236",
+    "NOMENCLATURE:277",
+    "NOMENCLATURE:285",
+    "NOMENCLATURE:290",
+    "NOMENCLATURE:647",
+    "NOMENCLATURE:653",
+    "NOMENCLATURE:654",
+    "NOMENCLATURE:688",
+    "NOMENCLATURE:703",
+    "NOMENCLATURE:730",
+    "NOMENCLATURE:933",
+    "OCCURRENCE_OUTSIDE_SOURCE_PERIOD"
+  ]
+}

@@ -18,6 +18,7 @@ else:
 
 
 REQUIRED_APPLICATION_TABLES = frozenset({
+    "alternative_usage_profile",
     "collection", "classification_system", "classification_category",
     "collection_membership", "concept_classification_revision",
     "submission_classification_proposal", "submission_collection_proposal",
@@ -878,3 +879,5 @@ def crear_esquema(conexion):
     install_lexical_decision(conexion)
     from classification_schema import install as install_classification
     install_classification(conexion)
+    from usage_profile import install as install_usage_profile
+    install_usage_profile(conexion)

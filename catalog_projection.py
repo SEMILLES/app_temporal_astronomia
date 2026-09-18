@@ -1,6 +1,7 @@
 """Deterministic, read-only projection of the current canonical catalog."""
 from source_details import catalog_source_reference
 from alternative_nomenclature import working_label_key
+from usage_profile import public_profile
 
 from youtube_media import (InvalidYouTubeURL, parse_youtube_url,
                            youtube_embed_url, youtube_watch_url)
@@ -127,6 +128,8 @@ def project_alternative_media(connection, alternative_id):
               "provenance_note", "role")
     result=[]
     for row in rows:
+        if row['mime_type'] != 'video/youtube':
+            continue
         try: video_id=parse_youtube_url(row["storage_key"])
         except InvalidYouTubeURL: continue
         item={field:row[field] for field in fields}
@@ -149,6 +152,8 @@ def build_catalog_projection(connection):
     # Phase 19A compatibility option B: retain legacy arrays until an explicit
     # data migration switches their source. Never merge them with structured rows.
     # Existing immutable publications and their names/order remain untouched.
+    profiles = {row['alternative_id']: public_profile(row)
+                for row in connection.execute('SELECT * FROM alternative_usage_profile')}
     all_alternatives = [dict(row) for row in connection.execute("""
         SELECT a.alternative_id, a.concept_id, a.original_code, a.working_label,
                a.created_at, a.retired_at, c.preferred_label,
@@ -187,6 +192,8 @@ def build_catalog_projection(connection):
             "legacy_alternative_id": row["original_code"],
             "working_label": row["working_label"],
             "name": names[row["alternative_id"]],
+            **({'usage_profile': profiles[row['alternative_id']]}
+               if profiles.get(row['alternative_id']) else {}),
             "media": project_alternative_media(connection, row["alternative_id"]),
             "occurrences": occurrences,
             "morphology": project_morphology(connection, row["alternative_id"], names),
