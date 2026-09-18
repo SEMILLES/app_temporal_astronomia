@@ -7,7 +7,8 @@ Rama `feature/analyst-work-assignment`, basada en `feature/occurrence-form-revie
 
 - Se reutiliza `collaborator`. No hay usuarios individuales autenticados ni un rol
   por colaborador: los permisos existentes dependen del prefijo privado de la ruta.
-  Todos los colaboradores activos pueden recibir trabajo; solo `master` lo administra.
+  Todos los colaboradores activos pueden recibir trabajo; `reviewer` y `master`
+  administran las asignaciones. «Mi trabajo» es exclusivo del rol exacto `analyst`.
 - El operador se toma de «Trabajando como», que es una identificación declarada,
   no una identidad autenticada. Puede quedar nulo, siguiendo la convención existente.
 - La auditoría vive en la nueva entidad administrativa, con identificadores,
@@ -39,17 +40,17 @@ Campos: `work_assignment_id`, `concept_id`, `analyst_id`, `analyst_name_snapshot
 Índice único parcial `(concept_id, analyst_id) WHERE active=1` e índice de filtro
 por analista. Claves foráneas a `concept` y `collaborator`.
 
-`GET /<prefijo-master>/administracion/asignaciones`: listado y filtros.
+`GET /<prefijo-reviewer-o-master>/administracion/asignaciones`: listado y filtros.
 `POST` en la misma ruta: `action=assign` o `action=remove`.
 Sin acceso devuelve 404, igual que las rutas privadas existentes.
 
-`GET /<prefijo-interno>/mi-trabajo`: asignaciones activas del colaborador declarado,
-disponible para los roles existentes `analyst`, `reviewer` y `master`. Búsqueda por
+`GET /<prefijo-analyst>/mi-trabajo`: asignaciones activas del colaborador declarado,
+exclusivo de `analyst`; `reviewer` y `master` reciben 404. Búsqueda por
 ID exacto o etiqueta y páginas de 50 conceptos. «Abrir concepto» enlaza a la ruta
 existente `alternatives.alternativas`, conservando el prefijo de acceso.
 
-La ampliación no modifica la migración 025 ni el esquema: siguen siendo SQLite,
-exclusivamente administrativos, con retirada lógica e índice único parcial.
+La migración 025 y su módulo `work_assignment_schema.py` permanecen inmutables.
+La corrección de roles requiere la nueva migración 026, descrita más abajo.
 
 La migración exige una ruta explícita, simula por defecto y crea un respaldo al
 aplicar. Rechaza ejecución en Railway y en modo producción. El inicio con base
@@ -73,6 +74,7 @@ if (-not (Test-Path -LiteralPath '.\work_assignment_demo.db')) {
     & $python scripts/demo_work_assignments.py
 }
 $env:LESICO_DATABASE_PATH = Join-Path $PWD 'work_assignment_demo.db'
+& $python migrations/026_work_assignment_reviewer_roles.py --database $env:LESICO_DATABASE_PATH --apply
 & $python -m flask --app app run --host 127.0.0.1 --port 5055 --no-reload
 ```
 
@@ -85,9 +87,11 @@ no puede acceder a esta administración. Detener con Ctrl+C.
 Recorrido de reunión: en `http://127.0.0.1:5055/admin-local/colaboradores`, registrar
 «Andrés» si aún no existe en esta demo. Abrir «Asignación de trabajo», seleccionar
 Concepto C y Andrés, y pulsar «Asignar seleccionados». Elegir Andrés en
-«Trabajando como» y pulsar «Mi trabajo»: aparece C; «Abrir concepto» abre la página
-existente aunque no tenga alternativas. También puede abrirse
-`http://127.0.0.1:5055/analista-local/mi-trabajo`, que recupera la misma selección.
+«Trabajando como» y abrir `http://127.0.0.1:5055/analista-local/mi-trabajo`, que
+recupera la selección: aparece C; «Abrir concepto» abre la página existente aunque
+no tenga alternativas. «Mi trabajo» solo aparece bajo el acceso de analista.
+Reviewer puede asignar y retirar desde
+`http://127.0.0.1:5055/revision-local/administracion/asignaciones`.
 Para demostrar una asignación compartida, asignar C también a Ana, cambiar el
 selector entre ambas personas, retirar solo la de Andrés y comprobar que C
 permanece para Ana. No guardar cambios lingüísticos durante la demo.
@@ -97,15 +101,52 @@ Para una **copia local desechable** de una base existente de la rama base:
 ```powershell
 & $python migrations/025_concept_work_assignment.py --database C:\ruta\copia-local.db
 & $python migrations/025_concept_work_assignment.py --database C:\ruta\copia-local.db --apply
+& $python migrations/026_work_assignment_reviewer_roles.py --database C:\ruta\copia-local.db
+& $python migrations/026_work_assignment_reviewer_roles.py --database C:\ruta\copia-local.db --apply
 ```
 
 No se requiere migrar la demo: nace con el esquema actualizado. No apuntar estos
 comandos a bases de producción o pruebas remotas.
 
+## Migración 026 y política de roles
+
+`026_work_assignment_reviewer_roles.py` reconstruye únicamente la tabla
+administrativa dentro de la transacción del mecanismo existente `safe_database`.
+Mantiene las claves foráneas activas, crea una tabla temporal de reemplazo, copia
+los 13 campos explícitamente y compara el contenido en ambas direcciones antes
+de reemplazar la tabla. Conserva IDs, snapshots, fechas, historial y el máximo
+histórico de `sqlite_sequence`, incluso cuando todas las filas se eliminaron.
+Recrea exactamente `one_active_concept_work_assignment` y
+`idx_work_assignment_analyst`, y valida esquema y claves foráneas al terminar.
+
+Los roles de creación y retirada admiten `reviewer` y `master`, nunca `analyst`.
+Las filas activas exigen fecha y rol de retirada nulos; las retiradas exigen ambos
+no nulos y un rol permitido. No se cambia ningún valor de las filas existentes.
+Un esquema 025 con filas que violen estas restricciones provoca rollback.
+
+Simula por defecto en memoria; `--apply` exige una ruta explícita y crea un
+respaldo consistente antes del cambio. Repetir 026 valida el esquema y no lo
+reescribe ni genera otro respaldo. Rechaza tablas referenciantes e índices o
+disparadores inesperados antes de reconstruir. No se debe volver a ejecutar 025
+sobre una base que ya tiene 026. El arranque con base explícita exige 026 y no la
+aplica automáticamente. Las bases sintéticas nuevas nacen con el esquema 026.
+
+La política central y los decoradores coinciden: «Mi trabajo» exige `analyst`
+exacto; «Asignación de trabajo» exige `reviewer` mínimo y se muestra en REVISIÓN.
+Las demás opciones de ADMINISTRACIÓN siguen exclusivas de `master`.
+
 ## Validación
+
+Corrección de permisos + 026: 13 pruebas de asignaciones y acceso y 7 de migración
+026 pasan (20/20), además de 6 pruebas de selección de base. Se comprueban
+operaciones HTTP de Reviewer, roles reales en auditoría, restricciones SQL,
+preservación exacta del historial, contador AUTOINCREMENT e idempotencia. Un fallo
+simulado al finalizar la reconstrucción comprueba rollback completo. La prueba
+histórica de colaboradores sigue sin modificarse.
 
 ```powershell
 & $python -m unittest discover -s tests -p test_work_assignments.py -v
+& $python -m unittest discover -s tests -p test_work_assignment_migration_026.py -v
 & $python -m unittest discover -s tests -p test_collaboration_activity.py -v
 & $python -m unittest discover -s tests -p test_database_selection.py -v
 & $python -m unittest discover -s tests -p test_production_readiness.py -v

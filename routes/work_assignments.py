@@ -3,7 +3,7 @@ from contextlib import closing
 
 from flask import Blueprint, abort, g, redirect, render_template, request, session, url_for
 
-from access_control import requires_analyst, requires_master
+from access_control import require_exact_role, requires_reviewer
 from database import conectar
 from work_assignments import assign, list_concepts, my_work, remove
 
@@ -11,7 +11,7 @@ work_assignments_bp = Blueprint('work_assignments', __name__)
 
 
 @work_assignments_bp.get('/mi-trabajo')
-@requires_analyst
+@require_exact_role('analyst')
 def personal_work():
     search = request.args.get('search', '')
     with closing(conectar()) as db:
@@ -29,7 +29,7 @@ def _filters(values):
 
 
 @work_assignments_bp.route('/administracion/asignaciones', methods=['GET', 'POST'])
-@requires_master
+@requires_reviewer
 def administration():
     filters = _filters(request.args if request.method == 'GET' else request.form)
     error = None

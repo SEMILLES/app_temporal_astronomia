@@ -89,9 +89,18 @@ class WorkAssignmentTests(unittest.TestCase):
         self.assertEqual(self.db.execute('SELECT count(*) FROM concept_work_assignment').fetchone()[0], 0)
 
     def test_service_permissions(self):
-        for role in ('analyst', 'reviewer', None):
+        for role in ('analyst', None):
             with self.assertRaises(PermissionError): assign(self.db, [1], [1], access_role=role)
             with self.assertRaises(PermissionError): remove(self.db, 1, access_role=role)
+
+    def test_reviewer_and_master_mutations_preserve_real_role(self):
+        for role in ('reviewer', 'master'):
+            self.assertEqual(assign(self.db, [1], [1], actor_id=2, access_role=role), 1)
+            row = self.db.execute('SELECT * FROM concept_work_assignment WHERE active=1').fetchone()
+            self.assertEqual(row['created_access_role'], role)
+            remove(self.db, row['work_assignment_id'], actor_id=2, access_role=role)
+            saved = self.db.execute('SELECT * FROM concept_work_assignment WHERE work_assignment_id=?', (row['work_assignment_id'],)).fetchone()
+            self.assertEqual(saved['removed_access_role'], role)
 
     def test_personal_work_isolation_shared_concept_and_removal(self):
         before = self.snapshot()
@@ -162,16 +171,18 @@ class WorkAssignmentTests(unittest.TestCase):
                     page.locator('input[name=analyst_ids][value="2"]').check()
                     page.get_by_role('button', name='Asignar seleccionados').click()
                     expect(page.get_by_role('status')).to_have_text('Asignaciones nuevas: 2.')
+                    page.goto('http://local.test/analyst-test/mi-trabajo')
                     page.get_by_role('link', name='Mi trabajo', exact=True).click()
                     expect(page.locator('#my-work-content')).to_be_visible()
                     expect(page.locator('tbody')).to_contain_text('Concepto A')
                     expect(page.locator('tbody')).not_to_contain_text('Concepto B')
                     page.locator('#lesico-collaborator').select_option('2')
-                    expect(page).to_have_url('http://local.test/admin-test/mi-trabajo?collaborator_id=2')
+                    expect(page).to_have_url('http://local.test/analyst-test/mi-trabajo?collaborator_id=2')
                     expect(page.locator('#my-work-content')).to_contain_text('Carlos')
                     page.goto('http://local.test/admin-test/administracion/asignaciones')
                     page.get_by_role('button', name='Retirar a Ana del concepto 1', exact=True).click()
                     page.locator('#lesico-collaborator').select_option('1')
+                    page.goto('http://local.test/analyst-test/mi-trabajo')
                     page.get_by_role('link', name='Mi trabajo', exact=True).click()
                     expect(page.locator('#my-work-content')).to_contain_text('No tienes conceptos asignados')
                     page.locator('#lesico-collaborator').select_option('2')
@@ -195,7 +206,19 @@ class WorkAssignmentTests(unittest.TestCase):
         with patch.object(database, 'BASE_DATOS', self.path), patch.dict(os.environ, {
             'LESICO_MASTER_ROUTE': 'admin-test', 'LESICO_REVIEWER_ROUTE': 'review-test', 'LESICO_ANALYST_ROUTE': 'analyst-test'}):
             client = app.test_client()
-            for prefix in ('', '/review-test', '/analyst-test'):
+            for prefix, personal, administration in (
+                ('analyst-test', 200, 404), ('review-test', 404, 200), ('admin-test', 404, 200)
+            ):
+                self.assertEqual(client.get(f'/{prefix}/mi-trabajo').status_code, personal)
+                response = client.get(f'/{prefix}/administracion/asignaciones')
+                self.assertEqual(response.status_code, administration)
+                visible = client.get(f'/{prefix}/mi-trabajo') if personal == 200 else response
+                header = visible.get_data(as_text=True).split('</aside>')[0]
+                self.assertEqual('>Mi trabajo</a>' in header, prefix == 'analyst-test')
+                self.assertEqual('>Asignación de trabajo</a>' in header, prefix != 'analyst-test')
+                for path in ('colaboradores', 'administracion/clasificaciones', 'actualizar-catalogo', 'publicaciones'):
+                    self.assertEqual(f'href="/{prefix}/{path}"' in header, prefix == 'admin-test')
+            for prefix in ('', '/analyst-test'):
                 for method in (client.get, client.post):
                     self.assertEqual(method(prefix + '/administracion/asignaciones').status_code, 404)
             url = '/admin-test/administracion/asignaciones'
@@ -213,6 +236,30 @@ class WorkAssignmentTests(unittest.TestCase):
             self.assertEqual(client.post(url, data=dict(action='assign', csrf_token=token)).status_code, 400)
             self.assertEqual(client.get(url + '?page=invalid').status_code, 400)
             self.assertEqual(client.get(url + '?status=unassigned').status_code, 200)
+            review_url = '/review-test/administracion/asignaciones'
+            response = client.post(review_url, data=dict(action='assign', concept_ids=['3'],
+                analyst_ids=['1'], collaborator_id='2', csrf_token=token))
+            self.assertEqual(response.status_code, 302)
+            row = self.db.execute('SELECT * FROM concept_work_assignment WHERE concept_id=3').fetchone()
+            self.assertEqual(row['created_access_role'], 'reviewer')
+            response = client.post(review_url, data=dict(action='remove', assignment_id=row['work_assignment_id'],
+                collaborator_id='2', csrf_token=token))
+            self.assertEqual(response.status_code, 302)
+            self.assertEqual(self.db.execute('SELECT removed_access_role FROM concept_work_assignment WHERE concept_id=3').fetchone()[0], 'reviewer')
+
+    def test_central_endpoint_policy_without_route_decorators(self):
+        from flask import Response
+        app = Flask(__name__)
+        for path, endpoint in (('/mi-trabajo', 'work_assignments.personal_work'),
+                               ('/administracion/asignaciones', 'work_assignments.administration')):
+            app.add_url_rule(path, endpoint, lambda: Response('ok', mimetype='text/plain'))
+        install_access_context(app)
+        with patch.dict(os.environ, {'LESICO_ANALYST_ROUTE': 'a', 'LESICO_REVIEWER_ROUTE': 'r',
+                                     'LESICO_MASTER_ROUTE': 'm'}):
+            client = app.test_client()
+            for prefix, personal, administration in (('a', 200, 404), ('r', 404, 200), ('m', 404, 200)):
+                self.assertEqual(client.get(f'/{prefix}/mi-trabajo').status_code, personal)
+                self.assertEqual(client.get(f'/{prefix}/administracion/asignaciones').status_code, administration)
 
     def test_migration_preview_apply_idempotence_and_preservation(self):
         spec = importlib.util.spec_from_file_location('migration025', ROOT / 'migrations/025_concept_work_assignment.py')
@@ -252,7 +299,9 @@ html = response.get_data(as_text=True)
 assert all(text in html for text in ('Concepto A', 'Concepto B', 'Concepto C', 'Ana', 'Carlos', 'Sin asignar'))
 client = app.test_client()
 assert client.get('/mi-trabajo?collaborator_id=1').status_code == 404
-for prefix in ('admin-local', 'analista-local', 'revision-local'):
+for prefix in ('admin-local', 'revision-local'):
+    assert client.get('/' + prefix + '/mi-trabajo?collaborator_id=1').status_code == 404
+for prefix in ('analista-local',):
     response = client.get('/' + prefix + '/mi-trabajo?collaborator_id=1')
     assert response.status_code == 200
     html = response.get_data(as_text=True)

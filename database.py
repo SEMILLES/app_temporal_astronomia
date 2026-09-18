@@ -98,6 +98,9 @@ def validar_base_explicita():
             }
             if is_production() and REQUIRED_APPLICATION_TABLES <= tables:
                 validar_columnas_produccion(conexion)
+            if "concept_work_assignment" in tables:
+                from work_assignment_reviewer_schema import validate_schema
+                validate_schema(conexion)
         finally:
             conexion.close()
     except sqlite3.Error as error:
@@ -891,5 +894,5 @@ def crear_esquema(conexion):
     install_classification(conexion)
     from usage_profile import install as install_usage_profile
     install_usage_profile(conexion)
-    from work_assignment_schema import install as install_work_assignments
+    from work_assignment_reviewer_schema import install as install_work_assignments
     install_work_assignments(conexion)

@@ -73,6 +73,18 @@ def require_role(minimum):
     return decorator
 
 
+def require_exact_role(required):
+    """Restrict a specific view without changing the normal role hierarchy."""
+    def decorator(function):
+        @wraps(function)
+        def guarded(*args, **kwargs):
+            if current_access_role() != required:
+                abort(404)
+            return function(*args, **kwargs)
+        return guarded
+    return decorator
+
+
 requires_analyst = require_role("analyst")
 requires_reviewer = require_role("reviewer")
 requires_master = require_role("master")
@@ -94,7 +106,10 @@ def install_access_context(app):
             return
         if role is None:
             abort(404)
+        if request.endpoint == "work_assignments.personal_work" and role != "analyst":
+            abort(404)
         reviewer_endpoints = {
+            "work_assignments.administration",
             "submissions.revisar_aportes",
             "submissions.decidir_aporte",
             "conflicts.conflicts_list", "conflicts.new_conflict",

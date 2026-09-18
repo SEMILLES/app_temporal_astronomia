@@ -65,7 +65,7 @@ def my_work(db, collaborator_id, *, search='', page=1, per_page=50):
 
 
 def assign(db, concept_ids, analyst_ids, *, actor_id=None, access_role):
-    if access_role != 'master':
+    if access_role not in ('reviewer', 'master'):
         raise PermissionError('Acceso restringido a administración.')
     concepts, analysts = _ids(concept_ids), _ids(analyst_ids)
     db.execute('BEGIN IMMEDIATE')
@@ -96,7 +96,7 @@ def assign(db, concept_ids, analyst_ids, *, actor_id=None, access_role):
 
 
 def remove(db, assignment_id, *, actor_id=None, access_role):
-    if access_role != 'master':
+    if access_role not in ('reviewer', 'master'):
         raise PermissionError('Acceso restringido a administración.')
     db.execute('BEGIN IMMEDIATE')
     try:
