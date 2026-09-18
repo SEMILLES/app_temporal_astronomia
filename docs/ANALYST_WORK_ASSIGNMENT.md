@@ -18,6 +18,13 @@ Rama `feature/analyst-work-assignment`, basada en `feature/occurrence-form-revie
   con `LIKE`, conforme a SQLite (no normaliza acentos). Los filtros se conservan tras guardar.
 - Los formularios nuevos usan un token de sesión contra solicitudes cruzadas;
   se requiere `LESICO_SECRET_KEY` estable también para la prueba local.
+- «Mi trabajo» reutiliza `lesico-collaborator-id` de «Trabajando como». Un script
+  pequeño transmite la selección como `collaborator_id` en la URL; al cambiarla
+  actualiza la consulta y reinicia la página. No se muestra el listado hasta
+  sincronizarlo con la selección del navegador. JavaScript es necesario para ese
+  mecanismo, igual que para la identificación actual. Sin selección válida no se
+  consulta trabajo de otros colaboradores. La identidad sigue siendo declarada:
+  este filtro no constituye una barrera de autorización individual.
 
 ## Esquema y rutas
 
@@ -35,6 +42,14 @@ por analista. Claves foráneas a `concept` y `collaborator`.
 `GET /<prefijo-master>/administracion/asignaciones`: listado y filtros.
 `POST` en la misma ruta: `action=assign` o `action=remove`.
 Sin acceso devuelve 404, igual que las rutas privadas existentes.
+
+`GET /<prefijo-interno>/mi-trabajo`: asignaciones activas del colaborador declarado,
+disponible para los roles existentes `analyst`, `reviewer` y `master`. Búsqueda por
+ID exacto o etiqueta y páginas de 50 conceptos. «Abrir concepto» enlaza a la ruta
+existente `alternatives.alternativas`, conservando el prefijo de acceso.
+
+La ampliación no modifica la migración 025 ni el esquema: siguen siendo SQLite,
+exclusivamente administrativos, con retirada lógica e índice único parcial.
 
 La migración exige una ruta explícita, simula por defecto y crea un respaldo al
 aplicar. Rechaza ejecución en Railway y en modo producción. El inicio con base
@@ -54,7 +69,9 @@ $env:LESICO_SECRET_KEY = 'clave-solo-demo-local-asignaciones-2026'
 $env:LESICO_MASTER_ROUTE = 'admin-local'
 $env:LESICO_ANALYST_ROUTE = 'analista-local'
 $env:LESICO_REVIEWER_ROUTE = 'revision-local'
-& $python scripts/demo_work_assignments.py
+if (-not (Test-Path -LiteralPath '.\work_assignment_demo.db')) {
+    & $python scripts/demo_work_assignments.py
+}
 $env:LESICO_DATABASE_PATH = Join-Path $PWD 'work_assignment_demo.db'
 & $python -m flask --app app run --host 127.0.0.1 --port 5055 --no-reload
 ```
@@ -64,6 +81,16 @@ Concepto A tiene Ana y Carlos; B tiene Carlos; C está sin asignar. Todos carece
 de alternativas. Seleccionar C y los dos analistas, asignar, probar filtros y retirar
 un analista. Repetir una asignación no la duplica. El prefijo `analista-local`
 no puede acceder a esta administración. Detener con Ctrl+C.
+
+Recorrido de reunión: en `http://127.0.0.1:5055/admin-local/colaboradores`, registrar
+«Andrés» si aún no existe en esta demo. Abrir «Asignación de trabajo», seleccionar
+Concepto C y Andrés, y pulsar «Asignar seleccionados». Elegir Andrés en
+«Trabajando como» y pulsar «Mi trabajo»: aparece C; «Abrir concepto» abre la página
+existente aunque no tenga alternativas. También puede abrirse
+`http://127.0.0.1:5055/analista-local/mi-trabajo`, que recupera la misma selección.
+Para demostrar una asignación compartida, asignar C también a Ana, cambiar el
+selector entre ambas personas, retirar solo la de Andrés y comprobar que C
+permanece para Ana. No guardar cambios lingüísticos durante la demo.
 
 Para una **copia local desechable** de una base existente de la rama base:
 
@@ -89,15 +116,23 @@ duplicados, historial, retirada, filtros, paginación, autorización, token de s
 rollback y preservación del contenido de todas las tablas previas. La prueba de
 migración comprueba simulación, respaldo, aplicación e idempotencia.
 
-Resultado de la validación: 8 pruebas nuevas, 6 de selección de base y 11 de
-arranque seguro pasan. Colaboradores: 7 pasan y 1 falla
+Resultado de la primera implementación: 8 pruebas nuevas, 6 de selección de base y
+11 de arranque seguro pasan. Colaboradores: 7 pasan y 1 falla
 (`test_rollback_removes_success_event`: `cannot start a transaction within a transaction`).
 El mismo fallo se reprodujo en el worktree de la rama base, sin esta implementación.
-La demo y el registro de la ruta en la aplicación real se verifican también con
-una base temporal nueva y el cliente HTTP de Flask. No se realizó inspección visual
-en navegador ni se accedió a bases remotas.
+La ampliación tiene 11 pruebas específicas, incluido el recorrido en Chromium
+sin interfaz: asignar desde administración, cambiar la selección, consultar,
+retirar y comprobar la separación entre colaboradores. Todas las solicitudes
+del navegador se interceptan localmente contra Flask con una base sintética.
+Las pruebas también abren la ruta existente del concepto con la aplicación real,
+verifican búsqueda, paginación, estados vacíos y la migración 025. No se accede a
+bases remotas. El fallo histórico de colaboradores se deja sin modificar.
 
 Archivos de implementación: `work_assignment_schema.py`, `work_assignments.py`,
 `routes/work_assignments.py`, `templates/asignacion_trabajo.html`, migración 025;
 integración en `database.py`, `app.py` y `templates/_internal_header.html`.
 También se añaden las pruebas, el creador de demo y este documento.
+
+Archivos de la ampliación: `work_assignments.py`, `routes/work_assignments.py`,
+`templates/_internal_header.html`, `templates/mi_trabajo.html`, `static/my-work.js`,
+`tests/test_work_assignments.py` y este documento. No cambian rutas lingüísticas.

@@ -32,9 +32,10 @@ def list_concepts(db, *, search='', status='all', analyst_id=None, page=1, per_p
     per_page = max(1, min(100, int(per_page)))
     conditions, params = [], []
     if search.strip():
-        conditions.append("c.preferred_label LIKE ? ESCAPE '\\'")
+        conditions.append("(c.preferred_label LIKE ? ESCAPE '\\' OR CAST(c.concept_id AS TEXT)=?)")
         literal = search.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
         params.append('%' + literal + '%')
+        params.append(search.strip())
     exists = 'EXISTS (SELECT 1 FROM concept_work_assignment w WHERE w.concept_id=c.concept_id AND w.active=1'
     if status != 'all':
         conditions.append(('NOT ' if status == 'unassigned' else '') + exists + ')')
@@ -50,6 +51,17 @@ def list_concepts(db, *, search='', status='all', analyst_id=None, page=1, per_p
                       (*params, per_page, (page - 1) * per_page)).fetchall()
     return dict(concepts=rows, assignments=assigned_analysts(db, [r['concept_id'] for r in rows]),
                 total=total, page=page, pages=pages)
+
+
+def my_work(db, collaborator_id, *, search='', page=1, per_page=50):
+    """Resolve the declared active collaborator; never fall back to all concepts."""
+    identifier, name = resolve_collaborator(db, collaborator_id)
+    if identifier is None:
+        return dict(collaborator_id=None, collaborator_name=None, concepts=[],
+                    assignments={}, total=0, page=1, pages=1)
+    return dict(list_concepts(db, analyst_id=identifier, search=search, page=page,
+                              per_page=per_page), collaborator_id=identifier,
+                collaborator_name=name)
 
 
 def assign(db, concept_ids, analyst_ids, *, actor_id=None, access_role):

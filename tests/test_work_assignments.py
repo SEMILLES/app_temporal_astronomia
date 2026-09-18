@@ -6,13 +6,14 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from urllib.parse import urlsplit
 from unittest.mock import patch
 
 from flask import Flask
 import database
 from access_control import install_access_context
 from routes.work_assignments import work_assignments_bp
-from work_assignments import assign, assigned_analysts, list_concepts, remove
+from work_assignments import assign, assigned_analysts, list_concepts, my_work, remove
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -92,6 +93,100 @@ class WorkAssignmentTests(unittest.TestCase):
             with self.assertRaises(PermissionError): assign(self.db, [1], [1], access_role=role)
             with self.assertRaises(PermissionError): remove(self.db, 1, access_role=role)
 
+    def test_personal_work_isolation_shared_concept_and_removal(self):
+        before = self.snapshot()
+        self.assign((1,), (1, 2))
+        self.assign((2,), (2,))
+        ids = lambda collaborator: [r['concept_id'] for r in my_work(self.db, collaborator)['concepts']]
+        self.assertEqual(ids(1), [1])
+        self.assertEqual(ids(2), [1, 2])
+        remove(self.db, 1, access_role='master')
+        self.assertEqual(ids(1), [])
+        self.assertEqual(ids(2), [1, 2])
+        self.assertEqual(self.db.execute('SELECT active FROM concept_work_assignment WHERE work_assignment_id=1').fetchone()[0], 0)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM alternative').fetchone()[0], 0)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_personal_work_empty_invalid_search_and_pagination(self):
+        self.assertEqual(my_work(self.db, 1)['total'], 0)
+        self.assign((1, 2), (1,))
+        for identifier in (None, '', 'bad', 999):
+            self.assertEqual(my_work(self.db, identifier)['concepts'], [])
+        self.assertEqual(my_work(self.db, 1, search='Concepto B')['total'], 1)
+        self.assertEqual(my_work(self.db, 1, search='2')['concepts'][0]['concept_id'], 2)
+        self.assertEqual(my_work(self.db, 2, search='2')['total'], 0)
+        self.assertEqual(my_work(self.db, 1, search='%')['total'], 0)
+        page = my_work(self.db, 1, page=2, per_page=1)
+        self.assertEqual(page['concepts'][0]['concept_id'], 2)
+        self.assertEqual(page['pages'], 2)
+        self.db.execute('UPDATE collaborator SET active=0 WHERE collaborator_id=1')
+        self.db.commit()
+        self.assertEqual(my_work(self.db, 1)['total'], 0)
+
+    def test_browser_declared_identity_and_assignment_flow(self):
+        from playwright.sync_api import sync_playwright, expect
+        app = Flask(__name__, template_folder=str(ROOT / 'templates'), static_folder=str(ROOT / 'static'))
+        app.config.update(TESTING=True, SECRET_KEY='local-browser-test')
+        app.register_blueprint(work_assignments_bp)
+        # The real destination is exercised in test_demo_and_real_app_integration.
+        from routes.alternatives import alternatives_bp
+        app.register_blueprint(alternatives_bp)
+        install_access_context(app)
+        with patch.object(database, 'BASE_DATOS', self.path), patch.dict(os.environ, {
+            'LESICO_MASTER_ROUTE': 'admin-test', 'LESICO_ANALYST_ROUTE': 'analyst-test'}):
+            client = app.test_client()
+
+            def serve(route):
+                request = route.request
+                url = urlsplit(request.url)
+                response = client.open(url.path + ('?' + url.query if url.query else ''),
+                                       method=request.method, data=request.post_data,
+                                       content_type=request.headers.get('content-type'), follow_redirects=True)
+                try:
+                    route.fulfill(status=response.status_code, body=response.data,
+                                  content_type=response.content_type)
+                finally:
+                    response.close()
+
+            with sync_playwright() as playwright:
+                browser = playwright.chromium.launch(headless=True)
+                try:
+                    page = browser.new_page()
+                    page.route('**/*', serve)
+                    errors = []
+                    page.on('pageerror', lambda error: errors.append(str(error)))
+                    page.goto('http://local.test/admin-test/administracion/asignaciones')
+                    page.locator('#lesico-collaborator').select_option('1')
+                    page.locator('input[name=concept_ids][value="1"]').check()
+                    page.locator('input[name=analyst_ids][value="1"]').check()
+                    page.locator('input[name=analyst_ids][value="2"]').check()
+                    page.get_by_role('button', name='Asignar seleccionados').click()
+                    expect(page.get_by_role('status')).to_have_text('Asignaciones nuevas: 2.')
+                    page.get_by_role('link', name='Mi trabajo', exact=True).click()
+                    expect(page.locator('#my-work-content')).to_be_visible()
+                    expect(page.locator('tbody')).to_contain_text('Concepto A')
+                    expect(page.locator('tbody')).not_to_contain_text('Concepto B')
+                    page.locator('#lesico-collaborator').select_option('2')
+                    expect(page).to_have_url('http://local.test/admin-test/mi-trabajo?collaborator_id=2')
+                    expect(page.locator('#my-work-content')).to_contain_text('Carlos')
+                    page.goto('http://local.test/admin-test/administracion/asignaciones')
+                    page.get_by_role('button', name='Retirar a Ana del concepto 1', exact=True).click()
+                    page.locator('#lesico-collaborator').select_option('1')
+                    page.get_by_role('link', name='Mi trabajo', exact=True).click()
+                    expect(page.locator('#my-work-content')).to_contain_text('No tienes conceptos asignados')
+                    page.locator('#lesico-collaborator').select_option('2')
+                    expect(page.locator('tbody')).to_contain_text('Concepto A')
+                    # Direct entry under the analyst prefix restores the same selection.
+                    page.goto('http://local.test/analyst-test/mi-trabajo')
+                    expect(page).to_have_url('http://local.test/analyst-test/mi-trabajo?collaborator_id=2')
+                    expect(page.locator('tbody')).to_contain_text('Concepto A')
+                    page.locator('#lesico-collaborator').select_option('')
+                    expect(page.locator('#my-work-content')).to_contain_text('Selecciona un colaborador')
+                    expect(page.locator('tbody')).to_have_count(0)
+                    self.assertEqual(errors, [])
+                finally:
+                    browser.close()
+
     def test_routes_permissions_csrf_bulk_and_remove(self):
         app = Flask(__name__, template_folder=str(ROOT / 'templates'))
         app.config.update(TESTING=True, SECRET_KEY='local-test-only')
@@ -148,12 +243,33 @@ class WorkAssignmentTests(unittest.TestCase):
         self.assertEqual(demo.read_bytes(), before)
         env = {key: value for key, value in os.environ.items() if not key.startswith(('LESICO_', 'RAILWAY_'))}
         env.update(LESICO_ENV='development', LESICO_DATABASE_PATH=str(demo),
-                   LESICO_SECRET_KEY='test-demo-only', LESICO_MASTER_ROUTE='admin-local')
+                   LESICO_SECRET_KEY='test-demo-only', LESICO_MASTER_ROUTE='admin-local',
+                   LESICO_ANALYST_ROUTE='analista-local', LESICO_REVIEWER_ROUTE='revision-local')
         code = """from app import app
 response = app.test_client().get('/admin-local/administracion/asignaciones')
 assert response.status_code == 200, response.status_code
 html = response.get_data(as_text=True)
 assert all(text in html for text in ('Concepto A', 'Concepto B', 'Concepto C', 'Ana', 'Carlos', 'Sin asignar'))
+client = app.test_client()
+assert client.get('/mi-trabajo?collaborator_id=1').status_code == 404
+for prefix in ('admin-local', 'analista-local', 'revision-local'):
+    response = client.get('/' + prefix + '/mi-trabajo?collaborator_id=1')
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert 'Concepto A' in html and 'Concepto B' not in html and 'Concepto C' not in html
+    from flask import url_for
+    with app.test_request_context(environ_overrides={'SCRIPT_NAME': '/' + prefix}):
+        link = url_for('alternatives.alternativas', concept_id=1)
+    assert link in html
+    assert client.get(link).status_code == 200
+html = client.get('/analista-local/mi-trabajo?collaborator_id=2').get_data(as_text=True)
+assert 'Concepto A' in html and 'Concepto B' in html
+html = client.get('/analista-local/mi-trabajo?collaborator_id=2&search=2').get_data(as_text=True)
+assert 'Concepto A' not in html and 'Concepto B' in html
+assert 'Selecciona un colaborador' in client.get('/analista-local/mi-trabajo').get_data(as_text=True)
+assert 'coincidan' in client.get('/analista-local/mi-trabajo?collaborator_id=1&search=ZZZ').get_data(as_text=True)
+assert client.get('/analista-local/administracion/asignaciones').status_code == 404
+assert client.get('/analista-local/mi-trabajo?collaborator_id=1&page=bad').status_code == 400
 """
         result = subprocess.run([sys.executable, '-c', code], cwd=ROOT, env=env, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stderr)

@@ -1,0 +1,30 @@
+{% extends '_visual_base.html' %}
+{% block title %}Mi trabajo{% endblock %}
+{% block content %}
+<h1>Mi trabajo</h1>
+<noscript><p>Active JavaScript para consultar el colaborador seleccionado en «Trabajando como».</p></noscript>
+<section id="my-work-content" data-collaborator-id="{{ collaborator_id or '' }}" hidden>
+{% if collaborator_id %}
+<p>Trabajo asignado a <strong>{{ collaborator_name }}</strong>.</p>
+<form method="get" class="toolbar">
+  <input type="hidden" name="collaborator_id" value="{{ collaborator_id }}">
+  <label>Buscar por ID o etiqueta <input type="search" name="search" value="{{ search }}"></label>
+  <button class="button-secondary">Buscar</button>
+</form>
+<p>{{ total }} conceptos · Página {{ page }} de {{ pages }}</p>
+{% if concepts %}
+<div class="table-scroll" role="region" aria-label="Conceptos asignados" tabindex="0">
+<table><thead><tr><th>ID del concepto</th><th>Etiqueta preferida</th><th>Acciones</th></tr></thead>
+<tbody>{% for concept in concepts %}<tr>
+  <td>{{ concept.concept_id }}</td><td>{{ concept.preferred_label or 'Sin etiqueta' }}</td>
+  <td><a href="{{ url_for('alternatives.alternativas', concept_id=concept.concept_id) }}">Abrir concepto</a></td>
+</tr>{% endfor %}</tbody></table></div>
+{% elif search %}<p>No hay conceptos asignados que coincidan con la búsqueda.</p>
+{% else %}<p>No tienes conceptos asignados actualmente.</p>{% endif %}
+<nav aria-label="Páginas de mi trabajo">
+{% if page > 1 %}<a href="{{ url_for('work_assignments.personal_work', collaborator_id=collaborator_id, search=search, page=page-1) }}">Anterior</a>{% endif %}
+{% if page < pages %}<a href="{{ url_for('work_assignments.personal_work', collaborator_id=collaborator_id, search=search, page=page+1) }}">Siguiente</a>{% endif %}
+</nav>
+{% else %}<p>Selecciona un colaborador en «Trabajando como» para consultar sus asignaciones.</p>{% endif %}
+</section>
+{% endblock %}
