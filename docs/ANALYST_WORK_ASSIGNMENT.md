@@ -14,7 +14,9 @@ Rama `feature/analyst-work-assignment`, basada en `feature/occurrence-form-revie
 - La auditoría vive en la nueva entidad administrativa, con identificadores,
   copias del nombre, rol y fechas de creación/retirada. No se escribe en tablas previas,
   incluida `activity_event`. Reasignar tras retirar crea una nueva fila histórica.
-- No hay estados lingüísticos, bloqueos ni efectos sobre alternativas u ocurrencias.
+- No hay estados lingüísticos automáticos ni bloqueos de edición. El diagnóstico
+  de solo lectura distingue pendientes bloqueantes de morfología/relaciones y
+  no bloqueantes de gramática, sin modificar alternativas u ocurrencias.
 - Paginación de 50 conceptos, selección por página y búsqueda literal por etiqueta
   con `LIKE`, conforme a SQLite (no normaliza acentos). Los filtros se conservan tras guardar.
 - Los formularios nuevos usan un token de sesión contra solicitudes cruzadas;
@@ -136,6 +138,10 @@ exacto; «Asignación de trabajo» exige `reviewer` mínimo y se muestra en REVI
 Las demás opciones de ADMINISTRACIÓN siguen exclusivas de `master`.
 
 ## Validación
+
+Diagnóstico y enlaces: 6 pruebas específicas correctas, junto con las 20 pruebas
+de asignaciones y migración (26/26). Inspección de herramientas, reglas SQL y
+límites de propuestas: [WORK_ASSIGNMENT_DIAGNOSTICS.md](WORK_ASSIGNMENT_DIAGNOSTICS.md).
 
 Corrección de permisos + 026: 13 pruebas de asignaciones y acceso y 7 de migración
 026 pasan (20/20), además de 6 pruebas de selección de base. Se comprueban

@@ -202,6 +202,8 @@ class WorkAssignmentTests(unittest.TestCase):
         app = Flask(__name__, template_folder=str(ROOT / 'templates'))
         app.config.update(TESTING=True, SECRET_KEY='local-test-only')
         app.register_blueprint(work_assignments_bp)
+        from routes.alternatives import alternatives_bp
+        app.register_blueprint(alternatives_bp)
         install_access_context(app)
         with patch.object(database, 'BASE_DATOS', self.path), patch.dict(os.environ, {
             'LESICO_MASTER_ROUTE': 'admin-test', 'LESICO_REVIEWER_ROUTE': 'review-test', 'LESICO_ANALYST_ROUTE': 'analyst-test'}):

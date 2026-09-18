@@ -33,11 +33,13 @@
 <p>{{ total }} conceptos · Página {{ page }} de {{ pages }}</p>
 <div style="overflow-x:auto">
 <table>
-  <thead><tr><th><input id="select-page" type="checkbox" aria-label="Seleccionar todos los conceptos de esta página"></th><th>ID del concepto</th><th>Etiqueta</th><th>Analistas asignados</th></tr></thead>
+  <thead><tr><th><input id="select-page" type="checkbox" aria-label="Seleccionar todos los conceptos de esta página"></th><th>ID del concepto</th><th>Etiqueta</th><th>Pendientes y resolución</th><th>Analistas asignados</th></tr></thead>
   <tbody>{% for concept in concepts %}
   <tr>
     <td><input form="bulk-assignment" type="checkbox" name="concept_ids" value="{{ concept.concept_id }}" aria-label="Seleccionar concepto {{ concept.concept_id }}"></td>
     <td>{{ concept.concept_id }}</td><td>{{ concept.preferred_label or 'Sin etiqueta' }}</td>
+    <td><a href="{{ url_for('alternatives.alternativas', concept_id=concept.concept_id) }}">Abrir concepto</a>
+      {% include '_work_diagnostic.html' %}</td>
     <td>{% for assignment in assignments[concept.concept_id] %}
       <form method="post" style="display:inline-flex;align-items:center;gap:.4rem;margin:.2rem;padding:.3rem;border:1px solid #ccc;border-radius:1rem">
         {{ hidden_context() }}<input type="hidden" name="action" value="remove"><input type="hidden" name="assignment_id" value="{{ assignment.work_assignment_id }}">
@@ -45,7 +47,7 @@
         <button class="button-secondary" aria-label="Retirar a {{ assignment.display_name }} del concepto {{ concept.concept_id }}">Retirar</button>
       </form>
     {% else %}Sin asignar{% endfor %}</td>
-  </tr>{% else %}<tr><td colspan="4">No hay conceptos para estos filtros.</td></tr>{% endfor %}</tbody>
+  </tr>{% else %}<tr><td colspan="5">No hay conceptos para estos filtros.</td></tr>{% endfor %}</tbody>
 </table></div>
 <nav aria-label="Páginas de conceptos">
 {% if page > 1 %}<a href="{{ url_for('work_assignments.administration', search=filters.search, status=filters.status, analyst_id=filters.analyst_id, page=page-1) }}">Anterior</a>{% endif %}

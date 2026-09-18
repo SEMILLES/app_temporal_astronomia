@@ -2,6 +2,46 @@
 from activity import resolve_collaborator
 
 
+def concept_diagnostics(db, concept_ids):
+    """Read canonical current rows in two batched queries, never mutate them."""
+    result = {identifier: dict(alternative_count=0, morphology=[], relations=[], grammar=[])
+              for identifier in concept_ids}
+    if not result:
+        return result
+    marks = ','.join('?' for _ in result)
+    alternatives = db.execute(f'''SELECT a.concept_id,a.alternative_id,a.working_label,
+        EXISTS(SELECT 1 FROM alternative_morphology m
+               WHERE m.alternative_id=a.alternative_id AND m.is_current=1) AS has_morphology,
+        EXISTS(SELECT 1 FROM alternative_relation r WHERE r.is_current=1 AND
+               (r.alternative_low_id=a.alternative_id OR r.alternative_high_id=a.alternative_id)) AS has_relation,
+        (SELECT MIN(s.occurrence_id) FROM assignment s
+         JOIN occurrence_concept_reference ref ON ref.occurrence_id=s.occurrence_id AND ref.is_current=1
+         LEFT JOIN concept_proposal cp ON cp.concept_proposal_id=ref.concept_proposal_id
+         WHERE s.alternative_id=a.alternative_id AND s.is_current=1
+           AND COALESCE(ref.concept_id,cp.resolved_concept_id)=a.concept_id) AS analysis_occurrence_id
+        FROM alternative a WHERE a.retired_at IS NULL AND a.concept_id IN ({marks})
+        ORDER BY a.concept_id,a.working_label,a.alternative_id''', tuple(result))
+    for row in alternatives:
+        diagnostic = result[row['concept_id']]
+        diagnostic['alternative_count'] += 1
+        item = dict(row)
+        if not row['has_morphology']:
+            diagnostic['morphology'].append(item)
+        suffix = (row['working_label'] or '').strip().lower()[-1:]
+        if suffix and 'b' <= suffix <= 'z' and not row['has_relation']:
+            diagnostic['relations'].append(item)
+    for row in db.execute(f'''SELECT a.concept_id,o.occurrence_id,o.original_gloss,
+            a.alternative_id,a.working_label
+        FROM assignment s JOIN alternative a ON a.alternative_id=s.alternative_id
+        JOIN occurrence o ON o.occurrence_id=s.occurrence_id
+        WHERE s.is_current=1 AND a.retired_at IS NULL AND a.concept_id IN ({marks})
+          AND NOT EXISTS(SELECT 1 FROM occurrence_grammar g
+                         WHERE g.occurrence_id=o.occurrence_id AND g.is_current=1)
+        ORDER BY a.concept_id,o.occurrence_id''', tuple(result)):
+        result[row['concept_id']]['grammar'].append(dict(row))
+    return result
+
+
 def _ids(values):
     try:
         result = sorted({int(value) for value in values})
@@ -49,7 +89,9 @@ def list_concepts(db, *, search='', status='all', analyst_id=None, page=1, per_p
     rows = db.execute('SELECT c.concept_id,c.preferred_label FROM concept c' + where +
                       ' ORDER BY c.preferred_label,c.concept_id LIMIT ? OFFSET ?',
                       (*params, per_page, (page - 1) * per_page)).fetchall()
-    return dict(concepts=rows, assignments=assigned_analysts(db, [r['concept_id'] for r in rows]),
+    identifiers = [r['concept_id'] for r in rows]
+    return dict(concepts=rows, assignments=assigned_analysts(db, identifiers),
+                diagnostics=concept_diagnostics(db, identifiers),
                 total=total, page=page, pages=pages)
 
 
@@ -58,7 +100,7 @@ def my_work(db, collaborator_id, *, search='', page=1, per_page=50):
     identifier, name = resolve_collaborator(db, collaborator_id)
     if identifier is None:
         return dict(collaborator_id=None, collaborator_name=None, concepts=[],
-                    assignments={}, total=0, page=1, pages=1)
+                    assignments={}, diagnostics={}, total=0, page=1, pages=1)
     return dict(list_concepts(db, analyst_id=identifier, search=search, page=page,
                               per_page=per_page), collaborator_id=identifier,
                 collaborator_name=name)

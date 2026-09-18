@@ -14,9 +14,10 @@
 <p>{{ total }} conceptos · Página {{ page }} de {{ pages }}</p>
 {% if concepts %}
 <div class="table-scroll" role="region" aria-label="Conceptos asignados" tabindex="0">
-<table><thead><tr><th>ID del concepto</th><th>Etiqueta preferida</th><th>Acciones</th></tr></thead>
+<table><thead><tr><th>ID del concepto</th><th>Etiqueta preferida</th><th>Pendientes</th><th>Acciones</th></tr></thead>
 <tbody>{% for concept in concepts %}<tr>
   <td>{{ concept.concept_id }}</td><td>{{ concept.preferred_label or 'Sin etiqueta' }}</td>
+  <td>{% include '_work_diagnostic.html' %}</td>
   <td><a href="{{ url_for('alternatives.alternativas', concept_id=concept.concept_id) }}">Abrir concepto</a></td>
 </tr>{% endfor %}</tbody></table></div>
 {% elif search %}<p>No hay conceptos asignados que coincidan con la búsqueda.</p>
