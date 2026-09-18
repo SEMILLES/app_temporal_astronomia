@@ -292,7 +292,14 @@ def actualizar_ocurrencia(occurrence_id):
         source_detail_2_applicability_override = normalize_applicability_override(
             source[0], request.form.get("source_detail_2_applicability_override",
                                         actual["source_detail_2_applicability_override"] if str(actual["source_id"]) == source_id else None))
-        source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2=normalize_occurrence_details(source[0],source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2,source_detail_2_applicability_override=source_detail_2_applicability_override)
+        if source[0] == "MESA_DE_TRABAJO" and int(source_id) == actual["source_id"]:
+            # Existing Mesa references are ignored semantically, but preserved verbatim.
+            source_detail_1_status = actual["source_detail_1_status"]
+            source_detail_1 = actual["source_detail_1"]
+            source_detail_2_status = actual["source_detail_2_status"]
+            source_detail_2 = actual["source_detail_2"]
+        else:
+            source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2=normalize_occurrence_details(source[0],source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2,source_detail_2_applicability_override=source_detail_2_applicability_override)
         occurrence_year = validate_occurrence_year(
             conexion, source_id, occurrence_year_value
         )

@@ -124,7 +124,11 @@ def save_draft(connection, draft_id=None, *, collaborator_id=None, access_role=N
         data["source_detail_2_applicability_override"] = normalize_applicability_override(
             source_type_row[0] if source_type_row else None,
             data["source_detail_2_applicability_override"])
-        if source_type_row and data["source_detail_2_applicability_override"] is not None:
+        if source_type_row and source_type_row[0] == "MESA_DE_TRABAJO":
+            (data["source_detail_1_status"], data["source_detail_1"],
+             data["source_detail_2_status"], data["source_detail_2"]) = normalize_occurrence_details(
+                source_type_row[0], None, None, None, None)
+        elif source_type_row and data["source_detail_2_applicability_override"] is not None:
             # Only the exceptional time field is normalized here; other draft fields
             # retain their existing incomplete-input behavior.
             _, _, data["source_detail_2_status"], data["source_detail_2"] = normalize_occurrence_details(

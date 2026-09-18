@@ -6,11 +6,13 @@ SOURCE_TYPES = {
     "VIDEO_POR_SENA": "Video por seña",
     "UN_VIDEO_VARIAS_SENAS": "Un video con varias señas",
     "VARIOS_VIDEOS_VARIAS_SENAS": "Varios videos con varias señas",
+    "MESA_DE_TRABAJO": "Mesa de trabajo",
     "OTRO": "Otro",
 }
 DETAIL_STATUSES = frozenset(("VALUE", "NA", "UNKNOWN"))
 
 def source_type_labels(source_type):
+    if source_type == "MESA_DE_TRABAJO": return (None, None, False)
     if source_type == "MATERIAL_IMPRESO": return ("Submaterial / sección", "Página", True)
     if source_type == "VIDEO_POR_SENA": return ("Título / identificador del video", None, False)
     if source_type in ("UN_VIDEO_VARIAS_SENAS", "VARIOS_VIDEOS_VARIAS_SENAS"):
@@ -47,6 +49,8 @@ def normalize_applicability_override(source_type, override):
 def effective_detail_2_applicability(source_type, status=None, override=None):
     """Explicit choice, then legacy VALUE/NA, then the source's normal rule."""
     override = normalize_applicability_override(source_type, override)
+    if source_type == "MESA_DE_TRABAJO":
+        return False
     if override is not None:
         return bool(override)
     if status == "VALUE":
@@ -62,6 +66,8 @@ def normalize_occurrence_details(source_type, status1, value1, status2, value2, 
     """Normalize references, retaining the existing four-item return contract."""
     source_detail_2_applicability_override = normalize_applicability_override(
         source_type, source_detail_2_applicability_override)
+    if source_type == "MESA_DE_TRABAJO":
+        return "NA", None, "NA", None
     applicable = effective_detail_2_applicability(
         source_type, status2, source_detail_2_applicability_override)
     if status2 == "NA" and (value2 or "").strip() and str(source_detail_2_applicability_override) != "0":
@@ -87,6 +93,8 @@ def _comparison(value):
 
 def catalog_source_reference(occurrence):
     source_type = occurrence["source"]["source_type"]
+    if source_type == "MESA_DE_TRABAJO":
+        return None
     d1 = occurrence.get("source_detail_1") or None
     d2 = occurrence.get("source_detail_2") or None
     if source_type == "VIDEO_POR_SENA":

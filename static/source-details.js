@@ -8,6 +8,7 @@
         VIDEO_POR_SENA: ['Título / identificador del video', 'Tiempo', false],
         UN_VIDEO_VARIAS_SENAS: ['Título del video', 'Tiempo', true],
         VARIOS_VIDEOS_VARIAS_SENAS: ['Título del video', 'Tiempo', true],
+        MESA_DE_TRABAJO: ['', '', false],
         OTRO: ['Referencia en la fuente', 'Localizador en la fuente', true]
     };
     const fields = [1, 2].map(number => ({
@@ -28,6 +29,7 @@
     }
     // Browser representation of source_details.effective_detail_2_applicability.
     function effective(kind) {
+        if (kind === 'MESA_DE_TRABAJO') return false;
         if (kind === 'VIDEO_POR_SENA' && override.value === '1') return true;
         if (kind === 'VARIOS_VIDEOS_VARIAS_SENAS' && override.value === '0') return false;
         if (fields[1].select.value === 'VALUE') return true;
@@ -42,6 +44,21 @@
     }
     function render() {
         const kind = type(), labels = config[kind] || config.OTRO;
+        const mesa = kind === 'MESA_DE_TRABAJO';
+        fieldset.hidden = mesa;
+        if (mesa) {
+            // Hide references without changing legacy values, statuses or overrides.
+            control.hidden = true;
+            fields.forEach(({row, input, select}) => {
+                row.hidden = true;
+                input.disabled = true;
+                input.required = false;
+                select.disabled = true;
+            });
+            return;
+        }
+        fields[0].row.hidden = false;
+        fields[0].select.disabled = false;
         fields.forEach((field, index) => {
             field.row.querySelector('.detail-label').textContent = labels[index];
         });
@@ -93,7 +110,7 @@
         } else {
             override.value = '';
             // Preserve entered values. A blank time uses the new source's normal rule.
-            if (!fields[1].input.value) fields[1].select.value = type() === 'VIDEO_POR_SENA' ? 'UNKNOWN' : 'VALUE';
+            if (type() !== 'MESA_DE_TRABAJO' && !fields[1].input.value) fields[1].select.value = type() === 'VIDEO_POR_SENA' ? 'UNKNOWN' : 'VALUE';
         }
         currentSource = source.value;
         applicable = effective(type());
@@ -107,6 +124,6 @@
     render();
     fieldset.closest('form').addEventListener('submit', () => {
         // Disabled selects are omitted from POST; transmit the normalized state too.
-        fields[1].select.disabled = false;
+        if (type() !== 'MESA_DE_TRABAJO') fields[1].select.disabled = false;
     });
 })();

@@ -20,8 +20,8 @@ class Migration017Tests(unittest.TestCase):
             db=sqlite3.connect(path);self.assertTrue({"source_detail_1_status","source_detail_2_status"}<=migration017.columns(db,"occurrence"));self.assertEqual(db.execute("SELECT setting_value FROM application_setting").fetchone()[0],"1");db.close()
 
 class DetailSemanticsTests(unittest.TestCase):
-    def test_five_types_and_validation(self):
-        self.assertEqual(len(SOURCE_TYPES),5)
+    def test_source_types_and_validation(self):
+        self.assertEqual(len(SOURCE_TYPES),6)
         for source_type in SOURCE_TYPES:self.assertEqual(source_form_values({"source_name":"S","source_type":source_type})[1],source_type)
         with self.assertRaises(ValueError):source_form_values({"source_name":"S"})
         self.assertEqual(normalize_occurrence_details("MATERIAL_IMPRESO","NA",None,"VALUE","203"),("NA",None,"VALUE","203"))
