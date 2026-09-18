@@ -60,7 +60,7 @@ def _context(db, draft=None, error=None):
 def _evidence(form):
     return {name: form.get(name) for name in (
         "source_id", "original_gloss", "occurrence_year", "source_detail_1",
-        "source_detail_2", "source_detail_1_status", "source_detail_2_status", "usage_examples_present", "grammatical_info_present",
+        "source_detail_2", "source_detail_1_status", "source_detail_2_status", "source_detail_2_applicability_override", "usage_examples_present", "grammatical_info_present",
         "grammatical_note", "source_locator", "provenance_note", "hyperlink",
     )}
 

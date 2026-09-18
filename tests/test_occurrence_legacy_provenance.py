@@ -229,7 +229,7 @@ class OccurrenceRouteTests(unittest.TestCase):
         connection.execute("UPDATE occurrence SET source_detail_1='VIDEO',source_detail_2='00:20',usage_examples_present=1,grammatical_info_present=1,grammatical_note='Nota fuente'")
         connection.commit();connection.close()
         html=self.client.get("/ocurrencias/1/editar").get_data(as_text=True)
-        for text in ("Detalle Fuente 1","Detalle Fuente 2","Ejemplos de uso","Información gramatical en la fuente","Apunte gramatical","Nota de procedencia","Nota del cambio"):
+        for text in ("Referencia en la fuente","Localizador en la fuente","Ejemplos de uso","Información gramatical en la fuente","Apunte gramatical","Nota de procedencia","Nota del cambio"):
             self.assertIn(text,html)
         self.assertNotIn('name="hyperlink"',html);self.assertNotIn('name="source_locator"',html)
         self.assertNotIn('id="grammatical-note-field" hidden',html)

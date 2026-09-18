@@ -3,7 +3,7 @@ import sqlite3
 from concept_labels import InvalidConceptLabel, normalize_concept_label
 from activity import record_activity
 from source_period import validate_occurrence_year
-from source_details import normalize_occurrence_details
+from source_details import normalize_occurrence_details, normalize_applicability_override
 
 
 class RegistrationError(ValueError):
@@ -86,7 +86,7 @@ def resolve_concept_reference(connection, concept_id=None,
 def save_draft(connection, draft_id=None, *, collaborator_id=None, access_role=None, **values):
     fields = (
         "source_id", "original_gloss", "occurrence_year", "source_detail_1",
-        "source_detail_2", "source_detail_1_status", "source_detail_2_status", "usage_examples_present", "grammatical_info_present",
+        "source_detail_2", "source_detail_1_status", "source_detail_2_status", "source_detail_2_applicability_override", "usage_examples_present", "grammatical_info_present",
         "grammatical_note", "source_locator", "provenance_note", "reference_concept_id",
         "reference_concept_proposal_id",
     )
@@ -98,6 +98,7 @@ def save_draft(connection, draft_id=None, *, collaborator_id=None, access_role=N
         "source_detail_2": _text(values.get("source_detail_2")),
         "source_detail_1_status": values.get("source_detail_1_status") or ("VALUE" if _text(values.get("source_detail_1")) else "UNKNOWN"),
         "source_detail_2_status": values.get("source_detail_2_status") or ("VALUE" if _text(values.get("source_detail_2")) else "UNKNOWN"),
+        "source_detail_2_applicability_override": values.get("source_detail_2_applicability_override"),
         "usage_examples_present": _flag(values.get("usage_examples_present")),
         "grammatical_info_present": _flag(values.get("grammatical_info_present")),
         "grammatical_note": _text(values.get("grammatical_note")) if _flag(values.get("grammatical_info_present")) else None,
@@ -116,6 +117,23 @@ def save_draft(connection, draft_id=None, *, collaborator_id=None, access_role=N
         data["occurrence_year"] = validate_occurrence_year(
             connection, data["source_id"], values.get("occurrence_year")
         )
+    source_type_row = connection.execute(
+        "SELECT source_type FROM source WHERE source_id=?", (data["source_id"],)
+    ).fetchone()
+    try:
+        data["source_detail_2_applicability_override"] = normalize_applicability_override(
+            source_type_row[0] if source_type_row else None,
+            data["source_detail_2_applicability_override"])
+        if source_type_row and data["source_detail_2_applicability_override"] is not None:
+            # Only the exceptional time field is normalized here; other draft fields
+            # retain their existing incomplete-input behavior.
+            _, _, data["source_detail_2_status"], data["source_detail_2"] = normalize_occurrence_details(
+                source_type_row[0], "UNKNOWN", None,
+                data["source_detail_2_status"], data["source_detail_2"],
+                allow_incomplete=True,
+                source_detail_2_applicability_override=data["source_detail_2_applicability_override"])
+    except ValueError as error:
+        raise RegistrationError(str(error)) from error
     if data["reference_concept_id"] and data["reference_concept_proposal_id"]:
         raise RegistrationError("Un borrador no puede tener dos referencias conceptuales.")
     if draft_id is None:
@@ -147,6 +165,7 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
                           original_gloss=None, occurrence_year=None,
                           source_detail_1=None, source_detail_2=None,
                           source_detail_1_status=None, source_detail_2_status=None,
+                          source_detail_2_applicability_override=None,
                           usage_examples_present=False,
                           grammatical_info_present=False, grammatical_note=None,
                           source_locator=None, provenance_note=None,
@@ -167,7 +186,10 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
             original_gloss = original_gloss or draft["original_gloss"]
             occurrence_year = occurrence_year or draft["occurrence_year"]
             source_detail_1 = source_detail_1 or draft["source_detail_1"]
-            source_detail_2 = source_detail_2 or draft["source_detail_2"]
+            if source_detail_2_status is None and source_detail_2 is None:
+                source_detail_2 = draft["source_detail_2"]
+            if source_detail_2_applicability_override is None:
+                source_detail_2_applicability_override = draft["source_detail_2_applicability_override"]
             source_detail_1_status = source_detail_1_status or draft["source_detail_1_status"]
             source_detail_2_status = source_detail_2_status or draft["source_detail_2_status"]
             usage_examples_present = usage_examples_present or draft["usage_examples_present"]
@@ -188,7 +210,8 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
         source_detail_1_status = source_detail_1_status or ("VALUE" if _text(source_detail_1) else "UNKNOWN")
         source_detail_2_status = source_detail_2_status or ("VALUE" if _text(source_detail_2) else "UNKNOWN")
         try:
-            source_detail_1_status, source_detail_1, source_detail_2_status, source_detail_2 = normalize_occurrence_details(source[0], source_detail_1_status, source_detail_1, source_detail_2_status, source_detail_2)
+            source_detail_2_applicability_override = normalize_applicability_override(source[0], source_detail_2_applicability_override)
+            source_detail_1_status, source_detail_1, source_detail_2_status, source_detail_2 = normalize_occurrence_details(source[0], source_detail_1_status, source_detail_1, source_detail_2_status, source_detail_2, source_detail_2_applicability_override=source_detail_2_applicability_override)
         except ValueError as error: raise RegistrationError(str(error)) from error
         reference_concept_id, reference_proposal_id = resolve_concept_reference(
             connection, concept_id, concept_proposal_id, proposed_label,
@@ -200,12 +223,12 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
                             collaborator_id=collaborator_id, access_role=access_role)
         cursor = connection.execute(
             "INSERT INTO occurrence (source_id, original_gloss, hyperlink, occurrence_year, "
-            "source_detail_1, source_detail_2, source_detail_1_status, source_detail_2_status, usage_examples_present, "
+            "source_detail_1, source_detail_2, source_detail_1_status, source_detail_2_status, source_detail_2_applicability_override, usage_examples_present, "
             "grammatical_info_present, grammatical_note, source_locator, provenance_note) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             (int(source_id), gloss, _text(hyperlink),
              validate_occurrence_year(connection, source_id, occurrence_year),
-             _text(source_detail_1), _text(source_detail_2), source_detail_1_status, source_detail_2_status,
+             _text(source_detail_1), _text(source_detail_2), source_detail_1_status, source_detail_2_status, source_detail_2_applicability_override,
              _flag(usage_examples_present), _flag(grammatical_info_present),
              _text(grammatical_note) if _flag(grammatical_info_present) else None,
              _text(source_locator), _text(provenance_note)),

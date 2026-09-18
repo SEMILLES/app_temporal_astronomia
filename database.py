@@ -200,6 +200,9 @@ def crear_esquema(conexion):
                 CHECK (source_detail_1_status IN ('VALUE','NA','UNKNOWN')),
             source_detail_2_status TEXT NOT NULL DEFAULT 'UNKNOWN'
                 CHECK (source_detail_2_status IN ('VALUE','NA','UNKNOWN')),
+            source_detail_2_applicability_override INTEGER
+                CHECK (source_detail_2_applicability_override IS NULL
+                       OR source_detail_2_applicability_override IN (0,1)),
             usage_examples_present INTEGER NOT NULL DEFAULT 0
                 CHECK (usage_examples_present IN (0, 1)),
             grammatical_info_present INTEGER NOT NULL DEFAULT 0
@@ -278,6 +281,9 @@ def crear_esquema(conexion):
                 CHECK (source_detail_1_status IN ('VALUE','NA','UNKNOWN')),
             source_detail_2_status TEXT NOT NULL DEFAULT 'UNKNOWN'
                 CHECK (source_detail_2_status IN ('VALUE','NA','UNKNOWN')),
+            source_detail_2_applicability_override INTEGER
+                CHECK (source_detail_2_applicability_override IS NULL
+                       OR source_detail_2_applicability_override IN (0,1)),
             usage_examples_present INTEGER NOT NULL DEFAULT 0
                 CHECK (usage_examples_present IN (0, 1)),
             grammatical_info_present INTEGER NOT NULL DEFAULT 0
@@ -501,6 +507,9 @@ def crear_esquema(conexion):
                 CHECK (source_detail_1_status IN ('VALUE','NA','UNKNOWN')),
             source_detail_2_status TEXT NOT NULL DEFAULT 'UNKNOWN'
                 CHECK (source_detail_2_status IN ('VALUE','NA','UNKNOWN')),
+            source_detail_2_applicability_override INTEGER
+                CHECK (source_detail_2_applicability_override IS NULL
+                       OR source_detail_2_applicability_override IN (0,1)),
             usage_examples_present INTEGER NOT NULL DEFAULT 0
                 CHECK (usage_examples_present IN (0, 1)),
             grammatical_info_present INTEGER NOT NULL DEFAULT 0

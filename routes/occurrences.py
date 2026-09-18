@@ -16,7 +16,7 @@ from alternative_workflow import AlternativeWorkflowError, create_alternative_su
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
 from source_period import validate_occurrence_year
 from access_control import requires_reviewer
-from source_details import normalize_occurrence_details
+from source_details import normalize_occurrence_details, normalize_applicability_override
 from functional_presentation import concept_options
 from immediate_acceptance import (ImmediateAcceptanceError,ImmediateBlockingError,
     alternative_operation,confirm_operation,grammar_operation,preview_operation)
@@ -235,7 +235,7 @@ def editar_ocurrencia(occurrence_id):
     conexion.execute("BEGIN")
     ocurrencia = conexion.execute("""
         SELECT occurrence_id, source_id, original_gloss, source_detail_1,
-               source_detail_2, source_detail_1_status, source_detail_2_status, occurrence_year, usage_examples_present,
+               source_detail_2, source_detail_1_status, source_detail_2_status, source_detail_2_applicability_override, occurrence_year, usage_examples_present,
                grammatical_info_present, grammatical_note, provenance_note
         FROM occurrence WHERE occurrence_id = ?
     """, (occurrence_id,)).fetchone()
@@ -279,7 +279,7 @@ def actualizar_ocurrencia(occurrence_id):
             SELECT legacy_occurrence_id, source_id, original_gloss, hyperlink,
                    legacy_source_detail_1, legacy_source_detail_2,
                    source_locator, provenance_note, occurrence_year,
-                   source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status,usage_examples_present,
+                   source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status,source_detail_2_applicability_override,usage_examples_present,
                    grammatical_info_present,grammatical_note
             FROM occurrence WHERE occurrence_id = ?
         """, (occurrence_id,)).fetchone()
@@ -289,18 +289,21 @@ def actualizar_ocurrencia(occurrence_id):
         check_edit(conexion, "occurrence", occurrence_id, request.form.get("edit_token"))
         source=conexion.execute("SELECT source_type FROM source WHERE source_id=? AND retired_at IS NULL",(source_id,)).fetchone()
         if source is None:return "La fuente no existe.",400
-        source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2=normalize_occurrence_details(source[0],source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2)
+        source_detail_2_applicability_override = normalize_applicability_override(
+            source[0], request.form.get("source_detail_2_applicability_override",
+                                        actual["source_detail_2_applicability_override"] if str(actual["source_id"]) == source_id else None))
+        source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2=normalize_occurrence_details(source[0],source_detail_1_status,source_detail_1,source_detail_2_status,source_detail_2,source_detail_2_applicability_override=source_detail_2_applicability_override)
         occurrence_year = validate_occurrence_year(
             conexion, source_id, occurrence_year_value
         )
         new_state = (
-            int(source_id), original_gloss, source_detail_1, source_detail_2, source_detail_1_status, source_detail_2_status,
+            int(source_id), original_gloss, source_detail_1, source_detail_2, source_detail_1_status, source_detail_2_status, source_detail_2_applicability_override,
             occurrence_year, usage_examples_present, grammatical_info_present,
             grammatical_note, provenance_note
         )
         previous_editable_state = (
             actual["source_id"], actual["original_gloss"],
-            actual["source_detail_1"], actual["source_detail_2"], actual["source_detail_1_status"], actual["source_detail_2_status"],
+            actual["source_detail_1"], actual["source_detail_2"], actual["source_detail_1_status"], actual["source_detail_2_status"], actual["source_detail_2_applicability_override"],
             actual["occurrence_year"], actual["usage_examples_present"],
             actual["grammatical_info_present"], actual["grammatical_note"],
             actual["provenance_note"]
@@ -311,24 +314,24 @@ def actualizar_ocurrencia(occurrence_id):
                     occurrence_id, legacy_occurrence_id, source_id,
                     original_gloss, hyperlink, legacy_source_detail_1,
                     legacy_source_detail_2, source_locator, provenance_note,
-                    occurrence_year, source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status,
+                    occurrence_year, source_detail_1,source_detail_2,source_detail_1_status,source_detail_2_status,source_detail_2_applicability_override,
                     usage_examples_present,grammatical_info_present,
                     grammatical_note,change_note,changed_by
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
                 occurrence_id, actual["legacy_occurrence_id"],
                 actual["source_id"], actual["original_gloss"],
                 actual["hyperlink"], actual["legacy_source_detail_1"],
                 actual["legacy_source_detail_2"], actual["source_locator"],
                 actual["provenance_note"], actual["occurrence_year"],
-                actual["source_detail_1"],actual["source_detail_2"],actual["source_detail_1_status"],actual["source_detail_2_status"],
+                actual["source_detail_1"],actual["source_detail_2"],actual["source_detail_1_status"],actual["source_detail_2_status"], actual["source_detail_2_applicability_override"],
                 actual["usage_examples_present"],actual["grammatical_info_present"],
                 actual["grammatical_note"],change_note,
                 resolve_collaborator(conexion, request.form.get("collaborator_id"))[1]
             ))
         cursor = conexion.execute("""
             UPDATE occurrence SET
-                source_id=?,original_gloss=?,source_detail_1=?,source_detail_2=?,source_detail_1_status=?,source_detail_2_status=?,
+                source_id=?,original_gloss=?,source_detail_1=?,source_detail_2=?,source_detail_1_status=?,source_detail_2_status=?,source_detail_2_applicability_override=?,
                 occurrence_year=?,usage_examples_present=?,
                 grammatical_info_present=?,grammatical_note=?,provenance_note=?,
                 updated_at = CURRENT_TIMESTAMP

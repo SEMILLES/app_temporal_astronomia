@@ -15,16 +15,16 @@ def source_type_labels(source_type):
     if source_type == "VIDEO_POR_SENA": return ("Título / identificador del video", None, False)
     if source_type in ("UN_VIDEO_VARIAS_SENAS", "VARIOS_VIDEOS_VARIAS_SENAS"):
         return ("Título del video", "Tiempo", True)
-    return ("Detalle Fuente 1", "Detalle Fuente 2", True)
+    return ("Referencia en la fuente", "Localizador en la fuente", True)
 
 def normalize_detail(status, value, *, applicable=True, kind=None, allow_incomplete=False):
     value = (value or "").strip() or None
     status = (status or "").strip().upper() or None
     if not applicable: return "NA", None
     if allow_incomplete and status is None: return None, value
-    if status not in DETAIL_STATUSES: raise ValueError("Seleccione Dato, N/A o Desconocido para cada detalle aplicable.")
+    if status not in DETAIL_STATUSES: raise ValueError("Debe indicarse Dato, N/A o Desconocido para cada referencia aplicable.")
     if status == "VALUE":
-        if value is None: raise ValueError("Un detalle marcado como Dato requiere un valor.")
+        if value is None: raise ValueError("Un campo marcado como Dato requiere un valor.")
         if kind == "page" and not value.isdigit(): raise ValueError("La página debe contener únicamente números.")
         if kind == "time" and not re.fullmatch(r"(?:\d{1,2}):[0-5]\d(?::[0-5]\d)?", value):
             raise ValueError("El tiempo debe usar M:SS, MM:SS o H:MM:SS.")
@@ -32,13 +32,53 @@ def normalize_detail(status, value, *, applicable=True, kind=None, allow_incompl
     if value is not None: raise ValueError("N/A y Desconocido no admiten texto.")
     return status, None
 
-def normalize_occurrence_details(source_type, status1, value1, status2, value2, *, allow_incomplete=False):
-    label1, label2, detail2_applicable = source_type_labels(source_type)
-    kind1 = None
-    kind2 = "page" if source_type == "MATERIAL_IMPRESO" else "time" if source_type in ("UN_VIDEO_VARIAS_SENAS", "VARIOS_VIDEOS_VARIAS_SENAS") else None
-    s1, v1 = normalize_detail(status1, value1, kind=kind1, allow_incomplete=allow_incomplete)
-    s2, v2 = normalize_detail(status2, value2, applicable=detail2_applicable, kind=kind2, allow_incomplete=allow_incomplete)
+def normalize_applicability_override(source_type, override):
+    """Keep only exceptions; explicit normal choices canonicalize to NULL."""
+    if override in (None, ""):
+        return None
+    if str(override) not in ("0", "1"):
+        raise ValueError("La aplicabilidad del tiempo no es válida.")
+    if source_type not in ("VIDEO_POR_SENA", "VARIOS_VIDEOS_VARIAS_SENAS"):
+        raise ValueError("La fuente no admite excepciones de aplicabilidad del tiempo.")
+    exceptional = 1 if source_type == "VIDEO_POR_SENA" else 0
+    return exceptional if int(override) == exceptional else None
+
+
+def effective_detail_2_applicability(source_type, status=None, override=None):
+    """Explicit choice, then legacy VALUE/NA, then the source's normal rule."""
+    override = normalize_applicability_override(source_type, override)
+    if override is not None:
+        return bool(override)
+    if status == "VALUE":
+        return True
+    if status == "NA":
+        return False
+    return source_type_labels(source_type)[2]
+
+
+def normalize_occurrence_details(source_type, status1, value1, status2, value2, *,
+                                 allow_incomplete=False,
+                                 source_detail_2_applicability_override=None):
+    """Normalize references, retaining the existing four-item return contract."""
+    source_detail_2_applicability_override = normalize_applicability_override(
+        source_type, source_detail_2_applicability_override)
+    applicable = effective_detail_2_applicability(
+        source_type, status2, source_detail_2_applicability_override)
+    if status2 == "NA" and (value2 or "").strip() and str(source_detail_2_applicability_override) != "0":
+        raise ValueError("N/A no admite texto.")
+    kind2 = "page" if source_type == "MATERIAL_IMPRESO" else "time" if source_type in (
+        "VIDEO_POR_SENA", "UN_VIDEO_VARIAS_SENAS", "VARIOS_VIDEOS_VARIAS_SENAS") else None
+    s1, v1 = normalize_detail(status1, value1, allow_incomplete=allow_incomplete)
+    if applicable and source_type == "VIDEO_POR_SENA":
+        if not allow_incomplete and status2 != "VALUE":
+            raise ValueError("El tiempo requerido necesita un valor válido.")
+        if allow_incomplete:
+            # Drafts retain unfinished input; completion performs strict validation.
+            return s1, v1, "VALUE", (value2 or "").strip() or None
+    s2, v2 = normalize_detail(status2, value2, applicable=applicable, kind=kind2,
+                              allow_incomplete=allow_incomplete)
     return s1, v1, s2, v2
+
 
 def _comparison(value):
     value = unicodedata.normalize("NFD", value or "")

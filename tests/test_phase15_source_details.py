@@ -25,7 +25,7 @@ class DetailSemanticsTests(unittest.TestCase):
         for source_type in SOURCE_TYPES:self.assertEqual(source_form_values({"source_name":"S","source_type":source_type})[1],source_type)
         with self.assertRaises(ValueError):source_form_values({"source_name":"S"})
         self.assertEqual(normalize_occurrence_details("MATERIAL_IMPRESO","NA",None,"VALUE","203"),("NA",None,"VALUE","203"))
-        self.assertEqual(normalize_occurrence_details("VIDEO_POR_SENA","VALUE","COHETE 2","VALUE","bad"),("VALUE","COHETE 2","NA",None))
+        with self.assertRaises(ValueError):normalize_occurrence_details("VIDEO_POR_SENA","VALUE","COHETE 2","VALUE","bad")
         for status in ("NA","UNKNOWN"):
             with self.assertRaises(ValueError):normalize_occurrence_details("OTRO",status,"texto","NA",None)
         with self.assertRaises(ValueError):normalize_occurrence_details("OTRO","VALUE","","NA",None)
@@ -43,7 +43,7 @@ class DetailSemanticsTests(unittest.TestCase):
     def test_ui_has_type_specific_labels_and_structured_statuses(self):
         javascript=(ROOT/"static"/"source-details.js").read_text(encoding="utf-8")
         template=(ROOT/"templates"/"_source_details_form.html").read_text(encoding="utf-8")
-        for label in ("Submaterial / sección","Página","Título / identificador del video","Título del video","Tiempo","Detalle Fuente 1","Detalle Fuente 2"):
+        for label in ("Submaterial / sección","Página","Título / identificador del video","Título del video","Tiempo","Referencia en la fuente","Localizador en la fuente"):
             self.assertIn(label,javascript)
         for value in ("VALUE","NA","UNKNOWN","Dato","N/A","Desconocido"):
             self.assertIn(value,template)
