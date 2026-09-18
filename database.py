@@ -18,6 +18,7 @@ else:
 
 
 REQUIRED_APPLICATION_TABLES = frozenset({
+    "concept_work_assignment",
     "alternative_usage_profile",
     "collection", "classification_system", "classification_category",
     "collection_membership", "concept_classification_revision",
@@ -890,3 +891,5 @@ def crear_esquema(conexion):
     install_classification(conexion)
     from usage_profile import install as install_usage_profile
     install_usage_profile(conexion)
+    from work_assignment_schema import install as install_work_assignments
+    install_work_assignments(conexion)

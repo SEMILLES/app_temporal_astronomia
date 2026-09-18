@@ -1,0 +1,101 @@
+"""Transactional Concept ↔ collaborator administration."""
+from activity import resolve_collaborator
+
+
+def _ids(values):
+    try:
+        result = sorted({int(value) for value in values})
+    except (ValueError, TypeError):
+        raise ValueError('Selección no válida.') from None
+    if not result or result[0] < 1 or len(result) > 500:
+        raise ValueError('Seleccione entre 1 y 500 elementos.')
+    return result
+
+
+def assigned_analysts(db, concept_ids):
+    result = {identifier: [] for identifier in concept_ids}
+    if not result:
+        return result
+    marks = ','.join('?' for _ in result)
+    for row in db.execute(f'''SELECT w.*, c.display_name, c.active AS collaborator_active
+            FROM concept_work_assignment w JOIN collaborator c ON c.collaborator_id=w.analyst_id
+            WHERE w.active=1 AND w.concept_id IN ({marks})
+            ORDER BY c.display_name,w.work_assignment_id''', tuple(result)):
+        result[row['concept_id']].append(row)
+    return result
+
+
+def list_concepts(db, *, search='', status='all', analyst_id=None, page=1, per_page=50):
+    if status not in ('all', 'unassigned', 'assigned'):
+        raise ValueError('Filtro de asignación no válido.')
+    page = max(1, int(page))
+    per_page = max(1, min(100, int(per_page)))
+    conditions, params = [], []
+    if search.strip():
+        conditions.append("c.preferred_label LIKE ? ESCAPE '\\'")
+        literal = search.strip().replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_')
+        params.append('%' + literal + '%')
+    exists = 'EXISTS (SELECT 1 FROM concept_work_assignment w WHERE w.concept_id=c.concept_id AND w.active=1'
+    if status != 'all':
+        conditions.append(('NOT ' if status == 'unassigned' else '') + exists + ')')
+    if analyst_id not in (None, ''):
+        conditions.append(exists + ' AND w.analyst_id=?)')
+        params.append(_ids([analyst_id])[0])
+    where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+    total = db.execute('SELECT count(*) FROM concept c' + where, params).fetchone()[0]
+    pages = max(1, (total + per_page - 1) // per_page)
+    page = min(page, pages)
+    rows = db.execute('SELECT c.concept_id,c.preferred_label FROM concept c' + where +
+                      ' ORDER BY c.preferred_label,c.concept_id LIMIT ? OFFSET ?',
+                      (*params, per_page, (page - 1) * per_page)).fetchall()
+    return dict(concepts=rows, assignments=assigned_analysts(db, [r['concept_id'] for r in rows]),
+                total=total, page=page, pages=pages)
+
+
+def assign(db, concept_ids, analyst_ids, *, actor_id=None, access_role):
+    if access_role != 'master':
+        raise PermissionError('Acceso restringido a administración.')
+    concepts, analysts = _ids(concept_ids), _ids(analyst_ids)
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        for identifier in concepts:
+            if not db.execute('SELECT 1 FROM concept WHERE concept_id=?', (identifier,)).fetchone():
+                raise ValueError('Un concepto seleccionado ya no existe.')
+        names = {}
+        for identifier in analysts:
+            row = db.execute('SELECT display_name FROM collaborator WHERE collaborator_id=? AND active=1', (identifier,)).fetchone()
+            if not row:
+                raise ValueError('Seleccione colaboradores activos existentes.')
+            names[identifier] = row[0]
+        actor, snapshot = resolve_collaborator(db, actor_id)
+        added = 0
+        for concept in concepts:
+            for analyst in analysts:
+                added += db.execute('''INSERT INTO concept_work_assignment
+                    (concept_id,analyst_id,analyst_name_snapshot,created_by_collaborator_id,
+                     created_by_name_snapshot,created_access_role) VALUES(?,?,?,?,?,?)
+                    ON CONFLICT(concept_id,analyst_id) WHERE active=1 DO NOTHING''',
+                    (concept, analyst, names[analyst], actor, snapshot, access_role)).rowcount
+        db.commit()
+        return added
+    except Exception:
+        db.rollback()
+        raise
+
+
+def remove(db, assignment_id, *, actor_id=None, access_role):
+    if access_role != 'master':
+        raise PermissionError('Acceso restringido a administración.')
+    db.execute('BEGIN IMMEDIATE')
+    try:
+        actor, snapshot = resolve_collaborator(db, actor_id)
+        changed = db.execute('''UPDATE concept_work_assignment SET active=0,
+            removed_at=CURRENT_TIMESTAMP,removed_by_collaborator_id=?,
+            removed_by_name_snapshot=?,removed_access_role=?
+            WHERE work_assignment_id=? AND active=1''',
+            (actor, snapshot, access_role, assignment_id)).rowcount
+        db.commit()
+        return changed
+    except Exception:
+        db.rollback()
+        raise
