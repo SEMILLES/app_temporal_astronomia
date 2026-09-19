@@ -513,6 +513,8 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
             'alternative_submission_morphology', morphology_resolution, approve_morphology)
         approve_relations = relations_resolution == 'ACCEPTED'
         approve_morphology = morphology_resolution == 'ACCEPTED'
+        if not approve_morphology:
+            raise AlternativeWorkflowError('Una alternativa nueva debe nacer con morfología aprobada.')
         before = _current_assignment_id(connection, submission['occurrence_id'])
         previous_alternative = connection.execute(
             'SELECT alternative_id FROM assignment WHERE assignment_id=?', (before,)
@@ -528,6 +530,12 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
                        reason='Retiro automático por pérdida de la última occurrence.',
                        actor={'access_role': access_role, 'collaborator_id': collaborator_id})
         _apply_review_plan(connection, plan, submission_id, reviewed_by, new_id, collaborator_id=collaborator_id, access_role=access_role)
+        label = connection.execute('SELECT working_label FROM alternative WHERE alternative_id=?', (new_id,)).fetchone()[0]
+        suffix = (label or '').strip().lower()[-1:]
+        if suffix and 'b' <= suffix <= 'z' and not connection.execute(
+                'SELECT 1 FROM alternative_relation WHERE is_current=1 AND (alternative_low_id=? OR alternative_high_id=?)',
+                (new_id, new_id)).fetchone():
+            raise AlternativeWorkflowError('Una alternativa nueva con letra b o posterior requiere una relación fonológica vigente.')
         morphology_id = None
         if approve_morphology:
             morphology_id, _ = materialize_submission_morphology(

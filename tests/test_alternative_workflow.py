@@ -440,18 +440,15 @@ class CreateNewLexicalWorkflowTests(unittest.TestCase):
             morphology={'component_count':2,'free_permutation':'NO',
                         'components':[{'position':1,'component_alternative_id':2}]})
 
-    def test_legacy_new_without_groups_optional_note_and_final_snapshot(self):
+    def test_legacy_new_without_morphology_cannot_create_alternative(self):
         sid=self.create(phonological_relation_answer='NO')
         self.db.execute('DELETE FROM alternative_submission_morphology WHERE submission_id=?',(sid,))
         self.db.execute('UPDATE alternative_submission SET is_legacy=1 WHERE submission_id=?',(sid,));self.db.commit()
-        before=self.proposal(sid)
-        aid=self.new(sid,review_note=' \n ')
-        row=self.decision(sid)
-        label=self.db.execute('SELECT working_label FROM alternative WHERE alternative_id=?',(aid,)).fetchone()[0]
-        self.assertEqual(('CREATE_NEW','CREATED',None,'NOT_PROPOSED','NOT_PROPOSED',label),tuple(row[k] for k in ('decision_action','assignment_effect','assignment_before_id','relations_resolution','morphology_resolution','alternative_label_snapshot')))
-        self.assertEqual(before,self.proposal(sid))
-        self.db.execute("UPDATE alternative SET working_label='99z' WHERE alternative_id=?",(aid,))
-        self.assertEqual(label,self.decision(sid)['alternative_label_snapshot'])
+        before=self.dump()
+        with self.assertRaisesRegex(AlternativeWorkflowError, 'morfolog'):
+            self.new(sid,review_note='Legacy proposal')
+        self.assertEqual(before,self.dump())
+        self.assertIsNone(self.decision(sid))
 
     def test_accepted_groups_materialize_with_provenance_and_group_nomenclature(self):
         sid=self.full_proposal();before=self.proposal(sid)
@@ -490,32 +487,23 @@ class CreateNewLexicalWorkflowTests(unittest.TestCase):
                 self.assertEqual(before,self.dump())
         self.assertIsNone(self.decision(sid))
 
-    def test_explicit_morphology_rejection_no_pending_conflict(self):
-        from conflict_rules import detect_pending_morphology
-        from conflicts import run_global_conflict_validation
+    def test_explicit_morphology_rejection_cannot_create_alternative(self):
         sid=self.create(phonological_relation_answer='NO');before=self.dump()
-        with self.assertRaises(AlternativeWorkflowError):self.new(sid,morphology_resolution='REJECTED')
-        self.assertEqual(before,self.dump())
-        aid=self.new(sid,morphology_resolution='REJECTED',review_note='Morphology rejected')
-        self.assertEqual(0,self.db.execute('SELECT count(*) FROM alternative_morphology WHERE alternative_id=?',(aid,)).fetchone()[0])
-        self.assertIsNone(self.decision(sid)['morphology_result_id'])
-        self.assertEqual([],detect_pending_morphology(self.db))
-        run_global_conflict_validation(self.db)
-        self.assertEqual(0,self.db.execute("SELECT count(*) FROM conflict WHERE rule_code='PENDING_MORPHOLOGY'").fetchone()[0])
+        for note in ('', 'Morphology rejected'):
+            with self.subTest(note=note), self.assertRaises(AlternativeWorkflowError):
+                self.new(sid,morphology_resolution='REJECTED',review_note=note)
+            self.assertEqual(before,self.dump())
+        self.assertIsNone(self.decision(sid))
 
-    def test_existing_and_unsure_to_new_without_morphology_require_note(self):
+    def test_existing_and_unsure_to_new_require_morphology_even_with_note(self):
         for kind,oid in [('EXISTING',5),('UNSURE',1)]:
             options={'proposed_existing_alternative_id':1} if kind=='EXISTING' else {'analysis_note':'Uncertain'}
             sid=self.create(occurrence=oid,kind=kind,**options);before=self.dump()
-            with self.assertRaises(AlternativeWorkflowError):self.new(sid)
-            self.assertEqual(before,self.dump())
-            aid=self.new(sid,review_note='Different form')
-            row=self.decision(sid)
-            self.assertEqual('NOT_PROPOSED',row['morphology_resolution']);self.assertIsNone(row['morphology_result_id'])
-            self.assertEqual(0,self.db.execute('SELECT count(*) FROM alternative_morphology WHERE alternative_id=?',(aid,)).fetchone()[0])
-            self.assertEqual('CREATED' if oid==5 else 'REPLACED',row['assignment_effect'])
-            if oid==1:
-                self.assertEqual(1,row['assignment_before_id']);self.assertNotEqual(1,row['assignment_result_id'])
+            for note in ('', 'Different form'):
+                with self.subTest(kind=kind,note=note), self.assertRaises(AlternativeWorkflowError):
+                    self.new(sid,review_note=note)
+                self.assertEqual(before,self.dump())
+            self.assertIsNone(self.decision(sid))
 
     def test_legacy_existing_with_real_morphology_proposal(self):
         sid=self.create(kind='EXISTING',proposed_existing_alternative_id=1)

@@ -54,6 +54,13 @@ class AtomicLexicalReviewTests(unittest.TestCase):
                         note='Reviewed', access_role='reviewer')
         return sid
 
+    def new_submission(self):
+        sid = create_alternative_submission(self.db, 1, 'NEW',
+            phonological_relation_answer='NO', morphology={'component_count_not_applicable': True})
+        save_resolution(self.db, sid, 'USE_EXISTING', concept_id=2,
+                        note='Reviewed', access_role='reviewer')
+        return sid
+
     def existing(self, sid, destination=4):
         return review_as_existing(self.db, sid, destination, access_role='reviewer', review_note='Reviewed')
 
@@ -94,10 +101,10 @@ class AtomicLexicalReviewTests(unittest.TestCase):
         self.assertEqual(self.stored(1),{1:'1b',2:'1a'})
 
     def test_new_cross_concept_virtual_materialized_and_preview_equal(self):
-        sid=self.submission()
+        sid=self.new_submission()
         plan=plan_lexical_review(self.db,1,2)
         preview=new_review_preview(self.db,1,2)
-        new=review_as_new(self.db,sid,access_role='reviewer',review_note='Reviewed')
+        new=review_as_new(self.db,sid,morphology_resolution='ACCEPTED',access_role='reviewer',review_note='Reviewed')
         self.assert_plan(plan,new)
         self.assertEqual(self.stored(2),{(new if k=='new' else k):v for k,v in preview['suggestions'].items()})
 
@@ -130,12 +137,12 @@ class AtomicLexicalReviewTests(unittest.TestCase):
         self.assertEqual(before,self.dump())
 
     def test_new_relation_and_closure_failure_roll_back_every_table(self):
-        sid=self.submission()
+        sid=self.new_submission()
         self.db.execute("INSERT INTO alternative_submission_relation(submission_id,target_alternative_id,phonological_parameter) VALUES(?,3,'CM_1')",(sid,))
         self.db.execute("CREATE TRIGGER fail_close BEFORE UPDATE ON submission WHEN NEW.status='resolved' BEGIN SELECT RAISE(ABORT,'synthetic'); END")
         self.db.commit();before=self.dump()
         with self.assertRaises(sqlite3.IntegrityError):
-            review_as_new(self.db,sid,relations_resolution='ACCEPTED',access_role='reviewer',review_note='Reviewed')
+            review_as_new(self.db,sid,morphology_resolution='ACCEPTED',relations_resolution='ACCEPTED',access_role='reviewer',review_note='Reviewed')
         self.assertEqual(before,self.dump())
 
     def test_outer_savepoint_preserves_outer_work(self):
@@ -167,40 +174,40 @@ class AtomicLexicalReviewTests(unittest.TestCase):
             self.db.execute("INSERT INTO alternative(alternative_id,concept_id,working_label) VALUES(?,2,?)",(aid,'1'+chr(97+aid-3)))
             self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(3,?,'CM_1')",(aid,))
         self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(3,4,'CM_1')")
-        self.db.commit();sid=self.submission()
+        self.db.commit();sid=self.new_submission()
         self.db.execute("INSERT INTO alternative_submission_relation(submission_id,target_alternative_id,phonological_parameter) VALUES(?,3,'CM_1')",(sid,));self.db.commit()
         before=self.dump()
         with self.assertRaisesRegex(InvalidNomenclatureError,'VARIANT_CAPACITY_EXCEEDED'):
-            review_as_new(self.db,sid,relations_resolution='ACCEPTED',access_role='reviewer',review_note='Reviewed')
+            review_as_new(self.db,sid,morphology_resolution='ACCEPTED',relations_resolution='ACCEPTED',access_role='reviewer',review_note='Reviewed')
         self.assertEqual(before,self.dump())
 
     def test_new_accepted_relations_follow_plan(self):
-        sid=self.submission()
+        sid=self.new_submission()
         self.db.execute("INSERT INTO alternative_submission_relation(submission_id,target_alternative_id,phonological_parameter) VALUES(?,3,'CM_1')",(sid,));self.db.commit()
         plan=plan_lexical_review(self.db,1,2,targets=[(3,'CM_1')])
-        new=review_as_new(self.db,sid,relations_resolution='ACCEPTED',access_role='reviewer',review_note='Reviewed')
+        new=review_as_new(self.db,sid,morphology_resolution='ACCEPTED',relations_resolution='ACCEPTED',access_role='reviewer',review_note='Reviewed')
         self.assert_plan(plan,new)
         self.assertEqual(self.stored(2)[new],'1a');self.assertEqual(self.stored(2)[3],'1b')
 
     def test_new_rejected_relation_is_excluded(self):
-        sid=self.submission()
+        sid=self.new_submission()
         self.db.execute("INSERT INTO alternative_submission_relation(submission_id,target_alternative_id,phonological_parameter) VALUES(?,3,'CM_1')",(sid,));self.db.commit()
         plan=plan_lexical_review(self.db,1,2)
-        new=review_as_new(self.db,sid,relations_resolution='REJECTED',access_role='reviewer',review_note='Reviewed')
+        new=review_as_new(self.db,sid,morphology_resolution='ACCEPTED',relations_resolution='REJECTED',access_role='reviewer',review_note='Reviewed')
         self.assert_plan(plan,new)
         self.assertEqual(self.db.execute('SELECT count(*) FROM alternative_relation').fetchone()[0],0)
 
     def test_manual_and_adjusted_valid_gaps_and_blocked_group_inversion(self):
         for mode in ('manual','adjusted'):
             with self.subTest(mode=mode):
-                sid=self.submission()
+                sid=self.new_submission()
                 self.db.execute("INSERT INTO alternative_submission_relation(submission_id,target_alternative_id,phonological_parameter) VALUES(?,3,'CM_1')",(sid,));self.db.commit()
                 before=self.dump()
                 with self.assertRaisesRegex(InvalidNomenclatureError,'GROUP_CHRONOLOGY_MISMATCH'):
-                    review_as_new(self.db,sid,relations_resolution='ACCEPTED',nomenclature_mode=mode,
+                    review_as_new(self.db,sid,morphology_resolution='ACCEPTED',relations_resolution='ACCEPTED',nomenclature_mode=mode,
                         labels={'new':'2a',3:'2c',4:'1a'},reason='Editorial',access_role='reviewer',review_note='Reviewed')
                 self.assertEqual(before,self.dump())
-                new=review_as_new(self.db,sid,relations_resolution='ACCEPTED',nomenclature_mode=mode,
+                new=review_as_new(self.db,sid,morphology_resolution='ACCEPTED',relations_resolution='ACCEPTED',nomenclature_mode=mode,
                     labels={'new':'1a',3:'1c',4:'2a'},reason='Editorial',access_role='reviewer',review_note='Reviewed')
                 self.assertEqual(self.stored(2),{new:'1a',3:'1c',4:'2a'})
                 self.assertEqual([tuple(r) for r in self.db.execute('SELECT concept_id,origin,reason FROM renumber_event ORDER BY concept_id')],
@@ -216,8 +223,8 @@ class AtomicLexicalReviewTests(unittest.TestCase):
                 self.tearDown();self.setUp()
 
     def test_immediate_new_preview_and_close_share_virtual_plan(self):
-        operation=alternative_operation(1,dict(proposal_kind='EXISTING',proposed_existing_alternative_id=1),
-            dict(decision='new',concept_resolution=dict(action='USE_EXISTING',concept_id=2,note='Reviewed')),
+        operation=alternative_operation(1,dict(proposal_kind='NEW',phonological_relation_answer='NO',morphology={'component_count_not_applicable':True}),
+            dict(decision='new',morphology_resolution='ACCEPTED',concept_resolution=dict(action='USE_EXISTING',concept_id=2,note='Reviewed')),
             actor_context=dict(access_role='reviewer'),review_note='Reviewed')
         before=self.dump();maps=[]
         def inspect(db):
@@ -225,7 +232,7 @@ class AtomicLexicalReviewTests(unittest.TestCase):
         preview_operation(self.db,inspect);self.assertEqual(before,self.dump())
         confirm_operation(self.db,inspect);self.assertEqual(maps[0],maps[1])
         self.tearDown();self.setUp()
-        sid=self.submission();review_as_new(self.db,sid,access_role='reviewer',review_note='Reviewed')
+        sid=self.new_submission();review_as_new(self.db,sid,morphology_resolution='ACCEPTED',access_role='reviewer',review_note='Reviewed')
         self.assertEqual(maps[0],(self.stored(1),self.stored(2)))
 
     def test_existing_same_assignment_revalidates_without_duplicate_event(self):
@@ -244,13 +251,13 @@ class AtomicLexicalReviewTests(unittest.TestCase):
         self.assertEqual(before,self.dump())
 
     def test_materialization_mismatch_rolls_back(self):
-        sid=self.submission()
+        sid=self.new_submission()
         # A trigger changes actual evidence after planning: no replacement map
         # may be silently calculated and applied instead of the reviewed map.
         self.db.execute("CREATE TRIGGER change_year AFTER INSERT ON assignment BEGIN UPDATE occurrence SET occurrence_year=2099 WHERE occurrence_id=NEW.occurrence_id; END")
         self.db.commit();before=self.dump()
         with self.assertRaisesRegex(InvalidNomenclatureError,'GROUP_CHRONOLOGY_MISMATCH'):
-            review_as_new(self.db,sid,access_role='reviewer',review_note='Reviewed')
+            review_as_new(self.db,sid,morphology_resolution='ACCEPTED',access_role='reviewer',review_note='Reviewed')
         self.assertEqual(before,self.dump())
 
 

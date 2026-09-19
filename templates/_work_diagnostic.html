@@ -3,25 +3,27 @@
 <p>Alternativas: {{ diagnostic.alternative_count }}<br>
 Morfología: {{ diagnostic.morphology|length }} pendientes · bloqueantes<br>
 Relaciones: {{ diagnostic.relations|length }} pendientes · bloqueantes<br>
-Gramática: {{ diagnostic.grammar|length }} pendientes · no bloqueantes</p>
+Gramática: {{ diagnostic.grammar|length }} pendientes · no bloqueantes<br>
+Asignación a alternativa: {{ diagnostic.assignment|length }} pendientes</p>
 {% if not diagnostic.alternative_count %}<p>Sin alternativas: trabajo pendiente válido.</p>{% endif %}
-{% if diagnostic.morphology or diagnostic.relations or diagnostic.grammar %}
+{% if diagnostic.morphology or diagnostic.relations or diagnostic.grammar or diagnostic.assignment %}
 <details><summary>Ver pendientes y herramientas</summary>
 {% for kind, title, anchor in [('morphology','Morfología','morfologia'),('relations','Relaciones fonológicas','relaciones')] %}
 {% if diagnostic[kind] %}<p><strong>{{ title }} · bloqueante</strong></p><ul>
 {% for item in diagnostic[kind] %}<li>Alternativa {{ item.working_label or 'sin etiqueta' }} · ID {{ item.alternative_id }}:
 {% if g.current_access_role in ('reviewer','master') %}
 <a href="{{ url_for('alternatives.gestionar_alternativa', alternative_id=item.alternative_id, _anchor=anchor) }}">Resolver {{ title|lower }}</a>
-{% elif item.analysis_occurrence_id %}
-<a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=item.analysis_occurrence_id) }}">Analizar evidencia {{ item.analysis_occurrence_id }}</a>
-<span>La corrección de esta alternativa vigente requiere revisión.</span>
 {% else %}
-<a href="{{ url_for('alternatives.alternativas', concept_id=concept.concept_id) }}">Consultar alternativa en el concepto</a>
-<span>Sin evidencia compatible para proponer; resolución por el Revisor.</span>
+{% if (item.working_label or '')|trim %}<a href="{{ url_for('catalog.internal_alternative', alternative_id=item.alternative_id) }}">Consultar alternativa {{ item.alternative_id }}</a>{% else %}<span>Alternativa sin etiqueta de consulta; requiere revisión.</span>{% endif %}
+<span>La propuesta de cambios sobre esta alternativa aún no está disponible para analistas. Resolución por el Revisor.</span>
 {% endif %}</li>{% endfor %}</ul>{% endif %}
 {% endfor %}
 {% if diagnostic.grammar %}<p><strong>Gramática · no bloqueante</strong></p><ul>
 {% for item in diagnostic.grammar %}<li><a href="{{ url_for('occurrences.mostrar_gramatica', occurrence_id=item.occurrence_id) }}">Analizar gramática de ocurrencia {{ item.occurrence_id }}</a> · {{ item.original_gloss }}</li>{% endfor %}
+</ul>{% endif %}
+{% if diagnostic.assignment %}<p><strong>Asignación a alternativa · ocurrencias</strong></p><ul>
+{% for item in diagnostic.assignment %}<li>Ocurrencia {{ item.occurrence_id }} · {{ item.original_gloss }}:
+<a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=item.occurrence_id) }}">Clasificar / asignar alternativa</a></li>{% endfor %}
 </ul>{% endif %}
 </details>{% endif %}
 </div>

@@ -3,8 +3,8 @@ from activity import resolve_collaborator
 
 
 def concept_diagnostics(db, concept_ids):
-    """Read canonical current rows in two batched queries, never mutate them."""
-    result = {identifier: dict(alternative_count=0, morphology=[], relations=[], grammar=[])
+    """Read the four task types in three batched queries, never mutate them."""
+    result = {identifier: dict(alternative_count=0, morphology=[], relations=[], grammar=[], assignment=[])
               for identifier in concept_ids}
     if not result:
         return result
@@ -13,12 +13,7 @@ def concept_diagnostics(db, concept_ids):
         EXISTS(SELECT 1 FROM alternative_morphology m
                WHERE m.alternative_id=a.alternative_id AND m.is_current=1) AS has_morphology,
         EXISTS(SELECT 1 FROM alternative_relation r WHERE r.is_current=1 AND
-               (r.alternative_low_id=a.alternative_id OR r.alternative_high_id=a.alternative_id)) AS has_relation,
-        (SELECT MIN(s.occurrence_id) FROM assignment s
-         JOIN occurrence_concept_reference ref ON ref.occurrence_id=s.occurrence_id AND ref.is_current=1
-         LEFT JOIN concept_proposal cp ON cp.concept_proposal_id=ref.concept_proposal_id
-         WHERE s.alternative_id=a.alternative_id AND s.is_current=1
-           AND COALESCE(ref.concept_id,cp.resolved_concept_id)=a.concept_id) AS analysis_occurrence_id
+               (r.alternative_low_id=a.alternative_id OR r.alternative_high_id=a.alternative_id)) AS has_relation
         FROM alternative a WHERE a.retired_at IS NULL AND a.concept_id IN ({marks})
         ORDER BY a.concept_id,a.working_label,a.alternative_id''', tuple(result))
     for row in alternatives:
@@ -39,6 +34,13 @@ def concept_diagnostics(db, concept_ids):
                          WHERE g.occurrence_id=o.occurrence_id AND g.is_current=1)
         ORDER BY a.concept_id,o.occurrence_id''', tuple(result)):
         result[row['concept_id']]['grammar'].append(dict(row))
+    for row in db.execute(f'''SELECT ref.concept_id,o.occurrence_id,o.original_gloss
+        FROM occurrence_concept_reference ref JOIN occurrence o ON o.occurrence_id=ref.occurrence_id
+        WHERE ref.is_current=1 AND ref.concept_id IN ({marks})
+          AND NOT EXISTS(SELECT 1 FROM assignment s
+                         WHERE s.occurrence_id=o.occurrence_id AND s.is_current=1)
+        ORDER BY ref.concept_id,o.occurrence_id''', tuple(result)):
+        result[row['concept_id']]['assignment'].append(dict(row))
     return result
 
 

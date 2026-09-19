@@ -385,14 +385,15 @@ class LexicalUITests(unittest.TestCase):
         before = self.dump()
         self.assertEqual(400, self.post(sid, decision='new').status_code)
         self.assertEqual(before, self.dump())
-        self.assertEqual(302, self.post(sid, decision='new', review_note='Forma distinta').status_code)
+        self.assertEqual(400, self.post(sid, decision='new', review_note='Forma distinta').status_code)
+        self.assertEqual(before, self.dump())
 
     def test_free_component_label_is_visible_after_closure(self):
         sid = self.create(groups=False)
         db = self.connect()
         db.execute("INSERT INTO alternative_submission_component(submission_id,position,component_label,note) VALUES(?,1,'LABEL ORIGINAL','NOTA COMPONENTE')", (sid,))
         db.commit(); db.close()
-        self.assertEqual(302, self.post(sid, decision='new', morphology_resolution='REJECTED', review_note='No incorporar componentes').status_code)
+        self.assertEqual(302, self.post(sid, decision='rejected', review_note='No incorporar componentes').status_code)
         page = self.page(sid)
         self.assertIn('LABEL ORIGINAL', page)
         self.assertIn('NOTA COMPONENTE', page)

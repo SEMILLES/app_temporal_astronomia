@@ -51,6 +51,10 @@ class WorkDiagnosticTests(unittest.TestCase):
         self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(2,3,'CM_1')")
         result = concept_diagnostics(self.db, [1])[1]
         self.assertEqual([r['alternative_id'] for r in result['relations']], identifiers[3:])
+        self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(2,4,'UB')")
+        result = concept_diagnostics(self.db, [1])[1]
+        self.assertEqual([r['alternative_id'] for r in result['relations']], [identifiers[4]])
+        self.assertEqual(self.db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0], 2)
 
     def test_morphology_current_and_partial_compound_is_not_a_blocker(self):
         self.alternative('1a')
@@ -81,13 +85,21 @@ class WorkDiagnosticTests(unittest.TestCase):
         result = concept_diagnostics(self.db, [1])[1]
         self.assertEqual([r['occurrence_id'] for r in result['grammar']], [missing, historical])
 
-    def test_analyst_evidence_link_respects_reference_context(self):
+    def test_assignment_requires_current_reference_and_no_current_assignment(self):
         alternative = self.alternative('1b')
-        self.occurrence(alternative, reference=3)
-        self.occurrence(alternative, reference=None)
-        self.assertIsNone(concept_diagnostics(self.db, [1])[1]['morphology'][0]['analysis_occurrence_id'])
-        compatible = self.occurrence(alternative)
-        self.assertEqual(concept_diagnostics(self.db, [1])[1]['morphology'][0]['analysis_occurrence_id'], compatible)
+        missing = self.occurrence()
+        historical = self.occurrence(alternative, current=0)
+        assigned = self.occurrence(alternative)
+        self.occurrence(reference=None)
+        old_reference = self.occurrence()
+        self.db.execute('UPDATE occurrence_concept_reference SET is_current=0 WHERE occurrence_id=?', (old_reference,))
+        other = self.occurrence(reference=3)
+        result = concept_diagnostics(self.db, [1, 2, 3])
+        self.assertEqual([r['occurrence_id'] for r in result[1]['assignment']], [missing, historical])
+        self.assertEqual([r['occurrence_id'] for r in result[3]['assignment']], [other])
+        self.assertEqual(result[2]['assignment'], [])
+        self.assertEqual([r['occurrence_id'] for r in result[1]['grammar']], [assigned])
+        self.assertNotIn('analysis_occurrence_id', result[1]['morphology'][0])
 
     def test_batched_read_only_query_count_and_empty_concept_assignment(self):
         for concept in (1, 3):
@@ -101,15 +113,16 @@ class WorkDiagnosticTests(unittest.TestCase):
         self.db.set_trace_callback(queries.append)
         result = concept_diagnostics(self.db, [1, 2, 3])
         self.db.set_trace_callback(None)
-        self.assertEqual(len(queries), 2)
-        self.assertEqual(result[2], dict(alternative_count=0, morphology=[], relations=[], grammar=[]))
+        self.assertEqual(len(queries), 3)
+        self.assertEqual(result[2], dict(alternative_count=0, morphology=[], relations=[], grammar=[], assignment=[]))
         self.assertEqual(list(self.db.iterdump()), before)
         self.assertEqual(list_concepts(self.db)['diagnostics'], result)
 
     def test_views_links_permissions_and_existing_submission_workflow(self):
         alternative = self.alternative('1b')
         self.occurrence(alternative)
-        self.alternative('2b')  # No evidence: analyst gets a consultation fallback.
+        self.alternative('2b')  # Alternative consultation does not depend on evidence.
+        self.occurrence()
         self.db.commit()
         assign(self.db, [1], [1], access_role='reviewer')
         env = {k: v for k, v in os.environ.items() if not k.startswith(('LESICO_', 'RAILWAY_'))}
@@ -127,20 +140,27 @@ assert analyst.status_code==200
 html=analyst.get_data(as_text=True)
 assert 'Morfología: 2 pendientes' in html and 'Relaciones: 2 pendientes' in html
 assert 'Gramática: 1 pendientes · no bloqueantes' in html
-assert '/a/ocurrencias/1/gramatica' in html and '/a/ocurrencias/1/clasificar' in html
+assert 'Asignación a alternativa: 1 pendientes' in html
+assert '/a/ocurrencias/1/gramatica' in html and '/a/ocurrencias/2/clasificar' in html
+assert '/a/ocurrencias/1/clasificar' not in html
+assert '/a/catalogo-interno/alternativas/1' in html
+assert '/a/catalogo-interno/alternativas/2' in html
 assert '/gestionar' not in html
-assert 'Sin evidencia compatible' in html
+assert 'aún no está disponible' in html
+assert client.get('/a/catalogo-interno/alternativas/1').status_code==200
+assert client.get('/a/catalogo-interno/alternativas/2').status_code==200
 for role in ('r','m'):
     response=client.get('/'+role+'/administracion/asignaciones')
     assert response.status_code==200
     html=response.get_data(as_text=True)
+    assert '/'+role+'/ocurrencias/2/clasificar' in html
     assert 'Morfología: 2 pendientes' in html and 'bloqueantes' in html
     for anchor in ('morfologia','relaciones'):
         link='/'+role+'/alternativas/1/gestionar#'+anchor
         assert link in html
         assert client.get(link).status_code==200
     assert client.get('/'+role+'/ocurrencias/1/gramatica').status_code==200
-for path in ('/ocurrencias/1/gramatica','/ocurrencias/1/clasificar','/conceptos/1/alternativas'):
+for path in ('/ocurrencias/1/gramatica','/ocurrencias/2/clasificar','/conceptos/1/alternativas'):
     assert client.get('/a'+path).status_code==200
 assert client.get('/a/alternativas/1/gestionar').status_code==404
 assert client.post('/a/alternativas/1/gestionar',data={'action':'morphology'}).status_code==404
@@ -151,7 +171,7 @@ with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM concept_work_assignment WHERE analyst_id!=1').fetchone()[0]==0
 response=client.post('/a/ocurrencias/1/gramatica',data={'gender':'FEM-A','note':'Propuesta local'})
 assert response.status_code==302
-response=client.post('/a/ocurrencias/1/clasificar',data={'proposal_kind':'EXISTING','proposed_existing_alternative_id':'1'})
+response=client.post('/a/ocurrencias/2/clasificar',data={'proposal_kind':'EXISTING','proposed_existing_alternative_id':'1'})
 assert response.status_code==302
 with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM occurrence_grammar').fetchone()[0]==0
