@@ -143,12 +143,12 @@ assert 'Gramática: 1 pendientes · no bloqueantes' in html
 assert 'Asignación a alternativa: 1 pendientes' in html
 assert '/a/ocurrencias/1/gramatica' in html and '/a/ocurrencias/2/clasificar' in html
 assert '/a/ocurrencias/1/clasificar' not in html
-assert '/a/catalogo-interno/alternativas/1' in html
-assert '/a/catalogo-interno/alternativas/2' in html
+assert '/a/alternativas/1/proponer#morfologia' in html
+assert '/a/alternativas/2/proponer#relaciones' in html
 assert '/gestionar' not in html
-assert 'aún no está disponible' in html
-assert client.get('/a/catalogo-interno/alternativas/1').status_code==200
-assert client.get('/a/catalogo-interno/alternativas/2').status_code==200
+assert 'aún no está disponible' not in html
+assert client.get('/a/alternativas/1/proponer').status_code==200
+assert client.get('/a/alternativas/2/proponer').status_code==200
 for role in ('r','m'):
     response=client.get('/'+role+'/administracion/asignaciones')
     assert response.status_code==200

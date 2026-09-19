@@ -14,8 +14,7 @@ Asignación a alternativa: {{ diagnostic.assignment|length }} pendientes</p>
 {% if g.current_access_role in ('reviewer','master') %}
 <a href="{{ url_for('alternatives.gestionar_alternativa', alternative_id=item.alternative_id, _anchor=anchor) }}">Resolver {{ title|lower }}</a>
 {% else %}
-{% if (item.working_label or '')|trim %}<a href="{{ url_for('catalog.internal_alternative', alternative_id=item.alternative_id) }}">Consultar alternativa {{ item.alternative_id }}</a>{% else %}<span>Alternativa sin etiqueta de consulta; requiere revisión.</span>{% endif %}
-<span>La propuesta de cambios sobre esta alternativa aún no está disponible para analistas. Resolución por el Revisor.</span>
+<a href="{{ url_for('alternative_changes.propose', alternative_id=item.alternative_id, _anchor=anchor) }}">Proponer {{ 'morfología' if kind=='morphology' else 'relación fonológica' }} · alternativa {{ item.alternative_id }}</a>
 {% endif %}</li>{% endfor %}</ul>{% endif %}
 {% endfor %}
 {% if diagnostic.grammar %}<p><strong>Gramática · no bloqueante</strong></p><ul>

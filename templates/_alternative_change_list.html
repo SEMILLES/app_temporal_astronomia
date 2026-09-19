@@ -1,0 +1,5 @@
+{% if alternative_changes %}
+<section><h2>Aportes sobre alternativas existentes</h2>
+{% for p in alternative_changes %}<p><a href="{{ url_for('alternative_changes.detail',submission_id=p.submission_id) }}">#{{p.submission_id}} · {{p.concept_label_snapshot}} · Alternativa {{p.alternative_label_snapshot or p.alternative_id}} · {{'Morfología' if p.change_kind=='MORPHOLOGY' else 'Relación fonológica'}}</a>
+· {{p.submitted_by}} · {{'Pendiente' if p.status=='pending' else ('Aprobado' if p.resolution=='accepted' else 'Rechazado')}}</p>{% endfor %}
+</section>{% endif %}

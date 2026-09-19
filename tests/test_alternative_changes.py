@@ -1,6 +1,10 @@
 import importlib.util
 import sqlite3
 import subprocess
+import os
+import sys
+import tempfile
+from contextlib import closing
 import unittest
 from pathlib import Path
 
@@ -96,6 +100,64 @@ class AlternativeChangeTests(unittest.TestCase):
                 with self.assertRaises(sqlite3.IntegrityError):self.review(sid)
                 self.assertEqual(before,list(self.db.iterdump()))
                 self.db.execute('ROLLBACK TO fixture');self.db.execute('RELEASE fixture')
+
+    def test_real_role_routes_proposal_queue_and_decision(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'changes.db'
+            with closing(sqlite3.connect(path)) as copy:self.db.backup(copy)
+            env={k:v for k,v in os.environ.items() if not k.startswith(('LESICO_','RAILWAY_'))}
+            env.update(LESICO_ENV='development',LESICO_DATABASE_PATH=str(path),LESICO_SECRET_KEY='test-only',
+                       LESICO_ANALYST_ROUTE='a',LESICO_REVIEWER_ROUTE='r',LESICO_MASTER_ROUTE='m')
+            script='''
+from app import app
+from database import conectar
+from contextlib import closing
+from html.parser import HTMLParser
+class Forms(HTMLParser):
+    def __init__(self,text):
+        super().__init__();self.forms=[];self.current=None;self.feed(text)
+    def handle_starttag(self,tag,attrs):
+        a=dict(attrs)
+        if tag=='form':self.current={};self.forms.append(self.current)
+        if tag=='input' and self.current is not None and a.get('name'):self.current[a['name']]=a.get('value','')
+client=app.test_client()
+page=client.get('/a/alternativas/2/proponer');assert page.status_code==200,page.text
+forms=Forms(page.text).forms
+data=next(f for f in forms if f.get('kind')=='MORPHOLOGY')
+data.update(component_count='1',collaborator_id='1')
+assert client.post('/a/alternativas/2/proponer',data={}).status_code==400
+response=client.post('/a/alternativas/2/proponer',data=data);assert response.status_code==302,response.text
+with closing(conectar()) as db:
+    assert db.execute('SELECT COUNT(*) FROM alternative_morphology').fetchone()[0]==0
+    sid=db.execute('SELECT max(submission_id) FROM submission').fetchone()[0]
+assert '/aportes/alternativas/'+str(sid) in client.get('/r/aportes/pendientes').text
+detail='/aportes/alternativas/'+str(sid)
+assert client.post('/a'+detail+'/decidir',data={}).status_code==404
+page=client.get('/r'+detail);assert page.status_code==200,page.text
+data=Forms(page.text).forms[0];data.update(decision='accepted',collaborator_id='1')
+response=client.post('/r'+detail+'/decidir',data=data);assert response.status_code==302,response.text
+with closing(conectar()) as db:
+    assert db.execute('SELECT COUNT(*) FROM alternative_morphology WHERE is_current=1').fetchone()[0]==1
+page=client.get('/a/alternativas/2/proponer')
+data=next(f for f in Forms(page.text).forms if f.get('kind')=='RELATION')
+data.update(target_id='1',parameter='CM_1',collaborator_id='1')
+response=client.post('/a/alternativas/2/proponer',data=data);assert response.status_code==302,response.text
+with closing(conectar()) as db:
+    assert db.execute('SELECT COUNT(*) FROM alternative_relation').fetchone()[0]==0
+    sid=db.execute('SELECT max(submission_id) FROM submission').fetchone()[0]
+detail='/aportes/alternativas/'+str(sid)
+page=client.get('/m'+detail);assert page.status_code==200,page.text
+data=Forms(page.text).forms[0];data.update(decision='accepted',collaborator_id='1')
+response=client.post('/m'+detail+'/decidir',data=data);assert response.status_code==302,response.text
+with closing(conectar()) as db:
+    assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==1
+    assert db.execute('PRAGMA foreign_key_check').fetchall()==[]
+assert client.get('/a/alternativas/2/gestionar').status_code==404
+assert client.get('/r/alternativas/2/gestionar').status_code==200
+assert client.get('/a/aportes').status_code==200
+'''
+            result=subprocess.run([sys.executable,'-c',script],cwd=ROOT,env=env,capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stdout+result.stderr)
 
 
 class Migration027Tests(unittest.TestCase):

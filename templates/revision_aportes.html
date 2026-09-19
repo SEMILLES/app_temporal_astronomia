@@ -3,6 +3,7 @@
 {% block content %}
 <h1>{{ 'Detalle del aporte' if detail else 'Revisión de aportes pendientes' }}</h1>{% if request.args.get('message') %}<p role="status"><strong>{{ request.args.get('message') }}</strong></p>{% endif %}
 {% set can_review = g.current_access_role in ('reviewer','master') %}
+{% include '_alternative_change_list.html' %}
 {% for aporte in aportes %}{% set ctx=alternative_context.get(aporte['submission_id']) %}
 <section id="submission-{{ aporte['submission_id'] }}"><details{% if detail %} open{% endif %}><summary><strong>#{{ aporte['submission_id'] }} · {{ aporte['original_gloss'] }}{% if aporte['display_concept'] %} · {{ aporte['display_concept'] }}{% endif %}</strong><br>Propuesta: {% if aporte['proposal_kind']=='NEW' %}nueva alternativa{% elif aporte['proposal_kind']=='EXISTING' %}alternativa existente{% elif aporte['proposal_kind']=='UNSURE' %}clasificación por determinar{% else %}análisis gramatical{% endif %} · Fuente: {{ aporte['source_name'] }} · {{ 'Revisar' if aporte['status']=='pending' else {'accepted':'Aceptado','rejected':'Rechazado'}.get(aporte['resolution'], 'Resuelto') }}</summary>
 {% if aporte['submission_type']=='GRAMMAR' %}

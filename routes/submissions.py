@@ -273,9 +273,11 @@ def aportes():
     db = conectar()
     try:
         rows = _rows(db)
+        from routes.alternative_changes import proposal_rows
+        changes = proposal_rows(db)
     finally:
         db.close()
-    return render_template("aportes.html", aportes=rows)
+    return render_template("aportes.html", aportes=rows, alternative_changes=changes)
 
 
 @submissions_bp.route("/aportes/pendientes")
@@ -284,11 +286,13 @@ def revisar_aportes():
     try:
         db.execute("BEGIN")
         rows = _rows(db, True)
+        from routes.alternative_changes import proposal_rows
+        changes = proposal_rows(db, pending=True)
         current = {row["occurrence_id"]: db.execute("SELECT * FROM occurrence_grammar WHERE occurrence_id=? AND is_current=1", (row["occurrence_id"],)).fetchone() for row in rows}
         alternative_context = _alternative_review_context(db, rows)
     finally:
         db.close()
-    return render_template("revision_aportes.html", aportes=rows, current_by_occurrence=current, alternative_context=alternative_context, grammar_vocabularies=GRAMMATICAL_MARK_VOCABULARIES)
+    return render_template("revision_aportes.html", aportes=rows, alternative_changes=changes, current_by_occurrence=current, alternative_context=alternative_context, grammar_vocabularies=GRAMMATICAL_MARK_VOCABULARIES)
 
 
 def _alternative_review_context(db, rows):

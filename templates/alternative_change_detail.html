@@ -1,0 +1,21 @@
+{% extends '_visual_base.html' %}
+{% block title %}Aporte sobre alternativa{% endblock %}
+{% block content %}
+<h1>Aporte #{{proposal.submission_id}} · {{'Morfología' if proposal.change_kind=='MORPHOLOGY' else 'Relación fonológica'}}</h1>
+<p>Concepto al proponer: {{proposal.concept_label_snapshot}} · Alternativa {{proposal.alternative_label_snapshot or proposal.alternative_id}}</p>
+<p>Autor: {{proposal.submitted_by}} · {{proposal.submitted_at}} · {{'Pendiente' if proposal.status=='pending' else ('Aprobado' if proposal.resolution=='accepted' else 'Rechazado')}}</p>
+{% include '_alternative_change_context.html' %}
+<h2>Información propuesta</h2>
+{% if proposal.change_kind=='MORPHOLOGY' %}
+<p>Cantidad: {{'No aplica' if proposed.component_count_not_applicable else proposed.component_count}} · Permutación libre: {{'No aplica' if proposed.free_permutation=='N/A' else proposed.free_permutation}} · {{proposed.note or ''}}</p>
+{% for c in proposed.components %}<p>Posición {{c.position}} · {{c.component_label or ''}} {% if c.component_alternative_id %}Alternativa {{c.component_alternative_id}}{% endif %} {{c.note or ''}}</p>{% else %}<p>Sin componentes explícitos.</p>{% endfor %}
+{% else %}<p>Alternativa {{proposal.alternative_id}} ↔ Alternativa {{proposed.target_id}} · {{proposed.parameter}}</p>
+{% if preview %}<h3>Nomenclatura al aprobar</h3>{% for row in preview.rows %}<p>Alternativa {{row.alternative_id}}: {{row.current_label or 'Sin etiqueta'}} → {{row.proposed_label}}</p>{% endfor %}{% endif %}
+{% endif %}
+{% if warning %}<p role="alert">{{warning}}</p>{% endif %}
+{% if proposal.status=='pending' and g.current_access_role in ('reviewer','master') %}
+<form method="post" action="{{url_for('alternative_changes.decide',submission_id=proposal.submission_id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}">
+<label>Nota de revisión (obligatoria al rechazar) <textarea name="review_note"></textarea></label>
+<button name="decision" value="accepted">Aprobar</button><button name="decision" value="rejected">Rechazar</button></form>
+{% elif proposal.status=='resolved' %}<p>Revisado por {{proposal.reviewed_by}} · {{proposal.resolved_at}} · {{proposal.review_note or ''}}</p>{% endif %}
+{% endblock %}

@@ -1,0 +1,9 @@
+<h2>{{alternative.preferred_label}} · Alternativa {{alternative.working_label or 'sin etiqueta'}} · ID {{alternative.alternative_id}}</h2>
+<h3>Morfología vigente</h3>
+{% if morphology %}<p>Cantidad: {{'No aplica' if morphology.component_count_not_applicable else (morphology.component_count or 'Sin información')}} · Permutación: {{'No aplica' if morphology.free_permutation=='N/A' else (morphology.free_permutation or 'Sin información')}}{% if morphology.note %} · {{morphology.note}}{% endif %}</p>
+{% for c in components %}<p>Componente {{c.position}}: {{c.component_label or ('Alternativa '~c.component_alternative_id) if c.component_label or c.component_alternative_id else ''}} {{c.note or ''}}</p>{% endfor %}
+{% else %}<p>Sin morfología vigente.</p>{% endif %}
+<h3>Relaciones vigentes</h3>
+{% for r in relations %}<p>{{r.low_label}} ↔ {{r.high_label}} · {{r.phonological_parameter}}</p>{% else %}<p>Sin relaciones vigentes.</p>{% endfor %}
+<h3>Evidencias asociadas</h3>
+{% for o in evidence %}<p><a href="{{url_for('occurrences.clasificar_ocurrencia',occurrence_id=o.occurrence_id)}}">Ocurrencia {{o.occurrence_id}} · {{o.original_gloss}}</a> · {{o.source_name}}</p>{% else %}<p>Sin ocurrencias asignadas.</p>{% endfor %}

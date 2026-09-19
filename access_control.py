@@ -109,6 +109,7 @@ def install_access_context(app):
         if request.endpoint == "work_assignments.personal_work" and role != "analyst":
             abort(404)
         reviewer_endpoints = {
+            "alternative_changes.decide",
             "work_assignments.administration",
             "submissions.revisar_aportes",
             "submissions.decidir_aporte",

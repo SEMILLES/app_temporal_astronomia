@@ -1,0 +1,25 @@
+{% extends '_visual_base.html' %}
+{% block title %}Proponer análisis de alternativa{% endblock %}
+{% block content %}
+<h1>Proponer análisis de alternativa</h1>
+{% if error %}<p role="alert">{{error}}</p>{% endif %}
+{% include '_alternative_change_context.html' %}
+<p>La propuesta queda pendiente. La información vigente solo cambia cuando se aprueba.</p>
+<section id="morfologia"><h2>Proponer morfología</h2>
+<form method="post"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="state_token" value="{{tokens.MORPHOLOGY}}"><input type="hidden" name="kind" value="MORPHOLOGY">
+<label>Cantidad de componentes (1 para seña simple; N/A para no aplica) <input name="component_count" required value="{{'N/A' if morphology and morphology.component_count_not_applicable else (morphology.component_count if morphology and morphology.component_count else '')}}"></label>
+<label>Permutación libre <select name="free_permutation">{% for value in ['SÍ','NO','SIN INFORMACIÓN'] %}<option{% if morphology and morphology.free_permutation==value %} selected{% endif %}>{{value}}</option>{% endfor %}</select></label>
+<label>Nota <input name="morphology_note" value="{{morphology.note if morphology and morphology.note else ''}}"></label>
+<fieldset><legend>Componentes identificados (pueden ser menos que la cantidad total)</legend>
+{% for i in range(1,[9,components|length+2]|max) %}{% set c=components[i-1] if components|length>=i else none %}
+<p><label>Posición <input name="component_{{i}}_position" size="3" value="{{c.position if c else i}}"></label>
+<label>ID alternativa <input name="component_{{i}}_alternative_id" size="6" value="{{c.component_alternative_id if c and c.component_alternative_id else ''}}"></label>
+<label>Etiqueta <input name="component_{{i}}_label" value="{{c.component_label if c and c.component_label else ''}}"></label>
+<label>Nota <input name="component_{{i}}_note" value="{{c.note if c and c.note else ''}}"></label></p>{% endfor %}
+</fieldset><button>Enviar propuesta de morfología</button></form></section>
+<section id="relaciones"><h2>Proponer relación fonológica</h2>
+<form method="post"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="state_token" value="{{tokens.RELATION}}"><input type="hidden" name="kind" value="RELATION">
+<label>Otra alternativa del concepto <select name="target_id" required>{% for a in options %}<option value="{{a.alternative_id}}">{{a.working_label or 'Sin etiqueta'}} · ID {{a.alternative_id}}</option>{% endfor %}</select></label>
+<label>Parámetro <select name="parameter">{% for p in parameters %}<option>{{p}}</option>{% endfor %}</select></label>
+<button{% if not options %} disabled{% endif %}>Enviar propuesta de relación fonológica</button></form></section>
+{% endblock %}

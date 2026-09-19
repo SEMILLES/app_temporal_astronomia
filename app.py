@@ -21,6 +21,7 @@ from routes.collaborators import collaborators_bp
 from routes.conflicts import conflicts_bp
 from routes.catalog import catalog_bp
 from routes.work_assignments import work_assignments_bp
+from routes.alternative_changes import alternative_changes_bp
 from access_control import install_access_context
 from source_period import format_source_period
 from conflict_presentation import local_timestamp
@@ -49,6 +50,7 @@ app.register_blueprint(collaborators_bp)
 app.register_blueprint(conflicts_bp)
 app.register_blueprint(catalog_bp)
 app.register_blueprint(work_assignments_bp)
+app.register_blueprint(alternative_changes_bp)
 
 install_access_context(app)
 
