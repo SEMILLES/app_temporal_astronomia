@@ -18,6 +18,7 @@ else:
 
 
 REQUIRED_APPLICATION_TABLES = frozenset({
+    "alternative_change_submission",
     "concept_work_assignment",
     "alternative_usage_profile",
     "collection", "classification_system", "classification_category",
@@ -101,6 +102,9 @@ def validar_base_explicita():
             if "concept_work_assignment" in tables:
                 from work_assignment_reviewer_schema import validate_schema
                 validate_schema(conexion)
+            if "submission" in tables:
+                from alternative_change_schema import validate_schema as validate_changes
+                validate_changes(conexion)
         finally:
             conexion.close()
     except sqlite3.Error as error:
@@ -564,9 +568,10 @@ def crear_esquema(conexion):
 
         CREATE TABLE IF NOT EXISTS submission (
             submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            occurrence_id INTEGER NOT NULL,
+            occurrence_id INTEGER,
+            alternative_id INTEGER REFERENCES alternative(alternative_id),
             submission_type TEXT NOT NULL
-                CHECK (submission_type IN ('GRAMMAR', 'ALTERNATIVE')),
+                CHECK (submission_type IN ('GRAMMAR', 'ALTERNATIVE', 'ALTERNATIVE_CHANGE')),
             status TEXT NOT NULL
                 CHECK (status IN ('pending', 'resolved')),
             resolution TEXT CHECK (resolution IN ('accepted', 'rejected')),
@@ -577,6 +582,8 @@ def crear_esquema(conexion):
             review_note TEXT,
             legacy_reviewed_at TEXT,
             FOREIGN KEY (occurrence_id) REFERENCES occurrence(occurrence_id),
+            CHECK ((submission_type='ALTERNATIVE_CHANGE' AND occurrence_id IS NULL AND alternative_id IS NOT NULL)
+                OR (submission_type IN ('GRAMMAR','ALTERNATIVE') AND occurrence_id IS NOT NULL AND alternative_id IS NULL)),
             CHECK (
                 (status = 'pending' AND resolution IS NULL)
                 OR (status = 'resolved'
@@ -896,3 +903,6 @@ def crear_esquema(conexion):
     install_usage_profile(conexion)
     from work_assignment_reviewer_schema import install as install_work_assignments
     install_work_assignments(conexion)
+
+    from alternative_change_schema import install as install_alternative_changes
+    install_alternative_changes(conexion)
