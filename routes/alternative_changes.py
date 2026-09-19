@@ -9,6 +9,7 @@ from alternative_admin import relation_preview
 from edit_concurrency import sign, unsign
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
 from routes.alternatives import _components_from_form
+from source_details import occurrence_presentation
 
 alternative_changes_bp = Blueprint('alternative_changes', __name__)
 
@@ -43,7 +44,7 @@ def _context(db, aid):
         FROM assignment a JOIN occurrence o USING(occurrence_id) JOIN source s USING(source_id)
         WHERE a.alternative_id=? AND a.is_current=1 ORDER BY o.occurrence_id''',(aid,)).fetchall()
     options = db.execute('SELECT alternative_id,working_label FROM alternative WHERE concept_id=? AND retired_at IS NULL AND alternative_id!=? ORDER BY alternative_id',(target['concept_id'],aid)).fetchall()
-    return dict(alternative=target,morphology=morphology,components=components,relations=relations,evidence=evidence,options=options,parameters=PHONOLOGICAL_PARAMETERS)
+    return dict(alternative=target,morphology=morphology,components=components,relations=relations,evidence=[occurrence_presentation(o) for o in evidence],options=options,parameters=PHONOLOGICAL_PARAMETERS)
 
 
 @alternative_changes_bp.route('/alternativas/<int:alternative_id>/proponer', methods=['GET','POST'])
@@ -58,7 +59,8 @@ def propose(alternative_id):
         if request.method == 'POST':
             try:
                 kind = request.form.get('kind')
-                if unsign(request.form.get('state_token')) != {'aid':alternative_id,'kind':kind,'baseline':baseline(db,alternative_id,kind)}:
+                state = unsign(request.form.get('state_token'))
+                if state.get('aid') != alternative_id or state.get('kind') != kind:
                     raise ValueError('La alternativa cambió; recargue la página antes de proponer.')
                 if kind == 'MORPHOLOGY':
                     count = request.form.get('component_count','').strip()
@@ -67,7 +69,7 @@ def propose(alternative_id):
                         note=request.form.get('morphology_note'),components=_components_from_form(request.form))
                 else:
                     values = dict(target_id=request.form.get('target_id'),parameter=request.form.get('parameter'))
-                sid = create_proposal(db,alternative_id,kind,values,collaborator_id=request.form.get('collaborator_id'),access_role=g.current_access_role)
+                sid = create_proposal(db,alternative_id,kind,values,collaborator_id=request.form.get('collaborator_id'),access_role=g.current_access_role,expected_baseline=state['baseline'])
                 return redirect(url_for('alternative_changes.detail',submission_id=sid))
             except (ValueError,TypeError,sqlite3.IntegrityError) as exc:
                 error = 'No fue posible guardar el aporte.' if isinstance(exc,sqlite3.IntegrityError) else str(exc)

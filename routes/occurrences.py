@@ -17,6 +17,7 @@ from phonological_parameters import PHONOLOGICAL_PARAMETERS
 from source_period import validate_occurrence_year
 from access_control import requires_reviewer
 from source_details import normalize_occurrence_details, normalize_applicability_override
+from source_details import occurrence_presentation
 from functional_presentation import concept_options
 from immediate_acceptance import (ImmediateAcceptanceError,ImmediateBlockingError,
     alternative_operation,confirm_operation,grammar_operation,preview_operation)
@@ -365,7 +366,7 @@ def actualizar_ocurrencia(occurrence_id):
 
 def _load_grammar_page_data(conexion, occurrence_id):
     occurrence = conexion.execute("""
-        SELECT o.occurrence_id, o.original_gloss, o.hyperlink, s.source_name,
+        SELECT o.*, s.source_name,s.source_type,s.legacy_source_code,
                COALESCE(c.preferred_label, cp.proposed_label) AS reference_label,
                ac.preferred_label AS assignment_concept,
                al.working_label AS assignment_label
@@ -382,6 +383,7 @@ def _load_grammar_page_data(conexion, occurrence_id):
     """, (occurrence_id,)).fetchone()
     if occurrence is None:
         return None, None, [], None
+    occurrence = occurrence_presentation(occurrence)
     current = conexion.execute("""
         SELECT occurrence_grammar_id, gender, plural, agentive,
                conjugated_form, negation, grammar_note, is_current,
@@ -521,8 +523,7 @@ def confirm_grammar_immediate(occurrence_id):
 
 def _load_classification_page_data(conexion, occurrence_id):
     occurrence = conexion.execute("""
-        SELECT o.occurrence_id, o.original_gloss, o.hyperlink,
-               o.occurrence_year,o.source_locator,o.provenance_note,
+        SELECT o.*,s.source_type,s.legacy_source_code,
                s.source_name, a.assignment_id, a.alternative_id,
                al.working_label, c.preferred_label,
                r.concept_id AS reference_concept_id,
@@ -546,6 +547,7 @@ def _load_classification_page_data(conexion, occurrence_id):
     if occurrence is None:
         return None
 
+    occurrence = occurrence_presentation(occurrence)
     context_concept_id = (
         occurrence["reference_concept_id"]
         or occurrence["resolved_concept_id"]

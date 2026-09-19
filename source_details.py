@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from urllib.parse import urlsplit
 
 SOURCE_TYPES = {
     "MATERIAL_IMPRESO": "Material impreso",
@@ -10,6 +11,37 @@ SOURCE_TYPES = {
     "OTRO": "Otro",
 }
 DETAIL_STATUSES = frozenset(("VALUE", "NA", "UNKNOWN"))
+
+
+def occurrence_presentation(row):
+    """Present already joined source/occurrence data without additional queries."""
+    item = dict(row)
+    def text(value):
+        value = str(value or '').strip()
+        return '' if value.upper() in ('UNKNOWN', 'NA', 'N/A') else value
+    name = text(item.get('source_name'))
+    legacy = text(item.get('legacy_source_code'))
+    item['source_display'] = f'({legacy}) {name}' if legacy else name
+    source_type = item.get('source_type')
+    parts = []
+    if source_type != 'MESA_DE_TRABAJO':
+        label1, label2, _ = source_type_labels(source_type)
+        if item.get('source_detail_1_status') == 'VALUE' and text(item.get('source_detail_1')):
+            parts.append(f'{label1}: {text(item["source_detail_1"])}')
+        applicable = effective_detail_2_applicability(source_type,
+            item.get('source_detail_2_status'), item.get('source_detail_2_applicability_override'))
+        if applicable and item.get('source_detail_2_status') == 'VALUE' and text(item.get('source_detail_2')):
+            parts.append(f'{label2 or "Tiempo"}: {text(item["source_detail_2"])}')
+        if not parts and text(item.get('source_locator')):
+            parts.append(text(item['source_locator']))
+    item['locator_display'] = ' · '.join(parts)
+    url = text(item.get('hyperlink'))
+    try:
+        parsed = urlsplit(url)
+        item['evidence_url'] = url if parsed.scheme in ('http','https') and parsed.netloc else None
+    except ValueError:
+        item['evidence_url'] = None
+    return item
 
 def source_type_labels(source_type):
     if source_type == "MESA_DE_TRABAJO": return (None, None, False)

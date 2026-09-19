@@ -8,7 +8,7 @@
 
 <p class="identifier">{{ 'OCC-%06d'|format(occurrence['occurrence_id']) }}</p>
 <div class="context-grid">
-<section class="evidence-context"><h2>Glosa original</h2><p><strong>{{ occurrence['original_gloss'] }}</strong></p><p class="metadata">Fuente: {{ occurrence['source_name'] }}</p>{% if occurrence['occurrence_year'] %}<p>Año: {{ occurrence['occurrence_year'] }}</p>{% endif %}</section>
+<section class="evidence-context"><h2>Glosa original</h2><p><strong>{{ occurrence['original_gloss'] }}</strong></p><p class="metadata">{% with item=occurrence %}{% include '_work_occurrence_context.html' %}{% endwith %}</p>{% if occurrence['occurrence_year'] %}<p>Año: {{ occurrence['occurrence_year'] }}</p>{% endif %}</section>
 <section><h2>Concepto de referencia</h2><p>{{ occurrence['reference_label'] or 'Contexto pendiente' }}</p></section>
 <section class="current-classification"><h2>Clasificación vigente</h2><p>{% if occurrence['assignment_id'] %}{{ occurrence['preferred_label'] | alternative_display_label(occurrence['working_label']) }} · ID {{ occurrence['alternative_id'] }}{% else %}Sin clasificación vigente{% endif %}</p></section>
 </div>

@@ -46,11 +46,13 @@ def _normalize(db, alternative_id, kind, values):
     raise ValueError('Tipo de propuesta no válido.')
 
 
-def create_proposal(db, alternative_id, kind, values, *, collaborator_id, access_role):
+def create_proposal(db, alternative_id, kind, values, *, collaborator_id, access_role, expected_baseline=None):
     owns = _transaction(db, 'alternative_change_create')
     try:
         actor_id, name = _actor(db, collaborator_id, access_role)
         target = _active_alternative(db, alternative_id)
+        if expected_baseline is not None and baseline(db,alternative_id,kind) != expected_baseline:
+            raise ValueError('La alternativa cambió; recargue la página antes de proponer.')
         normalized = _normalize(db, alternative_id, kind, values)
         concept = db.execute('SELECT preferred_label FROM concept WHERE concept_id=?', (target['concept_id'],)).fetchone()[0]
         sid = db.execute("""INSERT INTO submission(alternative_id,submission_type,status,submitted_by)

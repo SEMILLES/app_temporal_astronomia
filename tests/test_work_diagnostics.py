@@ -123,6 +123,8 @@ class WorkDiagnosticTests(unittest.TestCase):
         self.occurrence(alternative)
         self.alternative('2b')  # Alternative consultation does not depend on evidence.
         self.occurrence()
+        self.db.execute("UPDATE source SET source_name='Fuente de prueba',legacy_source_code='25ID',source_type='MATERIAL_IMPRESO'")
+        self.db.execute("UPDATE occurrence SET source_detail_1='Seccion A',source_detail_1_status='VALUE',source_detail_2='17',source_detail_2_status='VALUE'")
         self.db.commit()
         assign(self.db, [1], [1], access_role='reviewer')
         env = {k: v for k, v in os.environ.items() if not k.startswith(('LESICO_', 'RAILWAY_'))}
@@ -141,6 +143,8 @@ html=analyst.get_data(as_text=True)
 assert 'Morfología: 2 pendientes' in html and 'Relaciones: 2 pendientes' in html
 assert 'Gramática: 1 pendientes · no bloqueantes' in html
 assert 'Asignación a alternativa: 1 pendientes' in html
+assert html.count('(25ID) Fuente de prueba')==2
+assert html.count('Página: 17')==2
 assert '/a/ocurrencias/1/gramatica' in html and '/a/ocurrencias/2/clasificar' in html
 assert '/a/ocurrencias/1/clasificar' not in html
 assert '/a/alternativas/1/proponer#morfologia' in html
@@ -162,6 +166,9 @@ for role in ('r','m'):
     assert client.get('/'+role+'/ocurrencias/1/gramatica').status_code==200
 for path in ('/ocurrencias/1/gramatica','/ocurrencias/2/clasificar','/conceptos/1/alternativas'):
     assert client.get('/a'+path).status_code==200
+for path in ('/ocurrencias/1/gramatica','/ocurrencias/2/clasificar','/alternativas/1/proponer'):
+    page=client.get('/a'+path).get_data(as_text=True)
+    assert '(25ID) Fuente de prueba' in page and 'Página: 17' in page
 assert client.get('/a/alternativas/1/gestionar').status_code==404
 assert client.post('/a/alternativas/1/gestionar',data={'action':'morphology'}).status_code==404
 assert client.post('/a/ocurrencias/1/gramatica/aceptacion-inmediata/confirmar').status_code==404

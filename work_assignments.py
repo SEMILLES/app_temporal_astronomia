@@ -1,5 +1,6 @@
 """Transactional Concept ↔ collaborator administration."""
 from activity import resolve_collaborator
+from source_details import occurrence_presentation
 
 
 def concept_diagnostics(db, concept_ids):
@@ -25,22 +26,24 @@ def concept_diagnostics(db, concept_ids):
         suffix = (row['working_label'] or '').strip().lower()[-1:]
         if suffix and 'b' <= suffix <= 'z' and not row['has_relation']:
             diagnostic['relations'].append(item)
-    for row in db.execute(f'''SELECT a.concept_id,o.occurrence_id,o.original_gloss,
-            a.alternative_id,a.working_label
+    for row in db.execute(f'''SELECT a.concept_id,o.*,
+            a.alternative_id,a.working_label,src.source_name,src.legacy_source_code,src.source_type
         FROM assignment s JOIN alternative a ON a.alternative_id=s.alternative_id
         JOIN occurrence o ON o.occurrence_id=s.occurrence_id
+        JOIN source src ON src.source_id=o.source_id
         WHERE s.is_current=1 AND a.retired_at IS NULL AND a.concept_id IN ({marks})
           AND NOT EXISTS(SELECT 1 FROM occurrence_grammar g
                          WHERE g.occurrence_id=o.occurrence_id AND g.is_current=1)
         ORDER BY a.concept_id,o.occurrence_id''', tuple(result)):
-        result[row['concept_id']]['grammar'].append(dict(row))
-    for row in db.execute(f'''SELECT ref.concept_id,o.occurrence_id,o.original_gloss
+        result[row['concept_id']]['grammar'].append(occurrence_presentation(row))
+    for row in db.execute(f'''SELECT ref.concept_id,o.*,src.source_name,src.legacy_source_code,src.source_type
         FROM occurrence_concept_reference ref JOIN occurrence o ON o.occurrence_id=ref.occurrence_id
+        JOIN source src ON src.source_id=o.source_id
         WHERE ref.is_current=1 AND ref.concept_id IN ({marks})
           AND NOT EXISTS(SELECT 1 FROM assignment s
                          WHERE s.occurrence_id=o.occurrence_id AND s.is_current=1)
         ORDER BY ref.concept_id,o.occurrence_id''', tuple(result)):
-        result[row['concept_id']]['assignment'].append(dict(row))
+        result[row['concept_id']]['assignment'].append(occurrence_presentation(row))
     return result
 
 

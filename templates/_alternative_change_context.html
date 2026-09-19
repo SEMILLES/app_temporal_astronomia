@@ -6,4 +6,4 @@
 <h3>Relaciones vigentes</h3>
 {% for r in relations %}<p>{{r.low_label}} ↔ {{r.high_label}} · {{r.phonological_parameter}}</p>{% else %}<p>Sin relaciones vigentes.</p>{% endfor %}
 <h3>Evidencias asociadas</h3>
-{% for o in evidence %}<p><a href="{{url_for('occurrences.clasificar_ocurrencia',occurrence_id=o.occurrence_id)}}">Ocurrencia {{o.occurrence_id}} · {{o.original_gloss}}</a> · {{o.source_name}}</p>{% else %}<p>Sin ocurrencias asignadas.</p>{% endfor %}
+{% for o in evidence %}<p><a href="{{url_for('occurrences.clasificar_ocurrencia',occurrence_id=o.occurrence_id)}}">Ocurrencia {{o.occurrence_id}} · {{o.original_gloss}}</a>{% with item=o %}{% include '_work_occurrence_context.html' %}{% endwith %}</p>{% else %}<p>Sin ocurrencias asignadas.</p>{% endfor %}

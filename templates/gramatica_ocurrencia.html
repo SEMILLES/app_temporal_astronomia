@@ -9,7 +9,7 @@
 
 <p>
 <strong>Ocurrencia #{{ occurrence['occurrence_id'] }}</strong>
-— {{ occurrence['original_gloss'] }} · {{ occurrence['source_name'] }}
+— {{ occurrence['original_gloss'] }}{% with item=occurrence %}{% include '_work_occurrence_context.html' %}{% endwith %}
 </p>
 
 <p>Concepto contextual: {{ occurrence['reference_label'] or 'No disponible (legacy)' }}</p>

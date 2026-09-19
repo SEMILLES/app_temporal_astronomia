@@ -185,10 +185,35 @@ class Migration027Tests(unittest.TestCase):
             self.assertEqual(rows,[tuple(r) for r in db.execute(f'SELECT {columns} FROM {table}')],table)
         self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
         self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
-        db.execute("UPDATE submission SET status='resolved',resolution='accepted' WHERE submission_id=30")
+        from grammar_workflow import resolve_grammar_submission
+        resolve_grammar_submission(db,30,'rejected',review_note='Histórico compatible',access_role='reviewer')
         sid=db.execute("INSERT INTO submission(occurrence_id,submission_type,status) VALUES(1,'GRAMMAR','pending')").lastrowid
         self.assertGreater(sid,70);db.commit()
         db.execute('BEGIN IMMEDIATE');self.assertEqual(module.migration(db)['changes'],0);db.commit()
+
+    def test_empty_preview_backup_apply_and_failure_rollback(self):
+        from unittest.mock import patch
+        source=subprocess.check_output(['git','show','176ce25:database.py'],cwd=ROOT).decode('utf-8')
+        namespace={'__file__':str(ROOT/'database.py')};exec(compile(source,'old_database','exec'),namespace)
+        spec=importlib.util.spec_from_file_location('migration027',ROOT/'migrations/027_alternative_change_submissions.py')
+        module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'empty.db'
+            with closing(sqlite3.connect(path)) as db:
+                namespace['crear_esquema'](db);db.commit()
+            before=path.read_bytes()
+            self.assertEqual(module.migrate(path)['changes'],1)
+            self.assertEqual(path.read_bytes(),before)
+            with patch.object(module,'validate_schema',side_effect=ValueError('injected validation failure')):
+                with self.assertRaises(ValueError):module.migrate(path,apply=True)
+            self.assertEqual(path.read_bytes(),before)
+            report=module.migrate(path,apply=True)
+            self.assertEqual(report['changes'],1)
+            self.assertTrue(Path(report['backup']).is_file())
+            self.assertEqual(module.migrate(path,apply=True)['changes'],0)
+            with closing(sqlite3.connect(path)) as db:
+                self.assertEqual(db.execute('PRAGMA foreign_key_check').fetchall(),[])
+                self.assertEqual(db.execute('PRAGMA integrity_check').fetchone()[0],'ok')
 
 
 if __name__=='__main__':unittest.main()

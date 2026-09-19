@@ -22,24 +22,35 @@ faltante y asignación faltante. No hay consultas por fila.
 ## Herramientas y permisos
 
 Reviewer y Master reciben enlaces a `/alternativas/<id>/gestionar#morfologia`
-y `#relaciones`. Analyst recibe la consulta de la alternativa concreta en
-`/catalogo-interno/alternativas/<id>`, incluso sin evidencia asociada. Si falta
-una etiqueta válida, el catálogo no expone esa alternativa y se indica que
-requiere revisión. Nunca se sustituye ese enlace por una ocurrencia arbitraria.
+y `#relaciones`. Analyst recibe `/alternativas/<id>/proponer` con formularios de
+morfología y relaciones, incluso sin evidencia asociada. Cada propuesta crea un
+submission ALTERNATIVE_CHANGE pendiente, sin Occurrence artificial. Aparece en
+Aportes y Aportes pendientes, con autor, objeto, propuesta y decisión histórica.
 
 Gramática usa `/ocurrencias/<id>/gramatica`; asignación usa
 `/ocurrencias/<id>/clasificar`. Sus POST normales generan Aportes pendientes.
 Reviewer/Master conservan sus herramientas de aceptación inmediata y gestión
 canónica. Analyst no obtiene permisos canónicos nuevos.
 
-## Límite de los Aportes de alternativa
+## Aportes de alternativa y migración 027
 
-La propuesta de correcciones a una alternativa existente no está disponible
-para Analyst; se informa de forma impersonal en la interfaz. `submission` exige
-una ocurrencia; el almacenamiento de morfología propuesta admite NEW; la decisión
-USE_EXISTING no permite aceptar morfología ni relaciones. Resolverlo requiere
-otra tarea sobre el modelo y sus restricciones. No se crea infraestructura
-paralela ni se modifica el esquema en esta tarea.
+La migración 027 amplía submission: el objeto es una Occurrence para los tipos
+históricos o una Alternative para ALTERNATIVE_CHANGE. El subtipo conserva el
+payload normalizado, concepto/etiqueta al proponer, colaborador, rol y decisión.
+La reconstrucción SQLite preserva filas, IDs, índices, triggers y AUTOINCREMENT;
+usa el ejecutor existente con simulación, respaldo y validación de integridad.
+Las bases existentes requieren aplicar 027 explícitamente antes del arranque.
+
+La aprobación reutiliza los servicios canónicos en una transacción: morfología
+con supersedes y componentes; relación low/high con nomenclatura e historial.
+Si el estado canónico cambió, se rechaza la aprobación y se pide un nuevo aporte.
+El rechazo conserva el aporte y no modifica datos canónicos. Se admite agregar
+relaciones; el retiro/reemplazo mediante Aporte queda pendiente.
+
+Los pendientes de Occurrence, sus encabezados y las evidencias de los nuevos
+formularios muestran fuente con `legacy_source_code` entre paréntesis al inicio,
+localizador aplicable y enlace a la evidencia disponible. Se reutilizan las reglas
+de source_details, sin consultas adicionales por fila ni marcadores UNKNOWN/NA.
 
 Asignar a una alternativa existente conserva sus pendientes propios. Al aprobar
 una alternativa nueva se exige morfología aprobada, incluso para propuestas
