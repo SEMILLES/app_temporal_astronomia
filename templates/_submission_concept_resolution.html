@@ -24,7 +24,6 @@
 {% if aporte['status']=='pending' and can_review %}
 <form method="get" action="{{ url_for('submissions.detalle_aporte',submission_id=aporte['submission_id']) }}">
 <label>Consultar estado del Concept de destino <select name="metadata_target"><option value="">Referencia actual / Concept nuevo</option>{% for concept in ctx.concepts %}<option value="{{ concept.concept_id }}"{% if ctx.metadata_target == concept.concept_id %} selected{% endif %}>{{ concept.preferred_label }}</option>{% endfor %}</select></label><button type="submit">Consultar antes de editar</button></form>
-{% include '_concept_metadata_history.html' %}
 {% set resolution = ctx['concept_resolution'] %}
 {% set selected_action = ('CONFIRM_REFERENCE' if resolution['resolution_action']=='CONFIRM_REFERENCE' else 'USE_EXISTING') if resolution else ('ACCEPT_PROPOSAL' if aporte['reference_concept_proposal_id'] else 'CONFIRM_REFERENCE' if aporte['reference_concept_id'] else 'USE_EXISTING') %}
 {% if resolution %}<details class="concept-resolution-editor"><summary>Modificar resolución</summary>{% endif %}
@@ -38,9 +37,8 @@
 <label data-concept-action="USE_EXISTING"{% if selected_action!='USE_EXISTING' %} hidden{% endif %}>Concepto existente <select name="concept_id"{% if selected_action!='USE_EXISTING' %} disabled{% else %} required{% endif %}><option value="">Seleccione</option>{% for concept in ctx['concepts'] %}<option value="{{ concept['concept_id'] }}"{% if resolution and resolution['concept_id']==concept['concept_id'] %} selected{% endif %}>{{ concept['preferred_label'] }}{% if not concept.has_active_alternatives %} — sin alternativas vigentes{% endif %}</option>{% endfor %}</select></label>
 <label data-concept-action="CREATE_NEW" hidden>Nombre del nuevo concepto <input name="concept_label" disabled></label>
 <label>Nota de resolución conceptual <textarea name="concept_note">{{ (resolution['resolution_note'] or '') if resolution else '' }}</textarea></label>
-{% include '_concept_metadata_fields.html' %}
-<p><label><input type="checkbox" name="metadata_reviewed" value="yes"> Revisé las selecciones frente al estado del Concept de destino mostrado arriba.</label></p>
-<p>Los cambios marcados se guardan ahora en el Concept. Un rechazo léxico posterior no los revierte.</p>
+{% include '_new_concept_metadata_fields.html' %}
+<p>Las clasificaciones se aprueban al crear el concepto. Un rechazo léxico posterior conserva esta decisión conceptual.</p>
 <p>Cuando la resolución difiere de la referencia o propuesta original, se requiere una explicación. Guardar esta resolución mantiene el aporte pendiente y conserva la clasificación vigente.</p>
 <button type="submit" class="button-primary">Guardar resolución del concepto</button>
 </form>

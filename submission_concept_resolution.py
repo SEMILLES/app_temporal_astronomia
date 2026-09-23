@@ -114,6 +114,11 @@ def save_resolution(connection, submission_id, action, *, concept_id=None,
             concept_id = None
         else:
             raise ConceptResolutionError('La acción de resolución conceptual no es válida.')
+        from concept_classification import validate_new_metadata, ClassificationError
+        if action == 'CREATE_NEW':
+            concept_metadata = validate_new_metadata(connection, concept_metadata)
+        elif concept_metadata is not None:
+            raise ClassificationError('La resolución hacia un concepto existente no permite modificar sus clasificaciones.')
         if signed_scope is not None:
             if metadata_target not in (None, '') and str(metadata_target) != str(signed_scope['target_concept_id']):
                 raise ConceptResolutionError('El destino mostrado no coincide con el token firmado. Consulte el destino antes de guardar.')
@@ -134,15 +139,6 @@ def save_resolution(connection, submission_id, action, *, concept_id=None,
             raise ConceptResolutionError('Explique el cambio de concepto en la nota de resolución.')
         if action == 'CREATE_NEW':
             concept_id = connection.execute('INSERT INTO concept(preferred_label) VALUES(?)', (decided_label,)).lastrowid
-        if concept_metadata:
-            from concept_classification import check_proposal_base
-            if metadata_reviewed:
-                if expected_edit_token is None:
-                    raise ConceptResolutionError('La revisión explícita requiere el estado actualizado del formulario.')
-                if action != 'CREATE_NEW' and str(metadata_target or '') != str(concept_id):
-                    raise ConceptResolutionError('Consulte las clasificaciones del Concept de destino antes de guardar.')
-            else:
-                check_proposal_base(connection, submission_id, concept_id)
         actor_id, actor_name = resolve_collaborator(connection, collaborator_id)
         previous_id = previous['submission_concept_resolution_id'] if previous else None
         if previous_id:

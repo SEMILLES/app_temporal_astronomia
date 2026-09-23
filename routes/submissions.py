@@ -5,7 +5,7 @@ import re
 import json
 from submission_lexical_decision import get_decision
 from submission_concept_resolution import save_resolution, current_resolution, resolution_history
-from concept_classification import editor_context, parse_form as parse_concept_metadata
+from concept_classification import editor_context, parse_new_form as parse_concept_metadata
 from edit_concurrency import edit_token, StaleEdit, submission_concept_scope
 import sqlite3
 
@@ -394,7 +394,19 @@ def _alternative_review_context(db, rows):
         target = submission_concept_scope(db, row['submission_id'], requested_target)['target_concept_id']
         ctx['concept_edit_token'] = edit_token(db, 'submission_concept', row['submission_id'], metadata_target=target)
         ctx['metadata_target'] = target
-        ctx['metadata'] = editor_context(db,target,row['submission_id'])
+        ctx['metadata'] = editor_context(db,None,row['submission_id'])
+        from submission_concept_resolution import proposed_concept_decision
+        ctx['proposal_creates_new'] = False
+        if row['reference_concept_proposal_id']:
+            proposal = db.execute('SELECT proposed_label FROM concept_proposal WHERE concept_proposal_id=?',
+                                  (row['reference_concept_proposal_id'],)).fetchone()
+            try:
+                ctx['proposal_creates_new'] = proposed_concept_decision(db, {
+                    'reference_concept_proposal_id': row['reference_concept_proposal_id'],
+                    'proposed_label': proposal['proposed_label'],
+                })[0] == 'CREATE_NEW'
+            except ValueError:
+                pass  # Historical labels can still be corrected through CREATE_NEW.
         ctx['metadata_decisions'] = [json.loads(r['classification_decision_json'])
             for r in ctx['concept_history'] if r['classification_decision_json']]
     return result

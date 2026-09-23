@@ -36,10 +36,18 @@ class AlternativeWorkflowTests(unittest.TestCase):
     def create(self, occurrence=5, kind="NEW", **kwargs):
         if kind == "NEW" and "morphology" not in kwargs:
             kwargs["morphology"]={"component_count_not_applicable":True}
+        reference = self.db.execute('SELECT concept_proposal_id FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1', (occurrence,)).fetchone()
+        if reference and reference[0]:
+            kwargs.setdefault('concept_metadata', self.new_metadata())
+            kwargs.setdefault('access_role', 'analyst')
         sid = create_alternative_submission(self.db,occurrence,kind,**kwargs)
         if self.db.execute("SELECT reference_concept_id FROM alternative_submission WHERE submission_id=?",(sid,)).fetchone()[0] is not None:
             save_resolution(self.db,sid,'CONFIRM_REFERENCE',access_role='reviewer')
         return sid
+
+    def new_metadata(self):
+        row = self.db.execute("SELECT system_id,category_id FROM classification_category JOIN classification_system USING(system_id) WHERE classification_system.code='semantic-fields' ORDER BY category_id").fetchone()
+        return {'classifications': {row[0]: [row[1]]}}
 
     def test_existing_validation(self):
         sid=self.create(kind="EXISTING",proposed_existing_alternative_id=1); self.assertIsInstance(sid,int)
@@ -141,7 +149,7 @@ class AlternativeWorkflowTests(unittest.TestCase):
     def test_concept_proposal_resolution_new_existing_and_independence(self):
         proposal=self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('THREE','pending')").lastrowid
         for oid in (5,1): self.db.execute("UPDATE occurrence_concept_reference SET is_current=0 WHERE occurrence_id=?",(oid,)); self.db.execute("INSERT INTO occurrence_concept_reference(occurrence_id,concept_proposal_id) VALUES(?,?)",(oid,proposal))
-        self.db.commit(); sid=self.create(phonological_relation_answer="NO"); save_resolution(self.db,sid,"CREATE_NEW",label="THREE",access_role="reviewer"); new=review_as_new(self.db,sid,nomenclature_mode="automatic", access_role="reviewer", morphology_resolution="ACCEPTED", review_note="Revision documentada")
+        self.db.commit(); sid=self.create(phonological_relation_answer="NO"); save_resolution(self.db,sid,"CREATE_NEW",label="THREE",access_role="reviewer",concept_metadata=self.new_metadata()); new=review_as_new(self.db,sid,nomenclature_mode="automatic", access_role="reviewer", morphology_resolution="ACCEPTED", review_note="Revision documentada")
         resolved=self.db.execute("SELECT status,resolved_concept_id FROM concept_proposal WHERE concept_proposal_id=?",(proposal,)).fetchone(); self.assertEqual(tuple(resolved),("pending",None)); self.assertEqual(self.db.execute("SELECT concept_id FROM alternative WHERE alternative_id=?",(new,)).fetchone()[0],current_resolution(self.db,sid)["concept_id"]); self.assertIsNone(self.db.execute("SELECT concept_proposal_id FROM occurrence_concept_reference WHERE occurrence_id=5 AND is_current=1").fetchone()[0]); self.assertEqual(self.db.execute("SELECT count(*) FROM assignment WHERE occurrence_id=1 AND created_from_submission_id=?",(sid,)).fetchone()[0],0)
 
     def test_pending_concept_can_resolve_existing_and_cannot_accept_unresolved(self):

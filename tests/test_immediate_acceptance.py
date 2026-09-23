@@ -32,6 +32,8 @@ class ImmediateAcceptanceTests(unittest.TestCase):
         self.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1")
         self.db.commit()
         proposal={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology":{"component_count_not_applicable":True}}
+        category = self.db.execute("SELECT system_id,category_id FROM classification_category JOIN classification_system USING(system_id) WHERE classification_system.code='semantic-fields' ORDER BY category_id").fetchone()
+        proposal['concept_metadata'] = {'classifications': {category[0]: [category[1]]}}
         decision={"decision":"existing","alternative_id":1}
         before='\n'.join(self.db.iterdump())
         with self.assertRaises(ImmediateAcceptanceError):

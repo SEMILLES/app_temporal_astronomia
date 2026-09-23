@@ -121,10 +121,18 @@ def alternative_operation(occurrence_id,proposal,decision,*,actor_context,review
         if not resolution:
             raise ImmediateAcceptanceError("La propuesta conceptual requiere una resolución local explícita. Envíe el aporte a revisión.")
         action = {"existing":"USE_EXISTING", "new":"CREATE_NEW"}.get(resolution.get("action"), resolution.get("action"))
+        creates_concept = action == 'CREATE_NEW'
+        if action == 'ACCEPT_PROPOSAL':
+            from submission_concept_resolution import proposed_concept_decision
+            proposed = connection.execute('''SELECT a.reference_concept_proposal_id,p.proposed_label
+                FROM alternative_submission a LEFT JOIN concept_proposal p
+                ON p.concept_proposal_id=a.reference_concept_proposal_id WHERE a.submission_id=?''',
+                (submission_id,)).fetchone()
+            creates_concept = proposed_concept_decision(connection, proposed)[0] == 'CREATE_NEW'
         save_resolution(connection, submission_id, action,
             concept_id=resolution.get("concept_id"), label=resolution.get("label"),
             note=resolution.get("note") or review_note,
-            concept_metadata=proposal.get('concept_metadata'),
+            concept_metadata=proposal.get('concept_metadata') if creates_concept else None,
             collaborator_id=actor_context.get("collaborator_id"), access_role=actor_context.get("access_role"))
         concept_resolution=None
         if canonical=="existing":

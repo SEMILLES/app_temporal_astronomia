@@ -1,0 +1,33 @@
+{% set values = form_values|default({}) %}
+{% set metadata_enabled = ctx is not defined or selected_action == 'CREATE_NEW' or (selected_action == 'ACCEPT_PROPOSAL' and ctx.proposal_creates_new) %}
+{% macro system_fields(system, enabled=metadata_enabled) %}
+<fieldset data-new-system{% if system.collection_id %} data-collection="{{ system.collection_id }}"{% endif %}{% if not enabled %} hidden disabled{% endif %}>
+<legend>{{ 'Campo semántico' if system.code == 'semantic-fields' else system.name }} *</legend>
+<input type="hidden" name="classification_apply_{{ system.system_id }}" value="yes">
+{% for position in (1, 2) %}
+{% set key = 'category_' ~ system.system_id ~ '_' ~ position %}
+{% set selected = values.get(key, system.selection[position-1] or '')|string %}
+<label>{{ 'Campo' if system.code == 'semantic-fields' else 'Área' if system.code == 'knowledge-areas' else 'Categoría' }} {{ position }}{{ ' (opcional)' if position == 2 else '' }}
+<select name="{{ key }}" data-position="{{ position }}"{% if position == 1 %} required{% endif %}>
+<option value="">Seleccionar...</option>
+{% for category in system.categories|sort(attribute='display_order') if category.active %}
+<option value="{{ category.category_id }}"{% if selected == category.category_id|string %} selected{% endif %}>{{ category.name }}</option>
+{% endfor %}
+</select></label>
+{% endfor %}
+</fieldset>
+{% endmacro %}
+<section class="new-concept-metadata" data-proposal-creates-new="{{ 'yes' if ctx is defined and ctx.proposal_creates_new else 'no' }}"{% if not metadata_enabled %} hidden{% endif %}>
+{% if ctx is defined %}<h3>Selección final del revisor para el concepto nuevo</h3>{% endif %}
+<p>Seleccione una o dos categorías distintas por clasificación.</p>
+{% for system in metadata.systems if system.active and system.code == 'semantic-fields' %}{{ system_fields(system) }}{% endfor %}
+<fieldset><legend>Incluir en colecciones</legend>
+{% for collection in metadata.collections if collection.active %}
+{% set proposed_join = metadata.membership_proposals|selectattr('collection_id', 'equalto', collection.collection_id)|selectattr('action', 'equalto', 'join')|list %}
+{% set checked = values.get('collection_action_' ~ collection.collection_id) == 'join' if values else proposed_join %}
+<label><input type="checkbox" data-new-collection="{{ collection.collection_id }}" name="collection_action_{{ collection.collection_id }}" value="join"{% if checked %} checked{% endif %}{% if not metadata_enabled %} disabled{% endif %}> {{ collection.name }}</label>
+{% for system in metadata.systems if system.active and system.collection_id == collection.collection_id %}{{ system_fields(system, metadata_enabled and checked) }}{% endfor %}
+{% endfor %}
+</fieldset>
+</section>
+<script src="{{ url_for('static', filename='new-concept-metadata.js') }}" defer></script>

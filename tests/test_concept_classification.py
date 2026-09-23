@@ -44,12 +44,17 @@ class ClassificationTests(unittest.TestCase):
                               access_role='reviewer',collaborator_id=1,**kwargs)
 
     def current(self, sid=None):
-        return self.db.execute('SELECT * FROM concept_classification_revision WHERE concept_id=1 AND system_id=? AND ended_at IS NULL',(sid or self.sf,)).fetchone()
+        return self.db.execute('SELECT * FROM concept_classification_revision WHERE concept_id=? AND system_id=? AND ended_at IS NULL',(getattr(self, 'metadata_concept', 1),sid or self.sf)).fetchone()
 
     def dump(self):
         return '\n'.join(self.db.iterdump())
 
     def propose(self, payload):
+        if not self.db.execute('SELECT 1 FROM concept_proposal').fetchone():
+            self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
+            self.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
+            self.db.commit()
+        self.metadata_concept = 3
         return create_alternative_submission(self.db,1,'NEW',phonological_relation_answer='NO',
                     morphology={'component_count_not_applicable':True},concept_metadata=payload,access_role='analyst')
 
@@ -162,15 +167,15 @@ class ClassificationTests(unittest.TestCase):
         with self.assertRaises(StaleEdit):self.apply({self.sf:self.fields[1:2]},expected_state=state)
         self.assertEqual(before,self.dump())
 
-    def test_propose_correct_empty_and_accept_materializes(self):
+    def test_propose_correct_and_accept_materializes(self):
         payload={'classifications':{self.sf:list(reversed(self.fields[:2])),self.ka:self.areas[:2]},'collections':{self.collection:'join'}}
         sid=self.propose(payload)
         self.assertIsNone(self.current())
         proposal=proposal_payload(self.db,sid)
-        proposal['classifications'][self.sf]=[]
+        proposal['classifications'][self.sf]=self.fields[2:3]
         proposal['classifications'][self.ka]=[self.areas[2],None]
-        rid=save_resolution(self.db,sid,'CONFIRM_REFERENCE',access_role='reviewer',concept_metadata=proposal)
-        self.assertIsNone(self.current()['category_1_id'])
+        rid=save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata=proposal)
+        self.assertEqual(self.fields[2],self.current()['category_1_id'])
         self.assertEqual(self.areas[2],self.current(self.ka)['category_1_id'])
         self.assertEqual(self.fields[1],self.db.execute('SELECT category_1_id FROM submission_classification_proposal WHERE submission_id=? AND system_id=?',(sid,self.sf)).fetchone()[0])
         decision=json.loads(self.db.execute('SELECT classification_decision_json FROM submission_concept_resolution WHERE submission_concept_resolution_id=?',(rid,)).fetchone()[0])
@@ -182,7 +187,7 @@ class ClassificationTests(unittest.TestCase):
         self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
         self.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
         self.db.commit()
-        sid=self.propose({'classifications':{self.sf:self.fields[:2]},'collections':{self.collection:'join'}})
+        sid=self.propose({'classifications':{self.sf:self.fields[:2],self.ka:self.areas[:1]},'collections':{self.collection:'join'}})
         rid=save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid))
         cid=self.db.execute('SELECT concept_id FROM submission_concept_resolution WHERE submission_concept_resolution_id=?',(rid,)).fetchone()[0]
         self.assertEqual('NUEVO',self.db.execute('SELECT preferred_label FROM concept WHERE concept_id=?',(cid,)).fetchone()[0])
@@ -196,16 +201,15 @@ class ClassificationTests(unittest.TestCase):
         with self.assertRaises(sqlite3.IntegrityError):self.db.execute('DELETE FROM submission_classification_proposal')
         self.db.rollback()
 
-    def test_stale_proposal_and_reviewed_destination(self):
+    def test_catalog_change_invalidates_new_resolution_token(self):
         sid=self.propose({'classifications':{self.sf:self.fields[:1]}})
-        self.apply({self.sf:self.fields[1:2]})
-        with self.assertRaises(StaleEdit):save_resolution(self.db,sid,'CONFIRM_REFERENCE',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid))
         app=Flask(__name__);app.secret_key='test'
         with app.app_context():
             token=edit_token(self.db,'submission_concept',sid)
-            save_resolution(self.db,sid,'CONFIRM_REFERENCE',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid),
-                            expected_edit_token=token,metadata_reviewed=True,metadata_target=1)
-            with self.assertRaises(StaleEdit):save_resolution(self.db,sid,'CONFIRM_REFERENCE',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid),expected_edit_token=token)
+            administer(self.db,'category',identifier=self.fields[0],name='Cambio',access_role='master')
+            with self.assertRaises(StaleEdit):
+                save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid),expected_edit_token=token)
+            save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid),expected_edit_token=edit_token(self.db,'submission_concept',sid))
 
     def test_legacy_catalog_keeps_names_order_and_columns(self):
         self.db.execute("UPDATE concept SET semantic_field_1='LEGACY-B',semantic_field_2='LEGACY-A',knowledge_area_1='LEGACY-AREA' WHERE concept_id=1")
@@ -242,15 +246,16 @@ class ClassificationTests(unittest.TestCase):
         administer(self.db,'category',identifier=self.fields[0],name=SEMANTIC_FIELDS[0],active=0,access_role='master')
         before=self.dump()
         with self.assertRaises(ClassificationError):
-            save_resolution(self.db,sid,'CONFIRM_REFERENCE',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid))
+            save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid))
         self.assertEqual(before,self.dump())
-        save_resolution(self.db,sid,'CONFIRM_REFERENCE',access_role='reviewer',concept_metadata={'classifications':{self.sf:[]}})
-        self.assertIsNone(self.current()['category_1_id'])
+        save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata={'classifications':{self.sf:self.fields[1:2]}})
+        self.assertEqual(self.fields[1],self.current()['category_1_id'])
 
     def test_omitted_proposal_preserves_current_and_analyst_cannot_apply(self):
         sid=self.propose({'classifications':{self.sf:self.fields[:1]}})
         self.apply({self.sf:self.fields[2:3]})
-        save_resolution(self.db,sid,'CONFIRM_REFERENCE',access_role='reviewer')
+        save_resolution(self.db,sid,'USE_EXISTING',concept_id=1,note='Referencia existente',access_role='reviewer')
+        self.metadata_concept = 1
         self.assertEqual(self.fields[2],self.current()['category_1_id'])
         before=self.dump()
         with self.assertRaises(ClassificationError):
@@ -259,13 +264,13 @@ class ClassificationTests(unittest.TestCase):
 
     def test_decision_snapshot_name_immutable_after_master_rename(self):
         sid=self.propose({'classifications':{self.sf:self.fields[:1]}})
-        save_resolution(self.db,sid,'CONFIRM_REFERENCE',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid))
+        save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid))
         original=self.db.execute('SELECT classification_decision_json FROM submission_concept_resolution').fetchone()[0]
         administer(self.db,'category',identifier=self.fields[0],name='Nombre posterior',access_role='master')
         self.assertEqual(original,self.db.execute('SELECT classification_decision_json FROM submission_concept_resolution').fetchone()[0])
         with self.assertRaises(sqlite3.IntegrityError):self.db.execute("UPDATE submission_concept_resolution SET classification_decision_json='{}'")
         self.db.rollback()
-        context=editor_context(self.db,1,sid)
+        context=editor_context(self.db,3,sid)
         self.assertEqual('Nombre posterior',context['systems'][0]['current_names'][0])
         self.assertEqual(SEMANTIC_FIELDS[0],context['history'][0]['category_1_name'])
 
@@ -284,24 +289,18 @@ class ClassificationTests(unittest.TestCase):
         audit=Auditor(self.db);audit.classifications()
         self.assertTrue(any(r['code']=='DUPLICATE_OPEN_MEMBERSHIP' and r['status']=='FAIL' for r in audit.results))
 
-    def test_immediate_lexical_acceptance_metadata_and_stale_preview(self):
-        from immediate_acceptance import alternative_operation, preview_operation, confirm_operation
+    def test_immediate_existing_concept_rejects_metadata(self):
+        from immediate_acceptance import alternative_operation, preview_operation
         self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1a')")
         self.db.commit()
         proposal={'proposal_kind':'EXISTING','proposed_existing_alternative_id':1,
-                  'concept_metadata':{'classifications':{self.sf:self.fields[:2],self.ka:self.areas[:1]},
-                                      'collections':{self.collection:'join'}}}
+                  'concept_metadata':{'classifications':{self.sf:self.fields[:2]}}}
         operation=alternative_operation(1,proposal,{'decision':'existing','alternative_id':1},actor_context={'access_role':'reviewer'})
         app=Flask(__name__);app.secret_key='test'
         with app.app_context():
-            before=self.dump();preview=preview_operation(self.db,operation);self.assertEqual(before,self.dump())
-            administer(self.db,'category',identifier=self.fields[0],name='Nombre actualizado',access_role='master')
-            with self.assertRaises(StaleEdit):confirm_operation(self.db,operation,expected_preview_token=preview['preview_token'])
-            preview=preview_operation(self.db,operation)
-            result=confirm_operation(self.db,operation,expected_preview_token=preview['preview_token'])
-        self.assertEqual(self.fields[0],self.current()['category_1_id'])
-        self.assertEqual(self.areas[0],self.current(self.ka)['category_1_id'])
-        self.assertEqual('resolved',self.db.execute('SELECT status FROM submission WHERE submission_id=?',(result['result']['submission_id'],)).fetchone()[0])
+            before=self.dump()
+            with self.assertRaises(ClassificationError):preview_operation(self.db,operation)
+            self.assertEqual(before,self.dump())
 
 
 class MigrationTests(unittest.TestCase):
@@ -400,6 +399,9 @@ class ClassificationRouteTests(unittest.TestCase):
         self.assertEqual(409,self.client.post('/conceptos/1/actualizar',data={'preferred_label':'UNO','edit_token':concept_token}).status_code)
 
     def test_analyst_proposal_and_reviewer_correction_http(self):
+        self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
+        self.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
+        self.db.commit()
         self.role='analyst'
         self.assertEqual(200,self.client.get('/ocurrencias/1/clasificar').status_code)
         data={'proposal_kind':'NEW','phonological_relation_answer':'NO','morphology_component_count':'N/A',
@@ -411,9 +413,8 @@ class ClassificationRouteTests(unittest.TestCase):
         self.role='reviewer'
         url=f'/aportes/{sid}'
         token=self.token(url,'concept_edit_token')
-        data={'concept_edit_token':token,'concept_action':'CONFIRM_REFERENCE',
-              'metadata_reviewed':'yes','metadata_target':1,
-              **self.selections([],self.areas[2:3],'join')}
+        data={'concept_edit_token':token,'concept_action':'ACCEPT_PROPOSAL',
+              **self.selections(self.fields[1:2],self.areas[2:3],'join')}
         response=self.client.post(url+'/concepto',data=data);self.assertEqual(302,response.status_code,response.data)
         page=self.client.get(url).get_data(as_text=True)
         self.assertIn('Actividades y acciones',page);self.assertIn('Física',page)
@@ -427,6 +428,8 @@ class ClassificationRouteTests(unittest.TestCase):
               **self.selections(self.fields[:1])}
         self.assertEqual(400,self.client.post(url+'/concepto',data=data).status_code)
         data.update(concept_edit_token=self.token(url+'?metadata_target=2','concept_edit_token'),metadata_target=2)
+        self.assertEqual(400,self.client.post(url+'/concepto',data=data).status_code)
+        for key in self.selections(self.fields[:1]): data.pop(key)
         self.assertEqual(302,self.client.post(url+'/concepto',data=data).status_code)
 
     def test_invalid_edit_rolls_back_label_and_membership(self):

@@ -1,5 +1,5 @@
 from alternative_video_service import get_current_video
-from concept_classification import parse_form as parse_concept_metadata, editor_context
+from concept_classification import parse_new_form as parse_concept_metadata, editor_context
 from alternative_workflow import comparable_pending_proposals
 from activity import record_activity, resolve_collaborator
 from edit_concurrency import edit_token, check_edit, StaleEdit
@@ -624,7 +624,8 @@ def _load_classification_page_data(conexion, occurrence_id):
         "history": history,
         "component_alternatives": component_alternatives,
         "concepts": concepts,
-        "metadata": editor_context(conexion, context_concept_id),
+        "metadata": editor_context(conexion),
+        "new_concept_metadata": context_concept_id is None and occurrence["reference_concept_proposal_id"] is not None,
     }
 
 

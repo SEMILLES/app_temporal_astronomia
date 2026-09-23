@@ -184,6 +184,11 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
         raise AlternativeWorkflowError("La respuesta SÍ exige al menos una relación.")
     name = "create_alternative_submission"; owns = _transaction(connection, name)
     try:
+        from concept_classification import validate_new_metadata, ClassificationError
+        if resolved_concept is None and proposal_id is not None:
+            concept_metadata = validate_new_metadata(connection, concept_metadata)
+        elif concept_metadata is not None:
+            raise ClassificationError('Este aporte no permite modificar clasificaciones de un concepto existente.')
         cursor = connection.execute(
             "INSERT INTO submission(occurrence_id,submission_type,status,submitted_by) VALUES(?,'ALTERNATIVE','pending',?)",
             (occurrence_id, submitted_by),

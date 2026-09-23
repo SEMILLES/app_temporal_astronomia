@@ -39,9 +39,20 @@ class LocalConceptTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def create(self, oid):
-        return create_alternative_submission(self.db, oid, 'NEW', phonological_relation_answer='NO', morphology={'component_count_not_applicable':True})
+        reference = self.db.execute('SELECT concept_id FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1', (oid,)).fetchone()
+        metadata = self.new_metadata() if reference[0] is None else None
+        return create_alternative_submission(self.db, oid, 'NEW', phonological_relation_answer='NO', morphology={'component_count_not_applicable':True}, concept_metadata=metadata, access_role='analyst')
+
+    def new_metadata(self):
+        row = self.db.execute("SELECT system_id,category_id FROM classification_category JOIN classification_system USING(system_id) WHERE classification_system.code='semantic-fields' ORDER BY category_id").fetchone()
+        return {'classifications': {row[0]: [row[1]]}}
 
     def save(self, sid=None, action='USE_EXISTING', **kwargs):
+        from submission_concept_resolution import proposed_concept_decision
+        submission = self.db.execute('SELECT a.reference_concept_proposal_id,p.proposed_label FROM alternative_submission a LEFT JOIN concept_proposal p ON p.concept_proposal_id=a.reference_concept_proposal_id WHERE submission_id=?', (sid or self.a,)).fetchone()
+        creates = action == 'CREATE_NEW' or (action == 'ACCEPT_PROPOSAL' and submission['reference_concept_proposal_id'] and proposed_concept_decision(self.db, submission)[0] == 'CREATE_NEW')
+        if creates:
+            kwargs.setdefault('concept_metadata', self.new_metadata())
         return save_resolution(self.db, sid or self.a, action, access_role='reviewer', **kwargs)
 
     def snapshot(self):

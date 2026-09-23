@@ -223,6 +223,66 @@ def check_proposal_base(db, submission_id, concept_id):
                 raise StaleEdit('El destino o las clasificaciones cambiaron desde la propuesta. Revise el estado vigente y confirme sus selecciones.')
 
 
+def validate_new_metadata(db, payload):
+    """Validate a complete selection for a NEW concept, never a partial edit."""
+    payload = {} if payload is None else payload
+    if not isinstance(payload, dict) or set(payload) - {'classifications', 'collections'}:
+        raise ClassificationError('Datos de clasificación inválidos.')
+    try:
+        actions = {int(k): v for k, v in payload.get('collections', {}).items()}
+        selections = {int(k): normalize_pair(v) for k, v in payload.get('classifications', {}).items()}
+    except (AttributeError, TypeError, ValueError) as error:
+        raise ClassificationError('Selecciones de clasificación inválidas.') from error
+    for cid, action in actions.items():
+        if action != 'join' or not db.execute(
+                'SELECT 1 FROM collection WHERE collection_id=? AND active=1', (cid,)).fetchone():
+            raise ClassificationError('Seleccione una colección activa para incorporar el concepto.')
+    semantic = db.execute("SELECT system_id FROM classification_system WHERE code='semantic-fields' AND active=1 AND collection_id IS NULL").fetchone()
+    if semantic is None:
+        raise ClassificationError('El catálogo de campos semánticos no está disponible.')
+    required = {semantic[0]}
+    for cid in actions:
+        required.update(r[0] for r in db.execute(
+            'SELECT system_id FROM classification_system WHERE collection_id=? AND active=1', (cid,)))
+    for sid, values in selections.items():
+        system = db.execute('SELECT * FROM classification_system WHERE system_id=? AND active=1', (sid,)).fetchone()
+        if system is None:
+            raise ClassificationError('Seleccione un sistema de clasificación activo.')
+        if system['collection_id'] is not None and actions.get(system['collection_id']) != 'join':
+            raise ClassificationError('Seleccione la colección antes de sus clasificaciones.')
+        if system['collection_id'] is None and sid != semantic[0]:
+            raise ClassificationError('La clasificación no corresponde a este formulario.')
+        snapshot_pair(db, sid, values)
+    for sid in required:
+        if not any(selections.get(sid, [])):
+            name = db.execute('SELECT name FROM classification_system WHERE system_id=?', (sid,)).fetchone()[0]
+            raise ClassificationError(f'{name}: seleccione al menos una categoría.')
+    return {'classifications': selections, 'collections': actions}
+
+
+def has_metadata_fields(form):
+    return any(key.startswith(('category_', 'classification_apply_', 'collection_action_')) for key in form)
+
+
+def parse_new_form(form):
+    """Reuse the normal parser, rejecting forged/ambiguous fields at this boundary."""
+    for key in form:
+        if not key.startswith(('category_', 'classification_apply_', 'collection_action_')):
+            continue
+        if hasattr(form, 'getlist') and len(form.getlist(key)) != 1:
+            raise ClassificationError('Hay campos de clasificación repetidos.')
+        match = re.fullmatch(r'(?:classification_apply_|collection_action_)([1-9][0-9]*)|category_([1-9][0-9]*)_([12])', key)
+        if not match:
+            raise ClassificationError('Campo de clasificación inválido.')
+        if key.startswith('category_') and form.get(key) and form.get(f'classification_apply_{match[2]}') != 'yes':
+            raise ClassificationError('La categoría no tiene una selección de clasificación asociada.')
+        if key.startswith('classification_apply_') and form.get(key) != 'yes':
+            raise ClassificationError('Selección de clasificación inválida.')
+        if key.startswith('collection_action_') and form.get(key) != 'join':
+            raise ClassificationError('Seleccione una colección para incorporar el concepto.')
+    return parse_form(form) or ({} if has_metadata_fields(form) else None)
+
+
 def parse_form(form):
     payload = {'classifications':{},'collections':{}}
     for key in form:
