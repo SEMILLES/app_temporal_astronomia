@@ -14,7 +14,7 @@ migration = importlib.import_module('migrations.028_concept_reference_origin')
 ROOT = Path(__file__).resolve().parents[1]
 AUTH = 'LESICO_MIGRATION_028_ALLOW_PRUEBAS'
 PRUEBAS = {
-    'LESICO_ENV': 'pruebas',
+    'LESICO_ENV': 'production',
     'RAILWAY_ENVIRONMENT_NAME': 'pruebas',
     'RAILWAY_ENVIRONMENT_ID': 'dc6a07af-8842-44c8-a072-a0d3e10ae203',
     AUTH: '1',
@@ -50,7 +50,10 @@ def snapshot(path):
         return '\n'.join(db.iterdump())
 
 
-@pytest.mark.parametrize('env', [{}, PRUEBAS], ids=['local', 'railway-pruebas-authorized'])
+@pytest.mark.parametrize('env', [
+    {}, PRUEBAS, {**PRUEBAS, 'LESICO_ENV': None},
+    {**PRUEBAS, 'LESICO_ENV': 'development'},
+], ids=['local', 'railway-pruebas-production-profile', 'railway-no-profile', 'railway-development-profile'])
 def test_preview_apply_backup_integrity_and_idempotence(database_path, monkeypatch, env):
     configure(monkeypatch, env)
     before = database_path.read_bytes()
@@ -75,19 +78,17 @@ def test_preview_apply_backup_integrity_and_idempotence(database_path, monkeypat
     {'RAILWAY_SERVICE_ID': 'synthetic-service'},
     {**PRUEBAS, AUTH: None},
     {**PRUEBAS, AUTH: 'true'},
-    {**PRUEBAS, 'LESICO_ENV': None},
-    {**PRUEBAS, 'LESICO_ENV': 'development'},
     {**PRUEBAS, 'RAILWAY_ENVIRONMENT_NAME': None},
     {**PRUEBAS, 'RAILWAY_ENVIRONMENT_ID': None},
     {**PRUEBAS, 'RAILWAY_ENVIRONMENT_NAME': 'production'},
     {**PRUEBAS, 'RAILWAY_ENVIRONMENT_ID': 'not-pruebas'},
-    {**PRUEBAS, 'LESICO_ENV': 'production'},
-    {**PRUEBAS, 'LESICO_ENV': ' PRODUCTION '},
+    {**PRUEBAS, 'RAILWAY_ENVIRONMENT_NAME': 'production', 'RAILWAY_ENVIRONMENT_ID': 'production-id'},
+    {**PRUEBAS, 'RAILWAY_ENVIRONMENT_NAME': '', 'RAILWAY_ENVIRONMENT_ID': ''},
     {'LESICO_ENV': 'production', AUTH: '1'},
     {'LESICO_ENV': 'prod', AUTH: '1'},
-], ids=['railway-only', 'no-authorization', 'generic-authorization', 'no-declared-target',
-        'wrong-declared-target', 'no-railway-name', 'no-railway-id', 'production-name',
-        'wrong-railway-id', 'production-even-authorized', 'production-normalized',
+], ids=['railway-only', 'no-authorization', 'generic-authorization',
+        'no-railway-name', 'no-railway-id', 'production-name',
+        'wrong-railway-id', 'production-even-authorized', 'empty-railway-identity',
         'local-production-even-authorized', 'production-alias'])
 def test_unauthorized_execution_does_not_mutate_or_backup(database_path, monkeypatch, env):
     configure(monkeypatch, env)

@@ -46,21 +46,24 @@ Para una ejecución deliberada **dentro del entorno Railway PRUEBAS**, 028 exige
 simultáneamente:
 
 - `LESICO_MIGRATION_028_ALLOW_PRUEBAS=1` (autorización específica de esta migración).
-- `LESICO_ENV=pruebas` (destino declarado).
 - `RAILWAY_ENVIRONMENT_NAME=pruebas`.
 - `RAILWAY_ENVIRONMENT_ID=dc6a07af-8842-44c8-a072-a0d3e10ae203`, el ID ya autorizado
   por el helper compartido.
 
 El nombre y el ID deben proceder del entorno Railway: no sobrescribirlos para
 hacer pasar la comprobación. No se presupone que cualquier Railway sea PRUEBAS.
-Con `LESICO_ENV` ya configurado como `pruebas`, los comandos en ese contenedor
-(shell POSIX) serían:
+`LESICO_ENV` es el perfil de ejecución de la aplicación, no la identidad del
+entorno Railway. **Se conserva `LESICO_ENV=production` en PRUEBAS** y no se usa
+para autorizar o rechazar la migración allí. Fuera de Railway se mantiene el
+bloqueo local si ese perfil declara producción.
+
+Los comandos dentro del contenedor Railway PRUEBAS (shell POSIX) serían:
 
 ```sh
-# Simulación: usa la ruta configurada de la base de PRUEBAS.
-LESICO_MIGRATION_028_ALLOW_PRUEBAS=1 python migrations/028_concept_reference_origin.py --database "${LESICO_DATABASE_PATH:?Falta la ruta de la base de PRUEBAS}"
+# Simulación sobre la base de PRUEBAS.
+LESICO_MIGRATION_028_ALLOW_PRUEBAS=1 /app/.venv/bin/python /app/migrations/028_concept_reference_origin.py --database /data/lesico_astronomia.db
 # Aplicación deliberada: respaldo automático con nombre único junto a la base.
-LESICO_MIGRATION_028_ALLOW_PRUEBAS=1 python migrations/028_concept_reference_origin.py --database "${LESICO_DATABASE_PATH:?Falta la ruta de la base de PRUEBAS}" --apply
+LESICO_MIGRATION_028_ALLOW_PRUEBAS=1 /app/.venv/bin/python /app/migrations/028_concept_reference_origin.py --database /data/lesico_astronomia.db --apply
 ```
 
 La autorización se limita a cada comando. Puede usarse `--backup RUTA_NUEVA`
@@ -79,7 +82,7 @@ Para el ajuste de seguridad/ejecución de 028:
 python -B -m pytest -q -p no:cacheprovider --tb=short tests/test_migration_028_execution.py tests/test_concept_reference_origin.py
 ```
 
-Resultado: **50 pruebas aprobadas**. Incluye 18 casos nuevos de autorización,
+Resultado: **50 pruebas aprobadas**. Incluye 18 casos de autorización,
 simulación, CLI, backup, integridad e idempotencia, con variables de Railway
 simuladas y archivos locales sintéticos. Ninguna prueba contacta Railway.
 

@@ -10,21 +10,23 @@ from safe_database import cli, run, check_integrity
 
 
 def authorize_environment():
-    environment = os.environ.get('LESICO_ENV', '').strip().lower()
-    if environment in ('production', 'produccion', 'producción', 'prod'):
-        raise ValueError('La migración 028 no está autorizada en producción.')
     if any(k.startswith('RAILWAY_') for k in os.environ):
         # Require deliberate authorization AND the identity already allowlisted
         # by safe_database.run. Missing Railway identity is not evidence of tests.
         if not (
             os.environ.get('LESICO_MIGRATION_028_ALLOW_PRUEBAS') == '1'
-            and environment == 'pruebas'
             and os.environ.get('RAILWAY_ENVIRONMENT_NAME') == 'pruebas'
             and os.environ.get('RAILWAY_ENVIRONMENT_ID') == 'dc6a07af-8842-44c8-a072-a0d3e10ae203'
         ):
             raise ValueError(
                 'Railway requiere LESICO_MIGRATION_028_ALLOW_PRUEBAS=1, '
-                'LESICO_ENV=pruebas y nombre/ID verificados del entorno PRUEBAS.')
+                'y nombre/ID verificados del entorno PRUEBAS.')
+        return
+    # Outside Railway only, retain the local production-profile safeguard.
+    # In Railway LESICO_ENV is an application profile, not environment identity.
+    environment = os.environ.get('LESICO_ENV', '').strip().lower()
+    if environment in ('production', 'produccion', 'producción', 'prod'):
+        raise ValueError('La migración 028 local no está autorizada con perfil de producción.')
 
 
 def migration(db):
