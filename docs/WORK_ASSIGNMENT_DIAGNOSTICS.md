@@ -15,9 +15,16 @@ la página, sin estados persistidos ni escrituras lingüísticas:
   integridad. Una referencia histórica o ausente no basta para incluirla aquí.
 
 Un concepto sin alternativas sigue siendo trabajo válido y asignable. Las filas
-históricas no satisfacen pendientes actuales. Se realizan tres consultas por
+históricas no satisfacen pendientes actuales. Se realizan hasta cuatro consultas por
 lote de conceptos: alternativas con EXISTS de morfología/relaciones, gramática
-faltante y asignación faltante. No hay consultas por fila.
+faltante, asignación faltante y aportes pendientes. No hay consultas por fila.
+
+Los enlaces de Analyst usan `mode=morphology` o `mode=relation` para abrir solo
+esa tarea. “En revisión” se deriva de aportes pendientes y no reduce el conteo
+canónico. El backend serializa creación y detección de duplicados: una morfología
+pendiente por alternativa, o una relación pendiente por par simétrico/parámetro.
+El envío de varias relaciones crea aportes independientes; cada aprobación revisa
+la vista previa vigente. Las migraciones no cambian.
 
 ## Herramientas y permisos
 

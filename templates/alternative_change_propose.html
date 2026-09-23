@@ -13,14 +13,22 @@
 <section id="morfologia"><h2>Proponer morfología</h2>
 <form method="post"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="state_token" value="{{tokens.MORPHOLOGY}}"><input type="hidden" name="kind" value="MORPHOLOGY">
 <label>Cantidad de componentes (1 para seña simple; N/A para no aplica) <input name="component_count" required value="{{'N/A' if morphology and morphology.component_count_not_applicable else (morphology.component_count if morphology and morphology.component_count else '')}}"></label>
-<label>Permutación libre <select name="free_permutation">{% for value in ['SÍ','NO','SIN INFORMACIÓN'] %}<option{% if morphology and morphology.free_permutation==value %} selected{% endif %}>{{value}}</option>{% endfor %}</select></label>
+<label>Permutación libre <select name="free_permutation">{% for value in ['SIN INFORMACIÓN','SÍ','NO'] %}<option{% if morphology and morphology.free_permutation==value %} selected{% endif %}>{{value}}</option>{% endfor %}</select></label>
 <label>Nota <input name="morphology_note" value="{{morphology.note if morphology and morphology.note else ''}}"></label>
 <fieldset><legend>Componentes identificados (pueden ser menos que la cantidad total)</legend>
-{% for i in range(1,[9,components|length+2]|max) %}{% set c=components[i-1] if components|length>=i else none %}
-<p><label>Posición <input name="component_{{i}}_position" size="3" value="{{c.position if c else i}}"></label>
+<div id="morphology-components" data-next-index="{{components|length+2}}">
+{% for i in range(1,components|length+2) %}{% set c=components[i-1] if components|length>=i else none %}
+<p data-component-row><label>Posición <input name="component_{{i}}_position" size="3" value="{{c.position if c else ((components|map(attribute='position')|max)+1 if components else 1)}}"></label>
 <label>ID alternativa <input name="component_{{i}}_alternative_id" size="6" value="{{c.component_alternative_id if c and c.component_alternative_id else ''}}"></label>
 <label>Etiqueta <input name="component_{{i}}_label" value="{{c.component_label if c and c.component_label else ''}}"></label>
-<label>Nota <input name="component_{{i}}_note" value="{{c.note if c and c.note else ''}}"></label></p>{% endfor %}
+<label>Nota <input name="component_{{i}}_note" value="{{c.note if c and c.note else ''}}"></label><button type="button" data-remove-component hidden>Quitar componente</button></p>{% endfor %}
+</div><button type="button" id="add-component" hidden>Agregar componente</button>
+<template id="component-template"><p data-component-row>
+<label>Posición <input name="component___index___position" size="3"></label>
+<label>ID alternativa <input name="component___index___alternative_id" size="6"></label>
+<label>Etiqueta <input name="component___index___label"></label>
+<label>Nota <input name="component___index___note"></label><button type="button" data-remove-component>Quitar componente</button>
+</p></template>
 </fieldset><button>Enviar propuesta de morfología</button></form></section>
 {% endif %}{% endif %}
 {% if mode=='relation' %}
@@ -34,7 +42,7 @@
 <p id="relation-message" role="status"></p><ul id="prepared-relations"></ul>
 <button id="send-relations">Enviar propuestas</button></form>
 <script type="application/json" id="unavailable-relations">{{unavailable|tojson}}</script>
-<script src="{{url_for('static',filename='alternative-change-tasks.js')}}" defer></script>
 {% else %}<p>No hay otras alternativas activas de este concepto con las cuales establecer una relación fonológica.</p>{% endif %}
 </section>{% endif %}
+<script src="{{url_for('static',filename='alternative-change-tasks.js')}}" defer></script>
 {% endblock %}

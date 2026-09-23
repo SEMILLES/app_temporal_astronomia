@@ -134,6 +134,8 @@ def review_proposal(db, submission_id, decision, *, collaborator_id, access_role
             # Morphology must still match the version the analyst proposed over.
             expected = expected_baseline if kind=='RELATION' and expected_baseline is not None else proposal['baseline']
             if target['concept_id'] != proposal['concept_id'] or baseline(db, aid, kind) != expected:
+                if kind=='RELATION' and expected_baseline is not None:
+                    raise ValueError('La información cambió después de abrir la revisión. Vuelva a abrir el aporte antes de aprobar.')
                 raise ValueError('La información canónica cambió desde la propuesta. Rechácela y solicite un nuevo aporte.')
             values = _normalize(db, aid, kind, json.loads(proposal['payload']))
             before = _blocking_ids(db)

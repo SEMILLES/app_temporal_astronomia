@@ -1,4 +1,21 @@
 (() => {
+  const components = document.getElementById('morphology-components');
+  if (components) {
+    const addComponent = document.getElementById('add-component');
+    let index = Number(components.dataset.nextIndex);
+    addComponent.hidden = false;
+    components.querySelectorAll('[data-remove-component]').forEach(button => {button.hidden = false;});
+    components.addEventListener('click', event => {
+      if (event.target.matches('[data-remove-component]')) event.target.closest('[data-component-row]').remove();
+    });
+    addComponent.addEventListener('click', () => {
+      const nextPosition = Math.max(0, ...Array.from(components.querySelectorAll('[name$="_position"]'), input => Number(input.value) || 0)) + 1;
+      const template = document.createElement('template');
+      template.innerHTML = document.getElementById('component-template').innerHTML.replaceAll('__index__', String(index++));
+      template.content.querySelector('[name$="_position"]').value = nextPosition;
+      components.append(template.content);
+    });
+  }
   const form = document.getElementById('relation-proposals');
   if (!form) return;
   const target = form.querySelector('[name="target_id"]');

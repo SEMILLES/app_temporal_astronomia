@@ -236,6 +236,13 @@ with sync_playwright() as pw:
     try:
         page=browser.new_page();page.route('**/*',serve);errors=[]
         page.on('pageerror',lambda error:errors.append(str(error)))
+        page.goto('http://local.test/a/alternativas/1/proponer?mode=morphology')
+        expect(page.locator('select[name=free_permutation]')).to_have_value('SIN INFORMACIÓN')
+        expect(page.locator('#morphology-components [data-component-row]')).to_have_count(1)
+        page.locator('#add-component').click()
+        expect(page.locator('#morphology-components [data-component-row]')).to_have_count(2)
+        page.locator('#morphology-components [data-remove-component]').last.click()
+        expect(page.locator('#morphology-components [data-component-row]')).to_have_count(1)
         page.goto('http://local.test/a/alternativas/2/proponer?mode=relation')
         page.locator('#lesico-collaborator').select_option('1')
         expect(page.locator('#prepare-relation')).to_be_disabled()

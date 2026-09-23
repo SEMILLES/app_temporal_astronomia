@@ -187,6 +187,21 @@ with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM assignment').fetchone()[0]==1
     assert {tuple(r) for r in db.execute('SELECT submission_type,status FROM submission')}=={('GRAMMAR','pending'),('ALTERNATIVE','pending')}
 assert client.get('/r/aportes/pendientes').status_code==200
+from alternative_change_workflow import create_proposal,review_proposal
+with closing(conectar()) as db:
+    sid=create_proposal(db,1,'MORPHOLOGY',{'component_count':1},collaborator_id=1,access_role='analyst')
+html=client.get('/a/mi-trabajo?collaborator_id=1').text
+assert 'Morfología: 2 pendientes' in html
+assert 'En revisión' in html and '/a/aportes/alternativas/'+str(sid) in html
+assert '/a/alternativas/1/proponer?mode=morphology' not in html
+with closing(conectar()) as db:
+    review_proposal(db,sid,'rejected',collaborator_id=1,access_role='reviewer',note='Revisar análisis')
+html=client.get('/a/mi-trabajo?collaborator_id=1').text
+assert '/a/alternativas/1/proponer?mode=morphology' in html
+with closing(conectar()) as db:
+    sid=create_proposal(db,1,'MORPHOLOGY',{'component_count':1},collaborator_id=1,access_role='analyst')
+    review_proposal(db,sid,'accepted',collaborator_id=1,access_role='reviewer')
+assert 'Morfología: 1 pendientes' in client.get('/a/mi-trabajo?collaborator_id=1').text
 '''
         result = subprocess.run([sys.executable, '-c', code], env=env, cwd=ROOT, capture_output=True, text=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
