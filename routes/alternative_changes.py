@@ -4,7 +4,7 @@ import sqlite3
 from flask import Blueprint, abort, g, redirect, render_template, request, session, url_for
 from database import conectar
 from access_control import requires_analyst, requires_reviewer
-from alternative_change_workflow import create_proposal, get_proposal, review_proposal, baseline
+from alternative_change_workflow import create_proposal, get_proposal, review_proposal, baseline, pending_changes
 from alternative_admin import relation_preview
 from edit_concurrency import sign, unsign
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
@@ -50,6 +50,9 @@ def _context(db, aid):
 @alternative_changes_bp.route('/alternativas/<int:alternative_id>/proponer', methods=['GET','POST'])
 @requires_analyst
 def propose(alternative_id):
+    mode = request.args.get('mode')
+    if mode not in (None, 'morphology', 'relation'):
+        abort(404)
     csrf = _csrf(); db = conectar()
     try:
         context = _context(db,alternative_id)
@@ -59,6 +62,8 @@ def propose(alternative_id):
         if request.method == 'POST':
             try:
                 kind = request.form.get('kind')
+                if kind != {'morphology':'MORPHOLOGY','relation':'RELATION'}.get(mode):
+                    raise ValueError('Seleccione la tarea correspondiente antes de enviar la propuesta.')
                 state = unsign(request.form.get('state_token'))
                 if state.get('aid') != alternative_id or state.get('kind') != kind:
                     raise ValueError('La alternativa cambió; recargue la página antes de proponer.')
@@ -74,7 +79,8 @@ def propose(alternative_id):
             except (ValueError,TypeError,sqlite3.IntegrityError) as exc:
                 error = 'No fue posible guardar el aporte.' if isinstance(exc,sqlite3.IntegrityError) else str(exc)
         tokens = {kind:sign({'aid':alternative_id,'kind':kind,'baseline':baseline(db,alternative_id,kind)}) for kind in ('MORPHOLOGY','RELATION')}
-        return render_template('alternative_change_propose.html',**context,tokens=tokens,csrf_token=csrf,error=error), 400 if error else 200
+        pending = pending_changes(db,[alternative_id])[alternative_id]
+        return render_template('alternative_change_propose.html',**context,tokens=tokens,csrf_token=csrf,error=error,mode=mode,pending=pending), 400 if error else 200
     finally:
         db.close()
 

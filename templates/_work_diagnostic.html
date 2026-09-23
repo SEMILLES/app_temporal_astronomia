@@ -11,10 +11,14 @@ Asignación a alternativa: {{ diagnostic.assignment|length }} pendientes</p>
 {% for kind, title, anchor in [('morphology','Morfología','morfologia'),('relations','Relaciones fonológicas','relaciones')] %}
 {% if diagnostic[kind] %}<p><strong>{{ title }} · bloqueante</strong></p><ul>
 {% for item in diagnostic[kind] %}<li>Alternativa {{ item.working_label or 'sin etiqueta' }} · ID {{ item.alternative_id }}:
+{% set pending = item.pending_changes['MORPHOLOGY' if kind=='morphology' else 'RELATION'] %}
+{% for p in pending %}<a href="{{url_for('alternative_changes.detail',submission_id=p.submission_id)}}">En revisión · Aporte #{{p.submission_id}}</a>{% if not loop.last %} · {% endif %}{% endfor %}
 {% if g.current_access_role in ('reviewer','master') %}
 <a href="{{ url_for('alternatives.gestionar_alternativa', alternative_id=item.alternative_id, _anchor=anchor) }}">Resolver {{ title|lower }}</a>
-{% else %}
-<a href="{{ url_for('alternative_changes.propose', alternative_id=item.alternative_id, _anchor=anchor) }}">Proponer {{ 'morfología' if kind=='morphology' else 'relación fonológica' }} · alternativa {{ item.alternative_id }}</a>
+{% elif not pending %}
+<a href="{{ url_for('alternative_changes.propose', alternative_id=item.alternative_id, mode='morphology' if kind=='morphology' else 'relation') }}">Proponer {{ 'morfología' if kind=='morphology' else 'relación fonológica' }} · alternativa {{ item.alternative_id }}</a>
+{% elif kind=='relations' %}
+<a href="{{url_for('alternative_changes.propose',alternative_id=item.alternative_id,mode='relation')}}">Ver relaciones y proponer otras</a>
 {% endif %}</li>{% endfor %}</ul>{% endif %}
 {% endfor %}
 {% if diagnostic.grammar %}<p><strong>Gramática · no bloqueante</strong></p><ul>

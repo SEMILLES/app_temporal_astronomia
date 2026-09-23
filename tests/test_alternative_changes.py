@@ -82,6 +82,30 @@ class AlternativeChangeTests(unittest.TestCase):
         self.db.commit()
         with self.assertRaises(ValueError):self.propose('RELATION',{'target_id':1,'parameter':'CM_1'})
 
+    def test_pending_morphology_blocks_duplicate_and_rejection_reopens(self):
+        sid=self.propose()
+        before=list(self.db.iterdump())
+        with self.assertRaisesRegex(ValueError,'revisión'):self.propose(values={'component_count':2,'free_permutation':'NO'})
+        self.assertEqual(before,list(self.db.iterdump()))
+        item=next(r for r in concept_diagnostics(self.db,[1])[1]['morphology'] if r['alternative_id']==2)
+        self.assertEqual([r['submission_id'] for r in item['pending_changes']['MORPHOLOGY']],[sid])
+        self.review(sid,'rejected')
+        sid=self.propose();self.review(sid)
+        self.assertNotIn(2,[r['alternative_id'] for r in concept_diagnostics(self.db,[1])[1]['morphology']])
+
+    def test_pending_relation_duplicate_is_symmetric(self):
+        sid=self.propose('RELATION',{'target_id':1,'parameter':'CM_1'})
+        with self.assertRaisesRegex(ValueError,'revisión'):
+            create_proposal(self.db,1,'RELATION',{'target_id':2,'parameter':'CM_1'},collaborator_id=1,access_role='analyst')
+        with self.assertRaisesRegex(ValueError,'revisión'):self.propose('RELATION',{'target_id':1,'parameter':'CM_1'})
+        from alternative_change_workflow import pending_changes
+        pending=pending_changes(self.db,[1,2])
+        self.assertEqual(pending[1]['RELATION'][0]['submission_id'],sid)
+        self.assertEqual(pending[2]['RELATION'][0]['submission_id'],sid)
+        other=self.propose('RELATION',{'target_id':1,'parameter':'OR_M1'})
+        self.assertNotEqual(sid,other)
+        self.review(sid);self.review(other,'rejected')
+
     def test_failures_roll_back_everything(self):
         for kind, table, event in [('MORPHOLOGY','alternative_morphology','INSERT'),
                                   ('MORPHOLOGY','alternative_morphology','UPDATE'),
@@ -121,16 +145,24 @@ class Forms(HTMLParser):
         if tag=='form':self.current={};self.forms.append(self.current)
         if tag=='input' and self.current is not None and a.get('name'):self.current[a['name']]=a.get('value','')
 client=app.test_client()
-page=client.get('/a/alternativas/2/proponer');assert page.status_code==200,page.text
+page=client.get('/a/alternativas/2/proponer?mode=morphology');assert page.status_code==200,page.text
+assert 'name="kind" value="RELATION"' not in page.text
+assert 'Evidencias asociadas' in page.text
 forms=Forms(page.text).forms
 data=next(f for f in forms if f.get('kind')=='MORPHOLOGY')
 data.update(component_count='1',collaborator_id='1')
 assert client.post('/a/alternativas/2/proponer',data={}).status_code==400
-response=client.post('/a/alternativas/2/proponer',data=data);assert response.status_code==302,response.text
+response=client.post('/a/alternativas/2/proponer?mode=morphology',data=data);assert response.status_code==302,response.text
 with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM alternative_morphology').fetchone()[0]==0
     sid=db.execute('SELECT max(submission_id) FROM submission').fetchone()[0]
+page=client.get('/a/alternativas/2/proponer?mode=morphology')
+assert 'En revisión' in page.text and 'name="component_count"' not in page.text
+assert client.post('/a/alternativas/2/proponer?mode=morphology',data=data).status_code==400
 assert '/aportes/alternativas/'+str(sid) in client.get('/r/aportes/pendientes').text
+import re
+link=re.search('<a[^>]*href="/r/aportes/alternativas/'+str(sid)+'"[^>]*>',client.get('/r/aportes/pendientes').text)
+assert link and 'target=' not in link.group()
 detail='/aportes/alternativas/'+str(sid)
 assert client.post('/a'+detail+'/decidir',data={}).status_code==404
 page=client.get('/r'+detail);assert page.status_code==200,page.text
@@ -138,10 +170,12 @@ data=Forms(page.text).forms[0];data.update(decision='accepted',collaborator_id='
 response=client.post('/r'+detail+'/decidir',data=data);assert response.status_code==302,response.text
 with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM alternative_morphology WHERE is_current=1').fetchone()[0]==1
-page=client.get('/a/alternativas/2/proponer')
+page=client.get('/a/alternativas/2/proponer?mode=relation')
+assert 'name="component_count"' not in page.text
+assert 'value="2"' not in re.search('<select name="target_id".*?</select>',page.text,re.S).group()
 data=next(f for f in Forms(page.text).forms if f.get('kind')=='RELATION')
 data.update(target_id='1',parameter='CM_1',collaborator_id='1')
-response=client.post('/a/alternativas/2/proponer',data=data);assert response.status_code==302,response.text
+response=client.post('/a/alternativas/2/proponer?mode=relation',data=data);assert response.status_code==302,response.text
 with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM alternative_relation').fetchone()[0]==0
     sid=db.execute('SELECT max(submission_id) FROM submission').fetchone()[0]

@@ -1,10 +1,11 @@
 """Transactional Concept ↔ collaborator administration."""
 from activity import resolve_collaborator
 from source_details import occurrence_presentation
+from alternative_change_workflow import pending_changes
 
 
 def concept_diagnostics(db, concept_ids):
-    """Read the four task types in three batched queries, never mutate them."""
+    """Read canonical tasks and pending proposals in four batched queries."""
     result = {identifier: dict(alternative_count=0, morphology=[], relations=[], grammar=[], assignment=[])
               for identifier in concept_ids}
     if not result:
@@ -17,10 +18,13 @@ def concept_diagnostics(db, concept_ids):
                (r.alternative_low_id=a.alternative_id OR r.alternative_high_id=a.alternative_id)) AS has_relation
         FROM alternative a WHERE a.retired_at IS NULL AND a.concept_id IN ({marks})
         ORDER BY a.concept_id,a.working_label,a.alternative_id''', tuple(result))
+    alternatives = list(alternatives)
+    pending = pending_changes(db, [row['alternative_id'] for row in alternatives])
     for row in alternatives:
         diagnostic = result[row['concept_id']]
         diagnostic['alternative_count'] += 1
         item = dict(row)
+        item['pending_changes'] = pending[row['alternative_id']]
         if not row['has_morphology']:
             diagnostic['morphology'].append(item)
         suffix = (row['working_label'] or '').strip().lower()[-1:]

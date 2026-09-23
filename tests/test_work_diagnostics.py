@@ -113,7 +113,7 @@ class WorkDiagnosticTests(unittest.TestCase):
         self.db.set_trace_callback(queries.append)
         result = concept_diagnostics(self.db, [1, 2, 3])
         self.db.set_trace_callback(None)
-        self.assertEqual(len(queries), 3)
+        self.assertEqual(len(queries), 4)
         self.assertEqual(result[2], dict(alternative_count=0, morphology=[], relations=[], grammar=[], assignment=[]))
         self.assertEqual(list(self.db.iterdump()), before)
         self.assertEqual(list_concepts(self.db)['diagnostics'], result)
@@ -147,8 +147,8 @@ assert html.count('(25ID) Fuente de prueba')==2
 assert html.count('Página: 17')==2
 assert '/a/ocurrencias/1/gramatica' in html and '/a/ocurrencias/2/clasificar' in html
 assert '/a/ocurrencias/1/clasificar' not in html
-assert '/a/alternativas/1/proponer#morfologia' in html
-assert '/a/alternativas/2/proponer#relaciones' in html
+assert '/a/alternativas/1/proponer?mode=morphology' in html
+assert '/a/alternativas/2/proponer?mode=relation' in html
 assert '/gestionar' not in html
 assert 'aún no está disponible' not in html
 assert client.get('/a/alternativas/1/proponer').status_code==200

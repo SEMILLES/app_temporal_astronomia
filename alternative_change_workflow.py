@@ -46,6 +46,33 @@ def _normalize(db, alternative_id, kind, values):
     raise ValueError('Tipo de propuesta no válido.')
 
 
+def pending_changes(db, alternative_ids):
+    """One batched read; a pending relation concerns both endpoints."""
+    result = {aid: {'MORPHOLOGY': [], 'RELATION': []} for aid in alternative_ids}
+    if not result:
+        return result
+    marks = ','.join('?' for _ in result)
+    for row in db.execute(f'''SELECT s.submission_id,s.alternative_id,p.change_kind,
+            json_extract(p.payload,'$.target_id') AS target_id,
+            json_extract(p.payload,'$.parameter') AS parameter
+        FROM submission s JOIN alternative_change_submission p USING(submission_id)
+        WHERE s.status='pending' AND (s.alternative_id IN ({marks})
+            OR (p.change_kind='RELATION' AND json_extract(p.payload,'$.target_id') IN ({marks})))
+        ORDER BY s.submission_id''', tuple(result) * 2):
+        for aid in {row['alternative_id'], row['target_id']} & result.keys():
+            result[aid][row['change_kind']].append(dict(row))
+    return result
+
+
+def _check_pending_duplicate(db, aid, kind, values):
+    pending = pending_changes(db, [aid])[aid][kind]
+    for row in pending:
+        if kind == 'MORPHOLOGY' or (
+                {aid, values['target_id']} == {row['alternative_id'], row['target_id']}
+                and values['parameter'] == row['parameter']):
+            raise ValueError(f"Ya existe una propuesta equivalente en revisión: Aporte #{row['submission_id']}.")
+
+
 def create_proposal(db, alternative_id, kind, values, *, collaborator_id, access_role, expected_baseline=None):
     owns = _transaction(db, 'alternative_change_create')
     try:
@@ -54,6 +81,7 @@ def create_proposal(db, alternative_id, kind, values, *, collaborator_id, access
         if expected_baseline is not None and baseline(db,alternative_id,kind) != expected_baseline:
             raise ValueError('La alternativa cambió; recargue la página antes de proponer.')
         normalized = _normalize(db, alternative_id, kind, values)
+        _check_pending_duplicate(db, alternative_id, kind, normalized)
         concept = db.execute('SELECT preferred_label FROM concept WHERE concept_id=?', (target['concept_id'],)).fetchone()[0]
         sid = db.execute("""INSERT INTO submission(alternative_id,submission_type,status,submitted_by)
             VALUES(?,'ALTERNATIVE_CHANGE','pending',?)""", (alternative_id, name)).lastrowid
