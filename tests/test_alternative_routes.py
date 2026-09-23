@@ -307,7 +307,7 @@ class AlternativeRouteTests(unittest.TestCase):
         self.client.post("/ocurrencias/2/clasificar",data={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology_component_count":"N/A"})
         self.resolve_pending_concepts()
         page=self.client.get("/aportes/pendientes").get_data(as_text=True)
-        self.assertIn("Aceptar la propuesta del analista: crear nueva alternativa",page)
+        self.assertIn("Crear una nueva alternativa en el concepto resuelto",page)
         self.assertIn('class="new-decision-controls" hidden',page);self.assertIn('class="existing-decision-controls" hidden',page)
         self.assertIn('name="morphology_resolution" value="pending" checked',page)
         self.assertNotIn('name="approve_morphology"',page)

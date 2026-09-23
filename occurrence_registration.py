@@ -238,10 +238,17 @@ def complete_registration(connection, *, draft_id=None, source_id=None,
              _text(source_locator), _text(provenance_note)),
         )
         occurrence_id = cursor.lastrowid
+        # Preserve the user's choice on this versioned reference, not on the
+        # shared proposal. Label matching may reuse a proposal without changing
+        # the fact that this registration explicitly proposed a new concept.
+        proposal_origin = None
+        if reference_proposal_id is not None:
+            proposal_origin = ('SELECTED_PENDING' if concept_proposal_id not in (None, '')
+                               else 'NEW_PROPOSAL')
         connection.execute(
             "INSERT INTO occurrence_concept_reference "
-            "(occurrence_id, concept_id, concept_proposal_id) VALUES (?, ?, ?)",
-            (occurrence_id, reference_concept_id, reference_proposal_id),
+            "(occurrence_id, concept_id, concept_proposal_id, proposal_origin) VALUES (?, ?, ?, ?)",
+            (occurrence_id, reference_concept_id, reference_proposal_id, proposal_origin),
         )
         if draft_id is not None:
             connection.execute("DELETE FROM occurrence_draft WHERE draft_id = ?", (draft_id,))

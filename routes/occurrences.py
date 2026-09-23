@@ -528,6 +528,7 @@ def _load_classification_page_data(conexion, occurrence_id):
                al.working_label, c.preferred_label,
                r.concept_id AS reference_concept_id,
                r.concept_proposal_id AS reference_concept_proposal_id,
+               r.proposal_origin,
                COALESCE(rc.preferred_label,cp.proposed_label) AS reference_label,
                cp.status AS concept_proposal_status,
                cp.resolved_concept_id

@@ -548,6 +548,9 @@ def crear_esquema(conexion):
                 CHECK (is_current IN (0, 1)),
             supersedes_occurrence_concept_reference_id INTEGER,
             created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            proposal_origin TEXT CHECK (proposal_origin IS NULL OR
+                (concept_proposal_id IS NOT NULL AND
+                 proposal_origin IN ('NEW_PROPOSAL', 'SELECTED_PENDING'))),
             FOREIGN KEY (occurrence_id) REFERENCES occurrence(occurrence_id),
             FOREIGN KEY (concept_id) REFERENCES concept(concept_id),
             FOREIGN KEY (concept_proposal_id)

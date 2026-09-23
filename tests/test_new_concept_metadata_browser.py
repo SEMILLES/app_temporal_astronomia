@@ -5,6 +5,7 @@ import pytest
 
 from tests.test_new_concept_metadata import http
 from alternative_workflow import create_alternative_submission
+from tests.test_concept_reference_origin import register, propose, resolve, add_alternative
 
 playwright = pytest.importorskip('playwright.sync_api')
 ROOT = Path(__file__).resolve().parents[1]
@@ -91,3 +92,42 @@ def test_reviewer_existing_target_hides_and_disables_editor(http, page):
     assert page.locator('[name="concept_action"]').input_value() == 'ACCEPT_PROPOSAL'
     assert not editor.is_visible()
     assert submitted_metadata(page) == {}
+
+
+def test_new_proposal_locks_lexical_radios_and_submits_new(http, page):
+    oid = register(http, proposed_label='CONCEPTO NUEVO')
+    http.role = 'analyst'
+    page.goto(f'http://lesico.test/ocurrencias/{oid}/clasificar')
+    for value in ('NEW', 'EXISTING', 'UNSURE'):
+        radio = page.locator(f'input[type=radio][name=proposal_kind][value={value}]')
+        assert radio.is_visible()
+        assert radio.is_disabled()
+        assert radio.is_checked() == (value == 'NEW')
+    assert page.locator('#morphology').is_visible()
+    assert page.locator('#phonological-relations').is_visible()
+    assert page.locator('form').filter(has=page.locator('#morphology')).evaluate(
+        "form => new FormData(form).getAll('proposal_kind')") == ['NEW']
+
+
+def test_resolved_concept_availability_and_changed_target_in_browser(http, page):
+    oid = register(http, proposed_label='CONCEPTO NUEVO')
+    sid = propose(http, oid)
+    cid = resolve(http, sid)
+    page.goto(f'http://lesico.test/aportes/{sid}')
+    existing = page.locator('[name=decision][value=existing]')
+    assert existing.is_visible()
+    assert existing.is_disabled()
+    assert page.get_by_text('El concepto resuelto no tiene alternativas vigentes.').is_visible()
+    for action in ('new', 'rejected', 'pending'):
+        assert page.locator(f'[name=decision][value={action}]').is_enabled()
+    aid = add_alternative(http, cid=cid)
+    page.reload()
+    assert existing.is_enabled()
+    existing.check()
+    page.locator('[name=alternative_id]').select_option(str(aid))
+    resolve(http, sid, 2)
+    page.reload()
+    assert existing.is_disabled()
+    assert not existing.is_checked()
+    assert page.locator('[name=alternative_id]').input_value() == ''
+    assert page.locator(f'[name=alternative_id] option[value="{aid}"]').count() == 0

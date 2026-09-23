@@ -142,6 +142,12 @@ def create_alternative_submission(connection, occurrence_id, proposal_kind, *,
         raise AlternativeWorkflowError("Tipo de propuesta no válido.")
     concept_id, proposal_id = _context_reference(connection, occurrence_id)
     resolved_concept = _context_concept(connection, concept_id, proposal_id)
+    reference = connection.execute(
+        'SELECT proposal_origin FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1',
+        (occurrence_id,)).fetchone()
+    if reference['proposal_origin'] == 'NEW_PROPOSAL' and proposal_kind != 'NEW':
+        raise AlternativeWorkflowError(
+            'Al proponer un concepto nuevo, debe proponer una alternativa nueva.')
     note = (analysis_note or "").strip() or None
     if proposal_kind == "EXISTING":
         if proposed_existing_alternative_id is None:
@@ -437,6 +443,8 @@ def review_as_existing(connection, submission_id, alternative_id, *,
                 raise AlternativeWorkflowError('Guarde la resolución conceptual y vuelva a abrir la vista previa.')
         submission=_submission(connection,submission_id)
         concept_id=_resolve_concept(connection,submission,concept_resolution)
+        if alternative_id in (None, ''):
+            raise AlternativeWorkflowError('Seleccione una alternativa vigente del concepto resuelto.')
         if not _valid_alternative(connection,int(alternative_id),concept_id):
             raise AlternativeWorkflowError("La alternative seleccionada no pertenece al concept resuelto o está retirada.")
         if relation_policy != "preserve":

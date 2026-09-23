@@ -17,10 +17,10 @@
 {% if not ctx['concept_resolution'] %}<p>Concepto pendiente. Es necesario guardar la resolución del concepto antes de resolver el resto del análisis.</p>{% else %}<p>Concepto resuelto. Ya es posible continuar con la decisión sobre la alternativa.</p>{% endif %}
 <fieldset{% if not ctx['concept_resolution'] %} disabled{% endif %}><legend>Resolución del resto del análisis</legend>
 <fieldset><legend>Decisión principal</legend>
-{% if aporte['proposal_kind']=='NEW' %}<label><input type="radio" name="decision" value="new" required> Aceptar la propuesta del analista: crear nueva alternativa</label>
-{% elif aporte['proposal_kind']=='EXISTING' %}<label><input type="radio" name="decision" value="existing_proposed" required{% if not ctx['proposed_alternative_matches'] %} disabled{% endif %}> Aceptar la alternativa propuesta por el analista</label>{% endif %}
-<label><input type="radio" name="decision" value="existing" required> {{ 'Asignar a otra alternativa existente' if aporte['proposal_kind']=='EXISTING' else 'Asignar a una alternativa existente' }}</label>
-{% if aporte['proposal_kind']!='NEW' %}<label><input type="radio" name="decision" value="new" required> Crear una nueva alternativa</label>{% endif %}
+<label><input type="radio" name="decision" value="new" required> Crear una nueva alternativa en el concepto resuelto</label>
+{% if aporte['proposal_kind']=='EXISTING' %}<label><input type="radio" name="decision" value="existing_proposed" required{% if not ctx['proposed_alternative_matches'] %} disabled{% endif %}> Aceptar la alternativa propuesta por el analista</label>{% endif %}
+<label><input type="radio" name="decision" value="existing" required{% if not ctx['alternatives'] %} disabled{% endif %}> {{ 'Asignar a otra alternativa existente' if aporte['proposal_kind']=='EXISTING' else 'Asignar a una alternativa existente' }}</label>
+{% if ctx['concept_resolution'] and not ctx['alternatives'] %}<p>El concepto resuelto no tiene alternativas vigentes.</p>{% endif %}
 <label><input type="radio" name="decision" value="rejected" required> Rechazar el resto del análisis</label>
 <label><input type="radio" name="decision" value="pending" required> Dejar pendiente</label>
 </fieldset>

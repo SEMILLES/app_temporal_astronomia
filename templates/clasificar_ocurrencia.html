@@ -3,6 +3,7 @@
 {% block content %}
 {% set has_relation_targets = alternatives or pending_context %}
 {% set form_values = form_values|default({}) %}
+{% set force_new_alternative = occurrence['proposal_origin'] == 'NEW_PROPOSAL' %}
 {% if registration_flow %}<p><strong>Paso 3 de 4 — Análisis léxico</strong></p>{% endif %}
 <h1>Clasificar ocurrencia</h1>
 
@@ -32,7 +33,11 @@
 </section>
 {% endif %}
 
-<p><label><input type="radio" name="proposal_kind" value="EXISTING" required{% if form_values.get('proposal_kind') == 'EXISTING' %} checked{% endif %}> Corresponde a una alternativa existente</label></p>
+{% if force_new_alternative %}
+<p>Al proponer un concepto nuevo, la propuesta se registra necesariamente como una alternativa nueva. El revisor podrá reasignar el concepto y tomar la decisión léxica definitiva.</p>
+<input type="hidden" name="proposal_kind" value="NEW">
+{% endif %}
+<p><label><input type="radio" name="proposal_kind" value="EXISTING" required{% if force_new_alternative %} disabled{% elif form_values.get('proposal_kind') == 'EXISTING' %} checked{% endif %}> Corresponde a una alternativa existente</label></p>
 
 <p id="existing-alternative-field" hidden>
 <label>Alternativa existente
@@ -45,8 +50,8 @@
 </label>
 </p>
 
-<p><label><input type="radio" name="proposal_kind" value="NEW"{% if form_values.get('proposal_kind') == 'NEW' %} checked{% endif %}> Parece una nueva alternativa</label></p>
-<p><label><input type="radio" name="proposal_kind" value="UNSURE"{% if form_values.get('proposal_kind') == 'UNSURE' %} checked{% endif %}> No estoy seguro</label></p>
+<p><label><input type="radio" name="proposal_kind" value="NEW"{% if force_new_alternative %} checked disabled{% elif form_values.get('proposal_kind') == 'NEW' %} checked{% endif %}> Parece una nueva alternativa</label></p>
+<p><label><input type="radio" name="proposal_kind" value="UNSURE"{% if force_new_alternative %} disabled{% elif form_values.get('proposal_kind') == 'UNSURE' %} checked{% endif %}> No estoy seguro</label></p>
 
 <fieldset id="phonological-relations">
 <legend>Relaciones fonológicas</legend>
