@@ -9,9 +9,26 @@ sys.path.insert(0, str(ROOT / 'migration/usage_profile_2026-09-18'))
 from safe_database import cli, run, check_integrity
 
 
+def authorize_environment():
+    environment = os.environ.get('LESICO_ENV', '').strip().lower()
+    if environment in ('production', 'produccion', 'producción', 'prod'):
+        raise ValueError('La migración 028 no está autorizada en producción.')
+    if any(k.startswith('RAILWAY_') for k in os.environ):
+        # Require deliberate authorization AND the identity already allowlisted
+        # by safe_database.run. Missing Railway identity is not evidence of tests.
+        if not (
+            os.environ.get('LESICO_MIGRATION_028_ALLOW_PRUEBAS') == '1'
+            and environment == 'pruebas'
+            and os.environ.get('RAILWAY_ENVIRONMENT_NAME') == 'pruebas'
+            and os.environ.get('RAILWAY_ENVIRONMENT_ID') == 'dc6a07af-8842-44c8-a072-a0d3e10ae203'
+        ):
+            raise ValueError(
+                'Railway requiere LESICO_MIGRATION_028_ALLOW_PRUEBAS=1, '
+                'LESICO_ENV=pruebas y nombre/ID verificados del entorno PRUEBAS.')
+
+
 def migration(db):
-    if any(k.startswith('RAILWAY_') for k in os.environ) or os.environ.get('LESICO_ENV', '').strip().lower() == 'production':
-        raise ValueError('Migración exclusivamente local.')
+    authorize_environment()
     if not db.in_transaction or db.execute('PRAGMA foreign_keys').fetchone()[0] != 1:
         raise ValueError('Se requiere transacción y claves foráneas activas.')
     columns = {r[1] for r in db.execute('PRAGMA table_info(occurrence_concept_reference)')}

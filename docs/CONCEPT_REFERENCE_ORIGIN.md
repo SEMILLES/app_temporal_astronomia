@@ -30,21 +30,60 @@ vigencia, la transacción de revisión y el token contra vistas previas obsoleta
 Un destino omitido devuelve un error de validación explícito. Cambiar el concepto
 invalida el formulario anterior y la página nueva recalcula los destinos.
 
-## Migración local
+## Ejecución de la migración
 
 Las bases existentes requieren la migración antes de usar este cambio. El comando
 predeterminado solo simula la operación; `--apply` crea un respaldo y aplica la
-columna dentro de una transacción. Es idempotente y rechaza Railway y producción.
+columna dentro de una transacción. Es idempotente. Producción sigue bloqueada,
+incluso con la variable de autorización activada.
 
 ```text
 python migrations/028_concept_reference_origin.py --database RUTA_COPIA_LOCAL.db
 python migrations/028_concept_reference_origin.py --database RUTA_COPIA_LOCAL.db --apply
 ```
 
+Para una ejecución deliberada **dentro del entorno Railway PRUEBAS**, 028 exige
+simultáneamente:
+
+- `LESICO_MIGRATION_028_ALLOW_PRUEBAS=1` (autorización específica de esta migración).
+- `LESICO_ENV=pruebas` (destino declarado).
+- `RAILWAY_ENVIRONMENT_NAME=pruebas`.
+- `RAILWAY_ENVIRONMENT_ID=dc6a07af-8842-44c8-a072-a0d3e10ae203`, el ID ya autorizado
+  por el helper compartido.
+
+El nombre y el ID deben proceder del entorno Railway: no sobrescribirlos para
+hacer pasar la comprobación. No se presupone que cualquier Railway sea PRUEBAS.
+Con `LESICO_ENV` ya configurado como `pruebas`, los comandos en ese contenedor
+(shell POSIX) serían:
+
+```sh
+# Simulación: usa la ruta configurada de la base de PRUEBAS.
+LESICO_MIGRATION_028_ALLOW_PRUEBAS=1 python migrations/028_concept_reference_origin.py --database "${LESICO_DATABASE_PATH:?Falta la ruta de la base de PRUEBAS}"
+# Aplicación deliberada: respaldo automático con nombre único junto a la base.
+LESICO_MIGRATION_028_ALLOW_PRUEBAS=1 python migrations/028_concept_reference_origin.py --database "${LESICO_DATABASE_PATH:?Falta la ruta de la base de PRUEBAS}" --apply
+```
+
+La autorización se limita a cada comando. Puede usarse `--backup RUTA_NUEVA`
+para un destino de respaldo explícito y escribible. Si no se puede crear el
+respaldo, la operación se cancela sin aplicar el cambio. Se conservan sin cambios
+`safe_database.cli/run`, `--apply`, la transacción y `check_integrity`.
+
 En esta entrega solo se ejecutó sobre bases sintéticas temporales de pruebas.
 No se migraron bases de uso real ni se desplegó.
 
 ## Verificación
+
+Para el ajuste de seguridad/ejecución de 028:
+
+```text
+python -B -m pytest -q -p no:cacheprovider --tb=short tests/test_migration_028_execution.py tests/test_concept_reference_origin.py
+```
+
+Resultado: **50 pruebas aprobadas**. Incluye 18 casos nuevos de autorización,
+simulación, CLI, backup, integridad e idempotencia, con variables de Railway
+simuladas y archivos locales sintéticos. Ninguna prueba contacta Railway.
+
+Verificación de la entrega funcional original `76ff181`:
 
 ```text
 python -B -m pytest -q -p no:cacheprovider --tb=short tests/test_concept_reference_origin.py tests/test_new_concept_metadata_browser.py tests/test_new_concept_metadata.py tests/test_concept_classification.py tests/test_submission_concept_resolution.py tests/test_submission_lexical_ui.py tests/test_alternative_workflow.py tests/test_alternative_routes.py tests/test_alternative_morphology.py tests/test_submission_lexical_decision.py tests/test_phase18c3_registration_flow.py
