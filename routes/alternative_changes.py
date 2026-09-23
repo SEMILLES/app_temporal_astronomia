@@ -4,7 +4,7 @@ import sqlite3
 from flask import Blueprint, abort, g, redirect, render_template, request, session, url_for
 from database import conectar
 from access_control import requires_analyst, requires_reviewer
-from alternative_change_workflow import create_proposal, get_proposal, review_proposal, baseline, pending_changes
+from alternative_change_workflow import create_proposal, create_relation_proposals, get_proposal, review_proposal, baseline, pending_changes
 from alternative_admin import relation_preview
 from edit_concurrency import sign, unsign
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
@@ -55,6 +55,8 @@ def propose(alternative_id):
         abort(404)
     csrf = _csrf(); db = conectar()
     try:
+        if request.method=='GET':
+            db.execute('BEGIN')
         context = _context(db,alternative_id)
         if context['alternative']['retired_at']:
             abort(404)
@@ -73,14 +75,22 @@ def propose(alternative_id):
                         component_count_not_applicable=count=='N/A',free_permutation=request.form.get('free_permutation'),
                         note=request.form.get('morphology_note'),components=_components_from_form(request.form))
                 else:
-                    values = dict(target_id=request.form.get('target_id'),parameter=request.form.get('parameter'))
+                    targets, parameters = request.form.getlist('target_id'), request.form.getlist('parameter')
+                    if len(targets)!=len(parameters):
+                        raise ValueError('Cada relación debe tener alternativa y parámetro.')
+                    ids = create_relation_proposals(db,alternative_id,
+                        [dict(target_id=t,parameter=p) for t,p in zip(targets,parameters)],
+                        collaborator_id=request.form.get('collaborator_id'),access_role=g.current_access_role,expected_baseline=state['baseline'])
+                    return redirect(url_for('alternative_changes.propose',alternative_id=alternative_id,mode='relation',sent=','.join(map(str,ids))))
                 sid = create_proposal(db,alternative_id,kind,values,collaborator_id=request.form.get('collaborator_id'),access_role=g.current_access_role,expected_baseline=state['baseline'])
                 return redirect(url_for('alternative_changes.detail',submission_id=sid))
             except (ValueError,TypeError,sqlite3.IntegrityError) as exc:
                 error = 'No fue posible guardar el aporte.' if isinstance(exc,sqlite3.IntegrityError) else str(exc)
         tokens = {kind:sign({'aid':alternative_id,'kind':kind,'baseline':baseline(db,alternative_id,kind)}) for kind in ('MORPHOLOGY','RELATION')}
         pending = pending_changes(db,[alternative_id])[alternative_id]
-        return render_template('alternative_change_propose.html',**context,tokens=tokens,csrf_token=csrf,error=error,mode=mode,pending=pending), 400 if error else 200
+        unavailable = [[r['alternative_high_id'] if r['alternative_low_id']==alternative_id else r['alternative_low_id'],r['phonological_parameter']] for r in context['relations']]
+        unavailable += [[p['target_id'] if p['alternative_id']==alternative_id else p['alternative_id'],p['parameter']] for p in pending['RELATION']]
+        return render_template('alternative_change_propose.html',**context,tokens=tokens,csrf_token=csrf,error=error,mode=mode,pending=pending,unavailable=unavailable), 400 if error else 200
     finally:
         db.close()
 
@@ -90,6 +100,7 @@ def propose(alternative_id):
 def detail(submission_id):
     db=conectar()
     try:
+        db.execute('BEGIN')
         proposal=get_proposal(db,submission_id)
         if not proposal:abort(404)
         context=_context(db,proposal['alternative_id'])
@@ -98,7 +109,8 @@ def detail(submission_id):
             try:preview=relation_preview(db,proposal['alternative_id'],action='add',**json.loads(proposal['payload']))
             except (ValueError,TypeError) as exc:warning=str(exc)
         return render_template('alternative_change_detail.html',**context,proposal=proposal,
-            proposed=json.loads(proposal['payload']),preview=preview,warning=warning,csrf_token=_csrf())
+            proposed=json.loads(proposal['payload']),preview=preview,warning=warning,csrf_token=_csrf(),
+            review_token=sign({'sid':submission_id,'baseline':baseline(db,proposal['alternative_id'],proposal['change_kind'])}) if proposal['status']=='pending' and not context['alternative']['retired_at'] else '')
     finally:db.close()
 
 
@@ -107,8 +119,15 @@ def detail(submission_id):
 def decide(submission_id):
     _csrf();db=conectar()
     try:
+        expected = None
+        proposal = get_proposal(db,submission_id)
+        if request.form.get('decision')=='accepted' and proposal and proposal['change_kind']=='RELATION':
+            state = unsign(request.form.get('review_token'))
+            if state.get('sid')!=submission_id:
+                raise ValueError('Vuelva a abrir el aporte para revisar la decisión.')
+            expected = state['baseline']
         review_proposal(db,submission_id,request.form.get('decision'),collaborator_id=request.form.get('collaborator_id'),
-            access_role=g.current_access_role,note=request.form.get('review_note'))
+            access_role=g.current_access_role,note=request.form.get('review_note'),expected_baseline=expected)
         return redirect(url_for('alternative_changes.detail',submission_id=submission_id))
     except (ValueError,sqlite3.IntegrityError) as exc:
         return render_template('alternative_change_error.html',error='No fue posible aplicar el cambio.' if isinstance(exc,sqlite3.IntegrityError) else str(exc),submission_id=submission_id),400

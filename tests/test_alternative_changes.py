@@ -106,6 +106,40 @@ class AlternativeChangeTests(unittest.TestCase):
         self.assertNotEqual(sid,other)
         self.review(sid);self.review(other,'rejected')
 
+    def test_relation_batch_is_atomic_and_independently_reviewed(self):
+        from alternative_change_workflow import create_relation_proposals, baseline
+        actor=dict(collaborator_id=1,access_role='analyst')
+        values=[{'target_id':1,'parameter':'CM_1'},{'target_id':1,'parameter':'OR_M1'}]
+        before=list(self.db.iterdump())
+        for invalid in ([values[0],values[0]], [values[0],{'target_id':2,'parameter':'CM_1'}], []):
+            with self.assertRaises(ValueError):create_relation_proposals(self.db,2,invalid,**actor)
+            self.assertEqual(before,list(self.db.iterdump()))
+        ids=create_relation_proposals(self.db,2,values,**actor)
+        self.assertEqual(len(set(ids)),2)
+        stale=baseline(self.db,2,'RELATION')
+        self.review(ids[0])
+        before=list(self.db.iterdump())
+        with self.assertRaises(ValueError):
+            review_proposal(self.db,ids[1],'accepted',collaborator_id=1,access_role='reviewer',expected_baseline=stale)
+        self.assertEqual(before,list(self.db.iterdump()))
+        review_proposal(self.db,ids[1],'accepted',collaborator_id=1,access_role='reviewer',expected_baseline=baseline(self.db,2,'RELATION'))
+        rows=self.db.execute('SELECT alternative_low_id,alternative_high_id FROM alternative_relation WHERE is_current=1').fetchall()
+        self.assertEqual([tuple(r) for r in rows],[(1,2),(1,2)])
+
+    def test_two_connections_cannot_create_duplicate_morphology(self):
+        from concurrent.futures import ThreadPoolExecutor
+        with tempfile.TemporaryDirectory() as folder:
+            path=Path(folder)/'concurrent.db'
+            with closing(sqlite3.connect(path)) as copy:self.db.backup(copy)
+            def propose():
+                with closing(sqlite3.connect(path)) as db:
+                    db.row_factory=sqlite3.Row
+                    try:return create_proposal(db,2,'MORPHOLOGY',{'component_count':1},collaborator_id=1,access_role='analyst')
+                    except ValueError:return None
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                results=list(pool.map(lambda _:propose(),range(2)))
+            self.assertEqual(sum(sid is not None for sid in results),1)
+
     def test_failures_roll_back_everything(self):
         for kind, table, event in [('MORPHOLOGY','alternative_morphology','INSERT'),
                                   ('MORPHOLOGY','alternative_morphology','UPDATE'),
@@ -189,6 +223,45 @@ with closing(conectar()) as db:
 assert client.get('/a/alternativas/2/gestionar').status_code==404
 assert client.get('/r/alternativas/2/gestionar').status_code==200
 assert client.get('/a/aportes').status_code==200
+from playwright.sync_api import sync_playwright, expect
+from urllib.parse import urlsplit
+def serve(route):
+    req=route.request;url=urlsplit(req.url)
+    response=client.open(url.path+('?' + url.query if url.query else ''),method=req.method,
+        data=req.post_data,content_type=req.headers.get('content-type'),follow_redirects=True)
+    try:route.fulfill(status=response.status_code,body=response.data,content_type=response.content_type)
+    finally:response.close()
+with sync_playwright() as pw:
+    browser=pw.chromium.launch(headless=True)
+    try:
+        page=browser.new_page();page.route('**/*',serve);errors=[]
+        page.on('pageerror',lambda error:errors.append(str(error)))
+        page.goto('http://local.test/a/alternativas/2/proponer?mode=relation')
+        page.locator('#lesico-collaborator').select_option('1')
+        expect(page.locator('#prepare-relation')).to_be_disabled()
+        for parameter in ('CM_2','OR_M1'):
+            page.locator('#relation-parameter').select_option(parameter)
+            page.locator('#prepare-relation').click()
+            expect(page.locator('#prepare-relation')).to_be_disabled()
+        expect(page.locator('#prepared-relations li')).to_have_count(2)
+        page.locator('#send-relations').click()
+        with closing(conectar()) as db:
+            pending=[r[0] for r in db.execute("SELECT submission_id FROM submission WHERE status='pending'")]
+            assert len(pending)==2
+            assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==1
+        for sid,decision in zip(pending,('accepted','rejected')):
+            page.goto('http://local.test/r/aportes/alternativas/'+str(sid))
+            page.locator('textarea[name=review_note]').fill('Revision individual')
+            page.locator('button[value='+decision+']').click()
+        with closing(conectar()) as db:
+            assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==2
+        assert not errors,errors
+    finally:browser.close()
+with closing(conectar()) as db:
+    db.execute("UPDATE alternative SET retired_at=CURRENT_TIMESTAMP WHERE alternative_id=1");db.commit()
+page=client.get('/a/alternativas/2/proponer?mode=relation')
+assert 'No hay otras alternativas activas' in page.text
+assert 'id="relation-proposals"' not in page.text
 '''
             result=subprocess.run([sys.executable,'-c',script],cwd=ROOT,env=env,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)

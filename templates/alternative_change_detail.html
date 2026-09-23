@@ -15,6 +15,7 @@
 {% if warning %}<p role="alert">{{warning}}</p>{% endif %}
 {% if proposal.status=='pending' and g.current_access_role in ('reviewer','master') %}
 <form method="post" action="{{url_for('alternative_changes.decide',submission_id=proposal.submission_id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}">
+<input type="hidden" name="review_token" value="{{review_token}}">
 <label>Nota de revisión (obligatoria al rechazar) <textarea name="review_note"></textarea></label>
 <button name="decision" value="accepted">Aprobar</button><button name="decision" value="rejected">Rechazar</button></form>
 {% elif proposal.status=='resolved' %}<p>Revisado por {{proposal.reviewed_by}} · {{proposal.resolved_at}} · {{proposal.review_note or ''}}</p>{% endif %}

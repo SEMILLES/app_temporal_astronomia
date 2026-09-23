@@ -27,10 +27,14 @@
 <section id="relaciones"><h2>Proponer relación fonológica</h2>
 {% for p in pending.RELATION %}<p><a href="{{url_for('alternative_changes.detail',submission_id=p.submission_id)}}">En revisión · Aporte #{{p.submission_id}}</a> · Alternativas {{p.alternative_id}} ↔ {{p.target_id}} · {{p.parameter}}</p>{% endfor %}
 {% if options %}
-<form method="post"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="state_token" value="{{tokens.RELATION}}"><input type="hidden" name="kind" value="RELATION">
-<label>Otra alternativa del concepto <select name="target_id" required>{% for a in options %}<option value="{{a.alternative_id}}">{{a.working_label or 'Sin etiqueta'}} · ID {{a.alternative_id}}</option>{% endfor %}</select></label>
-<label>Parámetro <select name="parameter">{% for p in parameters %}<option>{{p}}</option>{% endfor %}</select></label>
-<button>Enviar propuesta de relación fonológica</button></form>
+<form method="post" id="relation-proposals"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="state_token" value="{{tokens.RELATION}}"><input type="hidden" name="kind" value="RELATION">
+<label>Otra alternativa del concepto <select name="target_id" id="relation-target" required>{% for a in options %}<option value="{{a.alternative_id}}">{{a.working_label or 'Sin etiqueta'}} · ID {{a.alternative_id}}</option>{% endfor %}</select></label>
+<label>Parámetro <select name="parameter" id="relation-parameter">{% for p in parameters %}<option>{{p}}</option>{% endfor %}</select></label>
+<button type="button" id="prepare-relation" hidden>Agregar relación</button>
+<p id="relation-message" role="status"></p><ul id="prepared-relations"></ul>
+<button id="send-relations">Enviar propuestas</button></form>
+<script type="application/json" id="unavailable-relations">{{unavailable|tojson}}</script>
+<script src="{{url_for('static',filename='alternative-change-tasks.js')}}" defer></script>
 {% else %}<p>No hay otras alternativas activas de este concepto con las cuales establecer una relación fonológica.</p>{% endif %}
 </section>{% endif %}
 {% endblock %}

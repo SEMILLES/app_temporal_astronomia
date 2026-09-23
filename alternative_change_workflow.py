@@ -104,7 +104,21 @@ def get_proposal(db, submission_id):
     return dict(row) if row else None
 
 
-def review_proposal(db, submission_id, decision, *, collaborator_id, access_role, note=None):
+def create_relation_proposals(db, alternative_id, relations, **actor):
+    """Submit the prepared list atomically, with one independent ID per edge."""
+    if not relations:
+        raise ValueError('Prepare al menos una relación.')
+    owns = _transaction(db, 'alternative_relation_batch')
+    try:
+        identifiers = [create_proposal(db,alternative_id,'RELATION',values,**actor) for values in relations]
+        _finish(db,'alternative_relation_batch',owns)
+        return identifiers
+    except Exception:
+        _rollback(db,'alternative_relation_batch',owns)
+        raise
+
+
+def review_proposal(db, submission_id, decision, *, collaborator_id, access_role, note=None, expected_baseline=None):
     owns = _transaction(db, 'alternative_change_review')
     try:
         actor_id, name = _actor(db, collaborator_id, access_role, review=True)
@@ -115,7 +129,11 @@ def review_proposal(db, submission_id, decision, *, collaborator_id, access_role
         if decision == 'accepted':
             aid, kind = proposal['alternative_id'], proposal['change_kind']
             target = _active_alternative(db, aid)
-            if target['concept_id'] != proposal['concept_id'] or baseline(db, aid, kind) != proposal['baseline']:
+            # Relations are independently reviewed against the graph shown on
+            # the review page, which may include previously approved siblings.
+            # Morphology must still match the version the analyst proposed over.
+            expected = expected_baseline if kind=='RELATION' and expected_baseline is not None else proposal['baseline']
+            if target['concept_id'] != proposal['concept_id'] or baseline(db, aid, kind) != expected:
                 raise ValueError('La información canónica cambió desde la propuesta. Rechácela y solicite un nuevo aporte.')
             values = _normalize(db, aid, kind, json.loads(proposal['payload']))
             before = _blocking_ids(db)
