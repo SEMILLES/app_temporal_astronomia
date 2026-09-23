@@ -394,17 +394,25 @@ def _alternative_review_context(db, rows):
         target = submission_concept_scope(db, row['submission_id'], requested_target)['target_concept_id']
         ctx['concept_edit_token'] = edit_token(db, 'submission_concept', row['submission_id'], metadata_target=target)
         ctx['metadata_target'] = target
+        ctx['target_consulted'] = requested_target is not None
+        ctx['consulted_action'] = request.args.get('concept_action', 'USE_EXISTING') if has_request_context() else 'USE_EXISTING'
+        ctx['target_state'] = db.execute('''SELECT c.preferred_label,
+            (SELECT count(*) FROM alternative a WHERE a.concept_id=c.concept_id
+             AND a.retired_at IS NULL) AS alternative_count
+            FROM concept c WHERE c.concept_id=?''', (target,)).fetchone()
         ctx['metadata'] = editor_context(db,None,row['submission_id'])
         from submission_concept_resolution import proposed_concept_decision
         ctx['proposal_creates_new'] = False
+        ctx['proposed_target'] = None
         if row['reference_concept_proposal_id']:
             proposal = db.execute('SELECT proposed_label FROM concept_proposal WHERE concept_proposal_id=?',
                                   (row['reference_concept_proposal_id'],)).fetchone()
             try:
-                ctx['proposal_creates_new'] = proposed_concept_decision(db, {
+                proposal_action, ctx['proposed_target'], _ = proposed_concept_decision(db, {
                     'reference_concept_proposal_id': row['reference_concept_proposal_id'],
                     'proposed_label': proposal['proposed_label'],
-                })[0] == 'CREATE_NEW'
+                })
+                ctx['proposal_creates_new'] = proposal_action == 'CREATE_NEW'
             except ValueError:
                 pass  # Historical labels can still be corrected through CREATE_NEW.
         ctx['metadata_decisions'] = [json.loads(r['classification_decision_json'])

@@ -15,7 +15,7 @@ def case():
     fixture = fixtures.ClassificationTests()
     fixture.setUp()
     fixture.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
-    fixture.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
+    fixture.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1,proposal_origin='NEW_PROPOSAL'")
     fixture.db.commit()
     yield fixture
     fixture.doCleanups()
@@ -164,7 +164,7 @@ def test_existing_resolution_rejects_metadata(case, action):
 
 
 def test_existing_analyst_cannot_send_metadata(case):
-    case.db.execute('UPDATE occurrence_concept_reference SET concept_id=1,concept_proposal_id=NULL')
+    case.db.execute('UPDATE occurrence_concept_reference SET concept_id=1,concept_proposal_id=NULL,proposal_origin=NULL')
     case.db.commit()
     before = case.dump()
     for payload in (selection(case), {}):
@@ -245,7 +245,7 @@ def test_http_existing_controls_absent_and_forged_post_rejected(http):
 
 def test_http_new_required_and_error_preserves_selections(http):
     http.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
-    http.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
+    http.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1,proposal_origin='NEW_PROPOSAL'")
     http.db.commit()
     http.role = 'analyst'
     url = '/ocurrencias/1/clasificar'

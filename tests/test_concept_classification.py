@@ -52,7 +52,7 @@ class ClassificationTests(unittest.TestCase):
     def propose(self, payload):
         if not self.db.execute('SELECT 1 FROM concept_proposal').fetchone():
             self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
-            self.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
+            self.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1,proposal_origin='NEW_PROPOSAL'")
             self.db.commit()
         self.metadata_concept = 3
         return create_alternative_submission(self.db,1,'NEW',phonological_relation_answer='NO',
@@ -185,7 +185,7 @@ class ClassificationTests(unittest.TestCase):
 
     def test_create_new_from_proposal(self):
         self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
-        self.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
+        self.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1,proposal_origin='NEW_PROPOSAL'")
         self.db.commit()
         sid=self.propose({'classifications':{self.sf:self.fields[:2],self.ka:self.areas[:1]},'collections':{self.collection:'join'}})
         rid=save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid))
@@ -400,7 +400,7 @@ class ClassificationRouteTests(unittest.TestCase):
 
     def test_analyst_proposal_and_reviewer_correction_http(self):
         self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
-        self.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
+        self.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1,proposal_origin='NEW_PROPOSAL'")
         self.db.commit()
         self.role='analyst'
         self.assertEqual(200,self.client.get('/ocurrencias/1/clasificar').status_code)

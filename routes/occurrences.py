@@ -626,7 +626,7 @@ def _load_classification_page_data(conexion, occurrence_id):
         "component_alternatives": component_alternatives,
         "concepts": concepts,
         "metadata": editor_context(conexion),
-        "new_concept_metadata": context_concept_id is None and occurrence["reference_concept_proposal_id"] is not None,
+        "new_concept_metadata": context_concept_id is None and occurrence["proposal_origin"] == 'NEW_PROPOSAL',
     }
 
 

@@ -156,7 +156,7 @@ def test_unknown_selected_and_direct_keep_existing_behavior(http, origin, kind):
         if origin is None:
             http.db.execute('UPDATE occurrence_concept_reference SET proposal_origin=NULL WHERE occurrence_id=?', (oid,))
             http.db.commit()
-        extra = http.selections(http.fields[:1])
+        extra = {}
     aid = add_alternative(http)
     url = f'/ocurrencias/{oid}/clasificar'
     inputs = Inputs(http.client.get(url).get_data(as_text=True))

@@ -1,8 +1,23 @@
 # Clasificaciones de conceptos nuevos en aportes de Alternative
 
 El analista completa las clasificaciones durante el análisis léxico de una
-ocurrencia cuya referencia es una propuesta de concepto aún no resuelta. El
+ocurrencia cuya referencia es una propuesta de concepto aún no resuelta con
+`proposal_origin=NEW_PROPOSAL`. El
 nombre sigue perteneciendo al paso de referencia conceptual existente.
+
+El editor del analista no aparece para `SELECTED_PENDING`, referencias directas
+ni referencias de origen desconocido. El backend no exige metadata en esos casos
+y rechaza cualquier metadata enviada manualmente, sin almacenar el aporte.
+La clasificación original de aportes ya guardados se conserva. El revisor puede
+completar la clasificación obligatoria si su resolución final crea un concepto,
+aunque el analista haya seleccionado una propuesta pendiente sin metadata.
+
+Para `USE_EXISTING`, la revisión utiliza un único selector «Concepto de destino».
+«Consultar estado de este concepto» consulta ese valor, recarga su token y muestra
+su nombre y cantidad de alternativas vigentes. Cambiar el selector invalida el
+estado mostrado y deshabilita guardar hasta una nueva consulta. El backend sigue
+rechazando tokens obsoletos o que cubran un destino distinto. Se mantienen
+`concept_edit_token` y `lexical_preview_token`.
 
 - Campo semántico obligatorio: una o dos categorías activas y distintas.
 - Colecciones activas obtenidas del catálogo, con pertenencia múltiple.
@@ -39,6 +54,32 @@ de resolución conceptual existentes; esta entrega no añade una acción autóno
 de rechazo conceptual sin concepto de destino.
 
 ## Verificación
+
+Corrección de UX sobre `db7cdd3` (editor del analista y destino único del revisor):
+
+```text
+python -B -m pytest -q -p no:cacheprovider --tb=short tests/test_concept_decision_ux.py tests/test_new_concept_metadata.py tests/test_new_concept_metadata_browser.py tests/test_concept_reference_origin.py tests/test_concept_classification.py tests/test_submission_concept_resolution.py tests/test_alternative_workflow.py tests/test_alternative_routes.py
+```
+
+Resultado: **241 pruebas y 37 subcasos aprobados**, incluidas siete pruebas de
+Chromium. Se comprueban el bloqueo de metadata fuera de `NEW_PROPOSAL`, la creación
+clasificada por el revisor desde `SELECTED_PENDING`, el destino único y su consulta,
+el rechazo de token A/destino B, el guardado de B con su token, cambios concurrentes
+y las opciones léxicas según alternativas vigentes. Se ajustaron las referencias
+de las fixtures de clasificación para declarar explícitamente `NEW_PROPOSAL`.
+Las pruebas usan únicamente bases sintéticas. `git diff --check` pasa.
+
+Archivos de esta corrección:
+
+- `alternative_workflow.py`, `routes/occurrences.py`, `routes/submissions.py`.
+- `templates/_submission_concept_resolution.html`.
+- `tests/test_concept_decision_ux.py`, `tests/test_new_concept_metadata_browser.py`,
+  `tests/test_new_concept_metadata.py`, `tests/test_concept_reference_origin.py`,
+  `tests/test_concept_classification.py`, `tests/test_submission_concept_resolution.py`,
+  `tests/test_alternative_workflow.py`.
+- Este documento.
+
+Verificación histórica de la entrega original de clasificaciones:
 
 Pruebas focalizadas:
 

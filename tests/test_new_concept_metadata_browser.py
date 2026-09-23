@@ -1,11 +1,15 @@
 """Browser checks for successful form controls; uses only synthetic fixture data."""
 from pathlib import Path
+from urllib.parse import parse_qsl
+from werkzeug.datastructures import MultiDict
 
 import pytest
 
 from tests.test_new_concept_metadata import http
 from alternative_workflow import create_alternative_submission
 from tests.test_concept_reference_origin import register, propose, resolve, add_alternative
+from tests.test_concept_decision_ux import selected_submission, analyst_reference
+from submission_concept_resolution import current_resolution
 
 playwright = pytest.importorskip('playwright.sync_api')
 ROOT = Path(__file__).resolve().parents[1]
@@ -23,9 +27,10 @@ def page(http):
             if path == '/static/new-concept-metadata.js':
                 route.fulfill(path=str(ROOT / 'static/new-concept-metadata.js'), content_type='text/javascript')
             else:
-                result = http.client.get(path)
-                route.fulfill(status=result.status_code, body=result.data,
-                              content_type=result.content_type)
+                # Follow redirects in Flask: the synthetic host has no DNS/server.
+                result = (http.client.post(path, data=MultiDict(parse_qsl(request.post_data or '', keep_blank_values=True)), follow_redirects=True)
+                          if request.method == 'POST' else http.client.get(path))
+                route.fulfill(status=result.status_code, body=result.data, headers=dict(result.headers))
 
         page.route('http://lesico.test/**', respond)
         yield page
@@ -39,7 +44,7 @@ def submitted_metadata(page):
 
 def test_collection_toggle_does_not_send_orphan_classifications(http, page):
     http.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
-    http.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
+    http.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1,proposal_origin='NEW_PROPOSAL'")
     http.db.commit()
     http.role = 'analyst'
     page.goto('http://lesico.test/ocurrencias/1/clasificar')
@@ -69,7 +74,7 @@ def test_collection_toggle_does_not_send_orphan_classifications(http, page):
 
 def test_reviewer_existing_target_hides_and_disables_editor(http, page):
     http.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('NUEVO','pending')")
-    http.db.execute('UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1')
+    http.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1,proposal_origin='NEW_PROPOSAL'")
     http.db.commit()
     sid = create_alternative_submission(http.db, 1, 'NEW', phonological_relation_answer='NO',
         morphology={'component_count_not_applicable': True}, access_role='analyst',
@@ -131,3 +136,63 @@ def test_resolved_concept_availability_and_changed_target_in_browser(http, page)
     assert not existing.is_checked()
     assert page.locator('[name=alternative_id]').input_value() == ''
     assert page.locator(f'[name=alternative_id] option[value="{aid}"]').count() == 0
+
+
+@pytest.mark.parametrize('origin', ['SELECTED_PENDING', 'DIRECT'])
+def test_analyst_cannot_see_or_submit_metadata_for_other_references(http, page, origin):
+    oid = analyst_reference(http, origin)
+    http.role = 'analyst'
+    page.goto(f'http://lesico.test/ocurrencias/{oid}/clasificar')
+    assert page.locator('.new-concept-metadata').count() == 0
+    assert page.locator('[name^=category_], [name^=collection_action_]').count() == 0
+
+
+def test_reviewer_uses_one_destination_and_reconsults_before_saving(http, page):
+    sid = selected_submission(http)
+    add_alternative(http, cid=2)
+    page.goto(f'http://lesico.test/aportes/{sid}')
+    action = page.locator('[name=concept_action]')
+    action.select_option('USE_EXISTING')
+    assert page.locator('select[name=metadata_target]').count() == 0
+    assert page.locator('select[name=concept_id]:visible').count() == 1
+    assert not page.locator('.new-concept-metadata').is_visible()
+    target = page.locator('[name=concept_id]')
+    save = page.get_by_role('button', name='Guardar resolución del concepto', exact=True)
+    consult = page.get_by_role('button', name='Consultar estado de este concepto', exact=True)
+    target.select_option('1')
+    assert save.is_disabled()
+    consult.click()
+    page.wait_for_url('**metadata_target=1**')
+    assert target.input_value() == '1'
+    assert action.input_value() == 'USE_EXISTING'
+    assert 'UNO' in page.locator('.consulted-concept-state').inner_text()
+    assert save.is_enabled()
+    target.select_option('2')
+    assert save.is_disabled()
+    assert not page.locator('.consulted-concept-state').is_visible()
+    assert page.get_by_text('El concepto de destino cambió. Consulte su estado antes de guardar.').is_visible()
+    target.select_option('1')
+    assert save.is_disabled()  # Changing back still requires explicit consultation.
+    target.select_option('2')
+    consult.click()
+    page.wait_for_url('**metadata_target=2**')
+    assert target.input_value() == '2'
+    assert page.locator('.consulted-concept-state').inner_text() == 'Estado consultado: DOS\n1 alternativa vigente'
+    assert page.get_by_text('Estado actualizado para guardar.').is_visible()
+    assert save.is_enabled()
+    assert page.locator('[name=concept_edit_token]').input_value()
+    assert page.locator('[name=lexical_preview_token]').input_value()
+    page.locator('[name=concept_note]').fill('Destino B consultado')
+    save.click()
+    page.wait_for_url(f'**/aportes/{sid}/concepto')
+    assert current_resolution(http.db, sid)['concept_id'] == 2
+    page.goto(f'http://lesico.test/aportes/{sid}')
+    assert page.locator('[name=decision][value=existing]').is_enabled()
+    page.locator('.concept-resolution-editor > summary').click()
+    target.select_option('1')
+    assert save.is_disabled()
+    consult.click()
+    page.wait_for_url('**metadata_target=1**')
+    assert page.locator('.concept-resolution-editor').get_attribute('open') is not None
+    assert target.is_visible() and target.input_value() == '1'
+    assert save.is_enabled()

@@ -36,8 +36,8 @@ class AlternativeWorkflowTests(unittest.TestCase):
     def create(self, occurrence=5, kind="NEW", **kwargs):
         if kind == "NEW" and "morphology" not in kwargs:
             kwargs["morphology"]={"component_count_not_applicable":True}
-        reference = self.db.execute('SELECT concept_proposal_id FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1', (occurrence,)).fetchone()
-        if reference and reference[0]:
+        reference = self.db.execute('SELECT proposal_origin FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1', (occurrence,)).fetchone()
+        if reference and reference[0] == 'NEW_PROPOSAL':
             kwargs.setdefault('concept_metadata', self.new_metadata())
             kwargs.setdefault('access_role', 'analyst')
         sid = create_alternative_submission(self.db,occurrence,kind,**kwargs)

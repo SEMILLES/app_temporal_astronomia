@@ -39,8 +39,8 @@ class LocalConceptTests(unittest.TestCase):
         self.tmp.cleanup()
 
     def create(self, oid):
-        reference = self.db.execute('SELECT concept_id FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1', (oid,)).fetchone()
-        metadata = self.new_metadata() if reference[0] is None else None
+        reference = self.db.execute('SELECT proposal_origin FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1', (oid,)).fetchone()
+        metadata = self.new_metadata() if reference[0] == 'NEW_PROPOSAL' else None
         return create_alternative_submission(self.db, oid, 'NEW', phonological_relation_answer='NO', morphology={'component_count_not_applicable':True}, concept_metadata=metadata, access_role='analyst')
 
     def new_metadata(self):
