@@ -160,6 +160,14 @@ def save_resolution(connection, submission_id, action, *, concept_id=None,
         new_reference = connection.execute("""INSERT INTO occurrence_concept_reference
             (occurrence_id,concept_id,supersedes_occurrence_concept_reference_id)
             VALUES(?,?,?)""", (submission['occurrence_id'],concept_id,reference_id)).lastrowid
+        # Close availability for future registrations by immutable proposal ID.
+        # The first resolution closes the shared proposal; subsequent local
+        # decisions remain independent and must not overwrite that history.
+        connection.execute("""UPDATE concept_proposal
+            SET status='resolved', resolved_concept_id=?,
+                resolved_at=CURRENT_TIMESTAMP, resolution_note=?
+            WHERE concept_proposal_id=? AND status='pending'""",
+            (concept_id, note, submission['reference_concept_proposal_id']))
         record_activity(connection, 'submission_concept_resolved', entity_type='submission',
             entity_id=submission_id, collaborator_id=actor_id, access_role=access_role,
             comment=json.dumps({'resolution_id':identifier,'reference_id':new_reference,'concept_id':concept_id,'note':note}, ensure_ascii=False))

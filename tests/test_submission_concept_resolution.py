@@ -59,10 +59,12 @@ class LocalConceptTests(unittest.TestCase):
         return '\n'.join(self.db.iterdump())
 
     def test_shared_proposal_independent_and_assignment_only_on_acceptance(self):
-        proposal = tuple(self.db.execute('SELECT * FROM concept_proposal').fetchone())
         original = [tuple(r) for r in self.db.execute('SELECT * FROM alternative_submission')]
         assignment = [tuple(r) for r in self.db.execute('SELECT * FROM assignment')]
         self.save(concept_id=1)
+        proposal = tuple(self.db.execute('SELECT * FROM concept_proposal').fetchone())
+        self.assertEqual(('resolved', 1), tuple(self.db.execute(
+            'SELECT status,resolved_concept_id FROM concept_proposal').fetchone()))
         self.assertIsNone(current_resolution(self.db,self.b))
         self.assertEqual('pending',self.db.execute('SELECT status FROM submission WHERE submission_id=?',(self.b,)).fetchone()[0])
         self.save(self.b,concept_id=2,note='Otro significado')
@@ -141,14 +143,13 @@ class LocalConceptTests(unittest.TestCase):
         self.db.commit()
         self.save(action='CREATE_NEW',label='nuevo concepto')
         self.assertEqual('NUEVO-CONCEPTO',current_resolution(self.db,self.a)['preferred_label'])
-        self.assertEqual('pending',self.db.execute('SELECT status FROM concept_proposal').fetchone()[0])
+        self.assertEqual('resolved',self.db.execute('SELECT status FROM concept_proposal').fetchone()[0])
 
     def test_accept_proposal_creates_or_reuses_normalized_concept_locally(self):
         for label, action in [('nuevo concepto', 'CREATE_NEW'), (' Nuevo--Concepto ', 'USE_EXISTING')]:
             with self.subTest(action=action):
                 self.db.execute('UPDATE concept_proposal SET proposed_label=?', (label,))
                 self.db.commit()
-                proposal = tuple(self.db.execute('SELECT * FROM concept_proposal').fetchone())
                 assignments = [tuple(r) for r in self.db.execute('SELECT * FROM assignment')]
                 self.save(action='ACCEPT_PROPOSAL', concept_id=2, label='IGNORADO')
                 resolution = current_resolution(self.db, self.a)
@@ -156,7 +157,8 @@ class LocalConceptTests(unittest.TestCase):
                 self.assertEqual('NUEVO-CONCEPTO', resolution['preferred_label'])
                 self.assertIsNone(resolution['resolution_note'])
                 self.assertEqual(3, self.db.execute('SELECT count(*) FROM concept').fetchone()[0])
-                self.assertEqual(proposal, tuple(self.db.execute('SELECT * FROM concept_proposal').fetchone()))
+                self.assertEqual(('resolved', resolution['concept_id']), tuple(self.db.execute(
+                    'SELECT status,resolved_concept_id FROM concept_proposal').fetchone()))
                 self.assertEqual(assignments, [tuple(r) for r in self.db.execute('SELECT * FROM assignment')])
                 self.assertIsNone(current_resolution(self.db, self.b))
                 self.assertEqual('pending', self.db.execute('SELECT status FROM submission WHERE submission_id=?', (self.a,)).fetchone()[0])
