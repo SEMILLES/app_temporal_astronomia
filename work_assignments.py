@@ -7,7 +7,7 @@ WORK_TYPES = {
     'morphology': 'Morfología',
     'relations': 'Relación fonológica',
     'grammar': 'Gramática',
-    'assignment': 'Asignación a Alternative',
+    'assignment': 'Asignación a alternativa',
 }
 
 

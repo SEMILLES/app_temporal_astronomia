@@ -6,22 +6,8 @@
 {% endmacro %}
 {% block content %}
 <h1>Asignación de trabajo</h1>
-<p>Asigne conceptos a uno o varios analistas. Las asignaciones retiradas conservan su historial.</p>
-{% if notice %}<p role="status">{{ notice }}</p>{% endif %}
-{% if error %}<p role="alert">{{ error }}</p>{% endif %}
-<h2>Trabajo pendiente</h2>
-<p>Conteos generales de los conceptos según la búsqueda y los filtros de asignación.
-El tipo de trabajo solo filtra el detalle inferior. Los aportes en revisión forman parte del pendiente, sin sumarse como tareas adicionales.</p>
-<div class="table-scroll" role="region" aria-label="Resumen de trabajo pendiente" tabindex="0">
-<table id="work-summary">
-  <thead><tr><th>Concept</th>{% for label in work_types.values() %}<th>{{ label }}</th>{% endfor %}<th>Total</th></tr></thead>
-  <tbody>{% for row in summary %}<tr>
-    <td>{{ row.preferred_label or 'Sin etiqueta' }} · {{ row.concept_id }}</td>
-    {% for kind in work_types %}<td>{{ row.counts[kind] }}</td>{% endfor %}<td>{{ row.total }}</td>
-  </tr>{% else %}<tr><td colspan="6">No hay trabajo pendiente para estos conceptos.</td></tr>{% endfor %}</tbody>
-</table></div>
-<form method="get">
-  <label>Concept <select name="concept_id"><option value="">Todos los Concepts</option>
+<form id="work-filters" method="get">
+  <label>Concepto <select name="concept_id"><option value="">Todos los conceptos</option>
     {% for row in concept_options %}<option value="{{ row.concept_id }}" {% if filters.concept_id|int == row.concept_id %}selected{% endif %}>{{ row.preferred_label or 'Sin etiqueta' }} — {{ row.total }} pendientes</option>{% endfor %}
   </select></label>
   <label>Tipo de trabajo <select name="work_type"><option value="">Todos</option>
@@ -38,7 +24,27 @@ El tipo de trabajo solo filtra el detalle inferior. Los aportes en revisión for
   <button class="button-secondary">Filtrar</button>
   <a href="{{ url_for('work_assignments.administration') }}">Limpiar</a>
 </form>
-<p>Trabajo encontrado: {{ task_total }} tareas · {{ total }} conceptos. El detalle se pagina por concepto.</p>
+{% if notice %}<p role="status">{{ notice }}</p>{% endif %}
+{% if error %}<p role="alert">{{ error }}</p>{% endif %}
+<section id="work-totals" aria-label="Resumen de trabajo pendiente">
+  <p><strong>Pendientes generales: {{ summary|sum(attribute='total') }} tareas · {{ summary|length }} conceptos.</strong><br>
+    {% for kind, label in work_types.items() %}{{ label }}: {{ summary|sum(attribute='counts.' ~ kind) }}{% if not loop.last %} · {% endif %}{% endfor %}
+  </p>
+  <p>Los totales generales conservan todos los tipos de trabajo de los conceptos seleccionados.<br>
+  Trabajo encontrado: {{ task_total }} tareas · {{ total }} conceptos con los filtros aplicados.</p>
+</section>
+<details id="work-summary-disclosure">
+  <summary>Ver resumen por concepto</summary>
+  <p>Los aportes en revisión forman parte del pendiente, sin sumarse como tareas adicionales.</p>
+  <div class="table-scroll" role="region" aria-label="Pendientes por concepto" tabindex="0">
+  <table id="work-summary">
+    <thead><tr><th>Concepto</th>{% for label in work_types.values() %}<th>{{ label }}</th>{% endfor %}<th>Total</th></tr></thead>
+    <tbody>{% for row in summary %}<tr>
+      <td>{{ row.preferred_label or 'Sin etiqueta' }} · {{ row.concept_id }}</td>
+      {% for kind in work_types %}<td>{{ row.counts[kind] }}</td>{% endfor %}<td>{{ row.total }}</td>
+    </tr>{% else %}<tr><td colspan="6">No hay trabajo pendiente para estos conceptos.</td></tr>{% endfor %}</tbody>
+  </table></div>
+</details>
 <form id="bulk-assignment" method="post">
   {{ hidden_context() }}<input type="hidden" name="action" value="assign">
   <fieldset><legend>Analistas que recibirán los conceptos seleccionados</legend>
@@ -47,7 +53,7 @@ El tipo de trabajo solo filtra el detalle inferior. Los aportes en revisión for
   {% else %}<p>No hay colaboradores activos. Regístrelos en Colaboradores.</p>{% endfor %}
   </fieldset>
   <button class="button-primary">Asignar seleccionados</button>
-  <p>La selección de conceptos se limita a esta página. Las asignaciones existentes se conservan.</p>
+  <p>La selección de conceptos se limita a esta página. Las asignaciones existentes se conservan y las retiradas mantienen su historial.</p>
 </form>
 <p>{{ total }} conceptos · Página {{ page }} de {{ pages }}</p>
 <div style="overflow-x:auto">

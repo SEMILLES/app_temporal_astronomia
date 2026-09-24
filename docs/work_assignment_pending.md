@@ -60,3 +60,18 @@ de optimizar el servicio canónico, sin duplicar sus reglas en otra query.
 
 La pantalla ahora oculta Concepts con cero pendientes, también si conservan
 asignaciones administrativas; no borra esas asignaciones ni altera su historial.
+
+## Presentación operativa
+
+Los filtros aparecen inmediatamente después del título. A continuación se muestran
+los totales generales (tareas, conceptos y los cuatro tipos) y el resultado de los
+filtros, calculados a partir de los conteos existentes. La tabla completa se aloja
+en «Ver resumen por concepto», un desplegable nativo plegado por defecto. Después
+aparecen la selección de analistas, la acción de asignar y la tabla paginada.
+No se añade un límite de 20 filas ni una segunda paginación al resumen.
+
+Los textos propios de la pantalla, incluidos errores y detalles plegables, usan
+«Concepto», «Alternativa» y «Asignación a alternativa». Se conserva «Master» como
+nombre visible del rol establecido por el componente común de la aplicación.
+Los identificadores internos, las URLs, las validaciones y los diagnósticos no
+cambian; los errores de filtros o sesión conservan su respuesta HTTP 400.

@@ -6,6 +6,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from html.parser import HTMLParser
 from urllib.parse import urlsplit
 from unittest.mock import patch
 
@@ -16,6 +17,30 @@ from routes.work_assignments import work_assignments_bp
 from work_assignments import assign, assigned_analysts, list_concepts, my_work, remove
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+class InterfaceText(HTMLParser):
+    """Include disclosure/option text and accessible labels, not technical attributes."""
+    def __init__(self, html):
+        super().__init__()
+        self.text = []
+        self.suppressed = False
+        self.feed(html)
+
+    def handle_starttag(self, tag, attrs):
+        if tag in ('script', 'style'):
+            self.suppressed = True
+        if not self.suppressed:
+            self.text.extend(value for key, value in attrs
+                             if key in ('aria-label', 'title', 'placeholder', 'alt') and value)
+
+    def handle_endtag(self, tag):
+        if tag in ('script', 'style'):
+            self.suppressed = False
+
+    def handle_data(self, data):
+        if not self.suppressed:
+            self.text.append(data)
 
 
 class WorkAssignmentTests(unittest.TestCase):
@@ -170,6 +195,18 @@ class WorkAssignmentTests(unittest.TestCase):
                     errors = []
                     page.on('pageerror', lambda error: errors.append(str(error)))
                     page.goto('http://local.test/admin-test/administracion/asignaciones')
+                    expect(page.locator('#work-summary')).not_to_be_visible()
+                    self.assertIsNone(page.locator('#work-summary-disclosure').get_attribute('open'))
+                    self.assertTrue(page.locator('#work-filters').evaluate(
+                        "el => el.previousElementSibling.tagName === 'H1'"))
+                    self.assertTrue(page.locator('#work-summary-disclosure').evaluate(
+                        "el => el.previousElementSibling.id === 'work-totals' && el.nextElementSibling.id === 'bulk-assignment'"))
+                    page.get_by_text('Ver resumen por concepto', exact=True).click()
+                    expect(page.locator('#work-summary')).to_be_visible()
+                    expect(page.locator('#work-summary th')).to_have_text([
+                        'Concepto', 'Morfología', 'Relación fonológica', 'Gramática', 'Asignación a alternativa', 'Total'])
+                    page.get_by_text('Ver resumen por concepto', exact=True).click()
+                    expect(page.locator('#work-totals')).to_contain_text('Pendientes generales: 3 tareas · 2 conceptos.')
                     page.locator('select[name=concept_id]').select_option('1')
                     page.get_by_role('button', name='Filtrar', exact=True).click()
                     expect(page.locator('#work-detail')).to_contain_text('Concepto A')
@@ -177,6 +214,8 @@ class WorkAssignmentTests(unittest.TestCase):
                     page.locator('select[name=work_type]').select_option('morphology')
                     page.get_by_role('button', name='Filtrar', exact=True).click()
                     expect(page.locator('select[name=concept_id]')).to_have_value('1')
+                    expect(page.locator('#work-totals')).to_contain_text('Pendientes generales: 2 tareas · 1 conceptos.')
+                    expect(page.locator('#work-totals')).to_contain_text('Trabajo encontrado: 1 tareas · 1 conceptos')
                     expect(page.locator('#work-detail')).not_to_contain_text('Resolver relación')
                     expect(page.locator('#work-detail')).to_contain_text('Resolver morfología')
                     page.locator('select[name=concept_id]').select_option('')
@@ -224,9 +263,66 @@ class WorkAssignmentTests(unittest.TestCase):
                     expect(no_js.locator('#work-detail')).not_to_contain_text('Concepto B')
                     expect(no_js.locator('#work-detail')).to_contain_text('Resolver relación')
                     expect(no_js.locator('#work-detail')).not_to_contain_text('Resolver morfología')
+                    # Exercise real server-side pagination with the same filters.
+                    for number in range(52):
+                        identifier = self.db.execute('INSERT INTO concept(preferred_label) VALUES(?)',
+                                                     (f'Lote {number:02}',)).lastrowid
+                        self.db.execute('INSERT INTO alternative(concept_id,working_label) VALUES(?,?)',
+                                        (identifier, '1a'))
+                    self.db.commit()
+                    no_js.goto('http://local.test/admin-test/administracion/asignaciones?search=Lote&work_type=morphology&status=unassigned')
+                    expect(no_js.locator('#work-detail tbody tr')).to_have_count(50)
+                    expect(no_js.locator('#work-summary')).not_to_be_visible()
+                    no_js.get_by_role('link', name='Siguiente', exact=True).click()
+                    expect(no_js.locator('#work-detail tbody tr')).to_have_count(2)
+                    expect(no_js.locator('#work-detail')).to_contain_text('Lote 50')
+                    expect(no_js.locator('select[name=work_type]')).to_have_value('morphology')
+                    expect(no_js.locator('input[name=search][type=search]')).to_have_value('Lote')
+                    expect(no_js.locator('select[name=status]')).to_have_value('unassigned')
+                    no_js.get_by_role('link', name='Anterior', exact=True).click()
+                    expect(no_js.locator('#work-detail tbody tr')).to_have_count(50)
                     no_js.close()
                 finally:
                     browser.close()
+
+    def test_interface_text_is_spanish_including_disclosures_and_errors(self):
+        self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1b')")
+        self.db.execute("INSERT INTO source(source_name) VALUES('Fuente de prueba')")
+        self.db.executemany('INSERT INTO occurrence(source_id,original_gloss) VALUES(1,?)',
+                            [('Evidencia asignada',), ('Evidencia sin asignar',)])
+        self.db.execute('INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,1)')
+        self.db.execute('INSERT INTO occurrence_concept_reference(occurrence_id,concept_id) VALUES(2,1)')
+        self.db.commit()
+        app = Flask(__name__, template_folder=str(ROOT / 'templates'))
+        app.config.update(TESTING=True, SECRET_KEY='spanish-test')
+        app.register_blueprint(work_assignments_bp)
+        from routes.alternatives import alternatives_bp
+        from routes.occurrences import occurrences_bp
+        app.register_blueprint(alternatives_bp)
+        app.register_blueprint(occurrences_bp)
+        install_access_context(app)
+        with patch.object(database, 'BASE_DATOS', self.path), patch.dict(os.environ, {
+            'LESICO_MASTER_ROUTE': 'm', 'LESICO_REVIEWER_ROUTE': 'r'}):
+            client = app.test_client()
+            for role in ('m', 'r'):
+                url = f'/{role}/administracion/asignaciones'
+                responses = [client.get(url), client.get(url + '?concept_id=999'),
+                             client.get(url + '?work_type=bad'), client.post(url)]
+                with client.session_transaction() as session:
+                    token = session['work_assignment_csrf']
+                responses.append(client.post(url, data={'action': 'assign', 'csrf_token': token}))
+                self.assertEqual([response.status_code for response in responses], [200, 200, 400, 400, 400])
+                for response in responses:
+                    visible = ' '.join(InterfaceText(response.get_data(as_text=True)).text)
+                    self.assertNotRegex(visible, r'\b(?:Concepts?|Alternatives?|Assignment|Reviewer|Work|Pending|Morphology|Relations|Grammar|Bad Request)\b')
+                html = responses[0].get_data(as_text=True)
+                visible = ' '.join(InterfaceText(html).text)
+                for text in ('Todos los conceptos', 'Tipo de trabajo', 'Asignación a alternativa',
+                             'Alternativa 1b', 'Ver resumen por concepto', 'Gramática: 1'):
+                    self.assertIn(text, visible)
+                self.assertIn('Pendientes generales: 4 tareas · 1 conceptos.', visible)
+                self.assertIn('name="concept_id"', html)
+                self.assertIn('value="assignment"', html)
 
     def test_routes_permissions_csrf_bulk_and_remove(self):
         app = Flask(__name__, template_folder=str(ROOT / 'templates'))

@@ -1,0 +1,7 @@
+{% extends '_visual_base.html' %}
+{% block title %}Asignación de trabajo · Solicitud no válida{% endblock %}
+{% block content %}
+<h1>Asignación de trabajo</h1>
+<p role="alert">{{ message }}</p>
+<a href="{{ url_for('work_assignments.administration') }}">Volver a asignación de trabajo</a>
+{% endblock %}

@@ -24,9 +24,9 @@ Asignación a alternativa: {{ diagnostic.assignment|length }} pendientes</p>
 {% endif %}</li>{% endfor %}</ul>{% endif %}
 {% endfor %}
 {% if diagnostic.grammar %}<p><strong>Gramática · no bloqueante</strong></p><ul>
-{% for item in diagnostic.grammar %}<li><a href="{{ url_for('occurrences.mostrar_gramatica', occurrence_id=item.occurrence_id) }}">Analizar gramática de ocurrencia {{ item.occurrence_id }}</a> · {{ item.original_gloss }} · Alternative {{ item.working_label or 'sin etiqueta' }} ({{ item.alternative_id }}){% include '_work_occurrence_context.html' %}</li>{% endfor %}
+{% for item in diagnostic.grammar %}<li><a href="{{ url_for('occurrences.mostrar_gramatica', occurrence_id=item.occurrence_id) }}">Analizar gramática de ocurrencia {{ item.occurrence_id }}</a> · {{ item.original_gloss }} · Alternativa {{ item.working_label or 'sin etiqueta' }} ({{ item.alternative_id }}){% include '_work_occurrence_context.html' %}</li>{% endfor %}
 </ul>{% endif %}
-{% if diagnostic.assignment %}<p><strong>Asignación a Alternative · ocurrencias</strong></p><ul>
+{% if diagnostic.assignment %}<p><strong>Asignación a alternativa · ocurrencias</strong></p><ul>
 {% for item in diagnostic.assignment %}<li>Ocurrencia {{ item.occurrence_id }} · {{ item.original_gloss }}:
 {% include '_work_occurrence_context.html' %}
 <a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=item.occurrence_id) }}">Clasificar / asignar alternativa</a></li>{% endfor %}

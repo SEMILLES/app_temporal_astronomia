@@ -38,7 +38,8 @@ def administration():
         if request.method == 'POST':
             token = session.get('work_assignment_csrf')
             if not token or not secrets.compare_digest(token, request.form.get('csrf_token', '')):
-                abort(400, description='La sesión del formulario venció. Recargue la página.')
+                return render_template('asignacion_trabajo_error.html',
+                                       message='La sesión del formulario venció. Recargue la página.'), 400
             try:
                 # Validate navigation before committing a mutation.
                 list_concepts(db, pending_only=True, **filters)
@@ -58,7 +59,7 @@ def administration():
         try:
             data = list_concepts(db, pending_only=True, **filters)
         except (ValueError, TypeError):
-            abort(400, description='Filtros no válidos.')
+            return render_template('asignacion_trabajo_error.html', message='Filtros no válidos.'), 400
         analysts = db.execute('SELECT collaborator_id,display_name,active FROM collaborator ORDER BY display_name,collaborator_id').fetchall()
     if 'work_assignment_csrf' not in session:
         session['work_assignment_csrf'] = secrets.token_urlsafe(32)
