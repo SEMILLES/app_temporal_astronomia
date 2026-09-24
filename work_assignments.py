@@ -3,6 +3,13 @@ from activity import resolve_collaborator
 from source_details import occurrence_presentation
 from alternative_change_workflow import pending_changes
 
+WORK_TYPES = {
+    'morphology': 'Morfología',
+    'relations': 'Relación fonológica',
+    'grammar': 'Gramática',
+    'assignment': 'Asignación a Alternative',
+}
+
 
 def concept_diagnostics(db, concept_ids):
     """Read canonical tasks and pending proposals in four batched queries."""
@@ -56,7 +63,7 @@ def _ids(values):
         result = sorted({int(value) for value in values})
     except (ValueError, TypeError):
         raise ValueError('Selección no válida.') from None
-    if not result or result[0] < 1 or len(result) > 500:
+    if not result or result[0] < 1 or result[-1] > 9223372036854775807 or len(result) > 500:
         raise ValueError('Seleccione entre 1 y 500 elementos.')
     return result
 
@@ -74,11 +81,15 @@ def assigned_analysts(db, concept_ids):
     return result
 
 
-def list_concepts(db, *, search='', status='all', analyst_id=None, page=1, per_page=50):
+def list_concepts(db, *, search='', status='all', analyst_id=None, page=1, per_page=50,
+                  pending_only=False, concept_id=None, work_type=''):
     if status not in ('all', 'unassigned', 'assigned'):
         raise ValueError('Filtro de asignación no válido.')
     page = max(1, int(page))
     per_page = max(1, min(100, int(per_page)))
+    if work_type not in ('', *WORK_TYPES):
+        raise ValueError('Tipo de trabajo no válido.')
+    selected_concept = None if concept_id in (None, '') else _ids([concept_id])[0]
     conditions, params = [], []
     if search.strip():
         conditions.append("(c.preferred_label LIKE ? ESCAPE '\\' OR CAST(c.concept_id AS TEXT)=?)")
@@ -92,6 +103,40 @@ def list_concepts(db, *, search='', status='all', analyst_id=None, page=1, per_p
         conditions.append(exists + ' AND w.analyst_id=?)')
         params.append(_ids([analyst_id])[0])
     where = ' WHERE ' + ' AND '.join(conditions) if conditions else ''
+    if pending_only:
+        # Aggregate canonical diagnostics before filtering/pagination, with
+        # bounded Concept IN lists. Preserve the personal-work listing below.
+        candidates = db.execute('SELECT c.concept_id,c.preferred_label FROM concept c' +
+                                where + ' ORDER BY c.preferred_label,c.concept_id', params).fetchall()
+        diagnostics = {}
+        for start in range(0, len(candidates), 400):
+            diagnostics.update(concept_diagnostics(
+                db, [row['concept_id'] for row in candidates[start:start + 400]]))
+        summaries = []
+        for row in candidates:
+            counts = {kind: len(diagnostics[row['concept_id']][kind]) for kind in WORK_TYPES}
+            if sum(counts.values()):
+                summaries.append(dict(row, counts=counts, total=sum(counts.values())))
+        summaries.sort(key=lambda row: (-row['total'], row['preferred_label'] or '', row['concept_id']))
+        summary = [row for row in summaries
+                   if selected_concept is None or row['concept_id'] == selected_concept]
+        rows = [row for row in summary if not work_type or row['counts'][work_type]]
+        task_total = sum(row['counts'][work_type] if work_type else row['total'] for row in rows)
+        total = len(rows)
+        pages = max(1, (total + per_page - 1) // per_page)
+        page = min(page, pages)
+        rows = rows[(page - 1) * per_page:page * per_page]
+        identifiers = [row['concept_id'] for row in rows]
+        detail = {identifier: dict(diagnostics[identifier]) for identifier in identifiers}
+        if work_type:
+            for diagnostic in detail.values():
+                for kind in WORK_TYPES:
+                    if kind != work_type:
+                        diagnostic[kind] = []
+        return dict(concepts=rows, assignments=assigned_analysts(db, identifiers),
+                    diagnostics=detail, summary=summary, concept_options=summaries,
+                    work_types=WORK_TYPES, task_total=task_total,
+                    total=total, page=page, pages=pages)
     total = db.execute('SELECT count(*) FROM concept c' + where, params).fetchone()[0]
     pages = max(1, (total + per_page - 1) // per_page)
     page = min(page, pages)

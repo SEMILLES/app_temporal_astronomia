@@ -134,12 +134,17 @@ class WorkAssignmentTests(unittest.TestCase):
 
     def test_browser_declared_identity_and_assignment_flow(self):
         from playwright.sync_api import sync_playwright, expect
+        self.db.executemany('INSERT INTO alternative(concept_id,working_label) VALUES(?,?)',
+                            [(1, '1b'), (2, '1a')])
+        self.db.commit()
         app = Flask(__name__, template_folder=str(ROOT / 'templates'), static_folder=str(ROOT / 'static'))
         app.config.update(TESTING=True, SECRET_KEY='local-browser-test')
         app.register_blueprint(work_assignments_bp)
         # The real destination is exercised in test_demo_and_real_app_integration.
         from routes.alternatives import alternatives_bp
         app.register_blueprint(alternatives_bp)
+        from routes.alternative_changes import alternative_changes_bp
+        app.register_blueprint(alternative_changes_bp)
         install_access_context(app)
         with patch.object(database, 'BASE_DATOS', self.path), patch.dict(os.environ, {
             'LESICO_MASTER_ROUTE': 'admin-test', 'LESICO_ANALYST_ROUTE': 'analyst-test'}):
@@ -165,6 +170,20 @@ class WorkAssignmentTests(unittest.TestCase):
                     errors = []
                     page.on('pageerror', lambda error: errors.append(str(error)))
                     page.goto('http://local.test/admin-test/administracion/asignaciones')
+                    page.locator('select[name=concept_id]').select_option('1')
+                    page.get_by_role('button', name='Filtrar', exact=True).click()
+                    expect(page.locator('#work-detail')).to_contain_text('Concepto A')
+                    expect(page.locator('#work-detail')).not_to_contain_text('Concepto B')
+                    page.locator('select[name=work_type]').select_option('morphology')
+                    page.get_by_role('button', name='Filtrar', exact=True).click()
+                    expect(page.locator('select[name=concept_id]')).to_have_value('1')
+                    expect(page.locator('#work-detail')).not_to_contain_text('Resolver relación')
+                    expect(page.locator('#work-detail')).to_contain_text('Resolver morfología')
+                    page.locator('select[name=concept_id]').select_option('')
+                    page.get_by_role('button', name='Filtrar', exact=True).click()
+                    expect(page.locator('#work-detail')).to_contain_text('Concepto B')
+                    expect(page.locator('select[name=work_type]')).to_have_value('morphology')
+                    page.get_by_role('link', name='Limpiar', exact=True).click()
                     page.locator('#lesico-collaborator').select_option('1')
                     page.locator('input[name=concept_ids][value="1"]').check()
                     page.locator('input[name=analyst_ids][value="1"]').check()
@@ -195,6 +214,17 @@ class WorkAssignmentTests(unittest.TestCase):
                     expect(page.locator('#my-work-content')).to_contain_text('Selecciona un colaborador')
                     expect(page.locator('tbody')).to_have_count(0)
                     self.assertEqual(errors, [])
+                    no_js = browser.new_page(java_script_enabled=False)
+                    no_js.route('**/*', serve)
+                    no_js.goto('http://local.test/admin-test/administracion/asignaciones')
+                    no_js.locator('select[name=concept_id]').select_option('1')
+                    no_js.locator('select[name=work_type]').select_option('relations')
+                    no_js.get_by_role('button', name='Filtrar', exact=True).click()
+                    expect(no_js.locator('#work-detail')).to_contain_text('Concepto A')
+                    expect(no_js.locator('#work-detail')).not_to_contain_text('Concepto B')
+                    expect(no_js.locator('#work-detail')).to_contain_text('Resolver relación')
+                    expect(no_js.locator('#work-detail')).not_to_contain_text('Resolver morfología')
+                    no_js.close()
                 finally:
                     browser.close()
 
@@ -238,6 +268,14 @@ class WorkAssignmentTests(unittest.TestCase):
             self.assertEqual(client.post(url, data=dict(action='assign', csrf_token=token)).status_code, 400)
             self.assertEqual(client.get(url + '?page=invalid').status_code, 400)
             self.assertEqual(client.get(url + '?status=unassigned').status_code, 200)
+            for query in ('concept_id=bad', 'concept_id=-1', 'concept_id=' + '9' * 100,
+                          'work_type=invalid', 'analyst_id=' + '9' * 100):
+                self.assertEqual(client.get(url + '?' + query).status_code, 400)
+                self.assertEqual(client.get('/analyst-test/administracion/asignaciones?' + query).status_code, 404)
+            response = client.post(url, data=dict(payload, concept_id='1', work_type='morphology'))
+            self.assertEqual(response.status_code, 302)
+            self.assertIn('concept_id=1', response.location)
+            self.assertIn('work_type=morphology', response.location)
             review_url = '/review-test/administracion/asignaciones'
             response = client.post(review_url, data=dict(action='assign', concept_ids=['3'],
                 analyst_ids=['1'], collaborator_id='2', csrf_token=token))
@@ -298,7 +336,8 @@ class WorkAssignmentTests(unittest.TestCase):
 response = app.test_client().get('/admin-local/administracion/asignaciones')
 assert response.status_code == 200, response.status_code
 html = response.get_data(as_text=True)
-assert all(text in html for text in ('Concepto A', 'Concepto B', 'Concepto C', 'Ana', 'Carlos', 'Sin asignar'))
+assert all(text in html for text in ('Ana', 'Carlos', 'Sin asignar', 'Trabajo encontrado: 0 tareas'))
+assert all(text not in html for text in ('Concepto A', 'Concepto B', 'Concepto C'))
 client = app.test_client()
 assert client.get('/mi-trabajo?collaborator_id=1').status_code == 404
 for prefix in ('admin-local', 'revision-local'):

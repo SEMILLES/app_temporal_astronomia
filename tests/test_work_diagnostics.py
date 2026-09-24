@@ -118,6 +118,110 @@ class WorkDiagnosticTests(unittest.TestCase):
         self.assertEqual(list(self.db.iterdump()), before)
         self.assertEqual(list_concepts(self.db)['diagnostics'], result)
 
+    def pending(self, **filters):
+        return list_concepts(self.db, pending_only=True, **filters)
+
+    def test_pending_summary_counts_filters_order_and_pagination(self):
+        first = self.alternative('1b')
+        other = self.alternative('1a', concept=3)
+        grammar = self.occurrence(first)
+        assignment = self.occurrence(reference=1)
+        self.occurrence(reference=None)
+        self.occurrence(other, reference=3)
+        data = self.pending(per_page=1)
+        self.assertEqual([(r['concept_id'], r['total']) for r in data['summary']], [(1, 4), (3, 2)])
+        self.assertEqual(data['summary'][0]['counts'], dict(morphology=1, relations=1, grammar=1, assignment=1))
+        self.assertEqual(data['task_total'], 6)
+        self.assertEqual(data['pages'], 2)
+        self.assertEqual(self.pending(page=2, per_page=1)['concepts'][0]['concept_id'], 3)
+        self.assertEqual([r['concept_id'] for r in self.pending(concept_id='3')['concepts']], [3])
+        selected = self.pending(concept_id=1, work_type='morphology')
+        self.assertEqual(selected['task_total'], 1)
+        self.assertEqual(selected['summary'][0]['total'], 4)
+        self.assertEqual(selected['diagnostics'][1]['relations'], [])
+        self.assertEqual(selected['diagnostics'][1]['grammar'], [])
+        self.assertEqual(selected['diagnostics'][1]['assignment'], [])
+        self.assertEqual(selected['diagnostics'][1]['morphology'][0]['alternative_id'], first)
+        self.assertEqual(self.pending(work_type='morphology')['task_total'], 2)
+        self.assertEqual(self.pending(concept_id=3, work_type='assignment')['concepts'], [])
+        self.assertEqual(self.pending(concept_id=999)['concepts'], [])
+        self.assertEqual(data['diagnostics'][1]['grammar'][0]['occurrence_id'], grammar)
+        self.assertEqual(data['diagnostics'][1]['assignment'][0]['occurrence_id'], assignment)
+        # A zero-pending Concept is absent; ties use the label before the ID.
+        self.alternative('2a', concept=3)
+        self.occurrence(reference=3)
+        self.assertEqual([r['concept_id'] for r in self.pending()['concept_options']], [3, 1])
+
+    def test_current_state_and_history_do_not_duplicate_summary(self):
+        a = self.alternative('1a')
+        b = self.alternative('1b')
+        o = self.occurrence(a)
+        missing = self.occurrence(reference=3)
+        self.db.execute('INSERT INTO assignment(occurrence_id,alternative_id,is_current) VALUES(?,?,0)', (o, b))
+        self.db.execute('INSERT INTO occurrence_concept_reference(occurrence_id,concept_id,is_current) VALUES(?,1,0)', (missing,))
+        self.db.execute('INSERT INTO alternative_morphology(alternative_id,is_current) VALUES(?,0)', (a,))
+        self.db.execute('INSERT INTO occurrence_grammar(occurrence_id,is_current) VALUES(?,0)', (o,))
+        self.db.commit()
+        assign(self.db, [1], [1], access_role='reviewer')
+        self.db.execute("INSERT INTO collaborator(display_name) VALUES('Otro analista')")
+        self.db.commit()
+        assign(self.db, [1], [2], access_role='reviewer')
+        data = self.pending()
+        self.assertEqual(data['summary'][0]['total'], 4)
+        self.assertEqual(data['diagnostics'][3]['assignment'][0]['occurrence_id'], missing)
+        self.db.execute('INSERT INTO alternative_morphology(alternative_id) VALUES(?)', (a,))
+        self.db.execute('INSERT INTO alternative_morphology(alternative_id) VALUES(?)', (b,))
+        self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(?,?,'CM_1')", (a, b))
+        self.db.execute('INSERT INTO occurrence_grammar(occurrence_id) VALUES(?)', (o,))
+        self.assertEqual([r['concept_id'] for r in self.pending()['concept_options']], [3])
+        self.db.execute('INSERT INTO assignment(occurrence_id,alternative_id) VALUES(?,?)', (missing, a))
+        self.assertEqual(self.pending(work_type='assignment')['task_total'], 0)
+
+    def test_pending_proposals_are_annotations_not_extra_tasks(self):
+        from alternative_change_workflow import create_proposal, review_proposal
+        a = self.alternative('1a')
+        b = self.alternative('1b')
+        self.db.commit()
+        before = self.pending()['task_total']
+        actor = dict(collaborator_id=1, access_role='analyst')
+        sid = create_proposal(self.db, b, 'MORPHOLOGY', {'component_count': 1}, **actor)
+        for parameter in ('CM_1', 'OR_M1'):
+            create_proposal(self.db, b, 'RELATION', {'target_id': a, 'parameter': parameter}, **actor)
+        self.assertEqual(self.pending()['task_total'], before)
+        review_proposal(self.db, sid, 'accepted', collaborator_id=1, access_role='reviewer')
+        self.assertEqual(self.pending()['task_total'], before - 1)
+
+    def test_grammar_follows_current_assignment_and_assignment_current_reference(self):
+        old = self.alternative('1a')
+        current = self.alternative('1b', concept=3)
+        occurrence = self.occurrence(old)
+        unassigned = self.occurrence(reference=1)
+        self.db.execute('UPDATE assignment SET is_current=0 WHERE occurrence_id=?', (occurrence,))
+        self.db.execute('INSERT INTO assignment(occurrence_id,alternative_id) VALUES(?,?)', (occurrence, current))
+        for identifier in (occurrence, unassigned):
+            self.db.execute('UPDATE occurrence_concept_reference SET is_current=0 WHERE occurrence_id=?', (identifier,))
+            self.db.execute('INSERT INTO occurrence_concept_reference(occurrence_id,concept_id) VALUES(?,3)', (identifier,))
+        result = self.pending()['diagnostics']
+        self.assertEqual(result[1]['grammar'], [])
+        self.assertEqual(result[1]['assignment'], [])
+        self.assertEqual([r['occurrence_id'] for r in result[3]['grammar']], [occurrence])
+        self.assertEqual([r['occurrence_id'] for r in result[3]['assignment']], [unassigned])
+        self.assertEqual(result[3]['relations'][0]['alternative_id'], current)
+        self.assertEqual(result[3]['morphology'][0]['alternative_id'], current)
+
+    def test_invalid_filters_and_scoped_options(self):
+        self.alternative('1a')
+        self.alternative('1b', concept=3)
+        self.db.commit()
+        assign(self.db, [1], [1], access_role='reviewer')
+        for filters in ({'concept_id': 'bad'}, {'concept_id': '-1'}, {'concept_id': '9' * 100},
+                        {'work_type': 'MORPHOLOGY'}, {'page': 'bad'}, {'analyst_id': '9' * 100}):
+            with self.assertRaises(ValueError):
+                self.pending(**filters)
+        self.assertEqual([r['concept_id'] for r in self.pending(analyst_id=1)['concept_options']], [1])
+        self.assertEqual(self.pending(analyst_id=1, concept_id=3)['concepts'], [])
+        self.assertEqual([r['concept_id'] for r in self.pending(status='unassigned')['summary']], [3])
+
     def test_views_links_permissions_and_existing_submission_workflow(self):
         alternative = self.alternative('1b')
         self.occurrence(alternative)
@@ -158,12 +262,17 @@ for role in ('r','m'):
     assert response.status_code==200
     html=response.get_data(as_text=True)
     assert '/'+role+'/ocurrencias/2/clasificar' in html
-    assert 'Morfología: 2 pendientes' in html and 'bloqueantes' in html
+    assert 'Trabajo encontrado: 6 tareas' in html and 'bloqueante' in html
     for anchor in ('morfologia','relaciones'):
         link='/'+role+'/alternativas/1/gestionar#'+anchor
         assert link in html
         assert client.get(link).status_code==200
     assert client.get('/'+role+'/ocurrencias/1/gramatica').status_code==200
+    for kind, count in (('morphology', 2), ('relations', 2), ('grammar', 1), ('assignment', 1)):
+        filtered=client.get('/'+role+'/administracion/asignaciones?concept_id=1&work_type='+kind)
+        assert filtered.status_code==200
+        assert 'Trabajo encontrado: '+str(count)+' tareas' in filtered.text
+    assert 'Trabajo encontrado: 0 tareas' in client.get('/'+role+'/administracion/asignaciones?concept_id=999').text
 for path in ('/ocurrencias/1/gramatica','/ocurrencias/2/clasificar','/conceptos/1/alternativas'):
     assert client.get('/a'+path).status_code==200
 for path in ('/ocurrencias/1/gramatica','/ocurrencias/2/clasificar','/alternativas/1/proponer'):

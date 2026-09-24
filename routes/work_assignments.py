@@ -25,6 +25,7 @@ def personal_work():
 
 def _filters(values):
     return dict(search=values.get('search', ''), status=values.get('status', 'all'),
+                concept_id=values.get('concept_id', ''), work_type=values.get('work_type', ''),
                 analyst_id=values.get('analyst_id', ''), page=values.get('page', '1'))
 
 
@@ -40,7 +41,7 @@ def administration():
                 abort(400, description='La sesión del formulario venció. Recargue la página.')
             try:
                 # Validate navigation before committing a mutation.
-                list_concepts(db, **filters)
+                list_concepts(db, pending_only=True, **filters)
                 if request.form.get('action') == 'assign':
                     changed = assign(db, request.form.getlist('concept_ids'), request.form.getlist('analyst_ids'),
                                      actor_id=request.form.get('collaborator_id'), access_role=g.current_access_role)
@@ -55,7 +56,7 @@ def administration():
             except (ValueError, TypeError):
                 error = 'No se guardaron cambios. Revise la selección de conceptos y colaboradores activos.'
         try:
-            data = list_concepts(db, **filters)
+            data = list_concepts(db, pending_only=True, **filters)
         except (ValueError, TypeError):
             abort(400, description='Filtros no válidos.')
         analysts = db.execute('SELECT collaborator_id,display_name,active FROM collaborator ORDER BY display_name,collaborator_id').fetchall()
