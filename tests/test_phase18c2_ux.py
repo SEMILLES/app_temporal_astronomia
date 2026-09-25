@@ -248,7 +248,7 @@ class ComponentAndConceptUXTests(unittest.TestCase):
 
     def test_concept_order_default_id_asc_desc_az_and_invalid(self):
         app = self.client.application
-        app.register_blueprint(concepts_bp)
+        self.assertIn('concepts', app.blueprints)  # Registered by the shared fixture.
 
         app.add_url_rule(
             '/trabajo',
@@ -256,11 +256,7 @@ class ComponentAndConceptUXTests(unittest.TestCase):
             view_func=lambda: '',
         )
 
-        app.add_url_rule(
-            '/alternativas/<int:concept_id>',
-            endpoint='alternatives.alternativas',
-            view_func=lambda concept_id: '',
-        )
+        self.assertIn('alternatives.alternativas', app.view_functions)
 
         db = self.connect()
         db.executemany(
@@ -272,26 +268,40 @@ class ComponentAndConceptUXTests(unittest.TestCase):
 
         import re
 
-        for query, expected in [
-            ('', [1, 2, 3]),
-            ('?sort=id_desc', [3, 2, 1]),
-            ('?sort=id_asc', [1, 2, 3]),
-            ('?sort=az', [3, 1, 2]),
-            ('?sort=invalid', [1, 2, 3]),
+        def section_ids(html, section_id):
+            section = re.search(
+                rf'<section id="{section_id}".*?</section>',
+                html,
+                re.S,
+            )
+            self.assertIsNotNone(section)
+            return [
+                int(x)
+                for x in re.findall(
+                    r'<td[^>]*class="identifier"[^>]*>\s*(\d+)\s*</td>',
+                    section.group(0),
+                    re.S,
+                )
+            ]
+
+        for query, expected_active, expected_empty in [
+            ('', [1], [2, 3]),
+            ('?sort=id_desc', [1], [3, 2]),
+            ('?sort=id_asc', [1], [2, 3]),
+            ('?sort=az', [1], [3, 2]),
+            ('?sort=invalid', [1], [2, 3]),
         ]:
             html = self.client.get(
                 '/conceptos' + query
             ).get_data(as_text=True)
 
             self.assertEqual(
-                [
-                    int(x)
-                    for x in re.findall(
-                        r'<td>\s*(\d+)\s*</td>',
-                        html,
-                    )
-                ],
-                expected,
+                section_ids(html, 'active-concepts'),
+                expected_active,
+            )
+            self.assertEqual(
+                section_ids(html, 'empty-concepts'),
+                expected_empty,
             )
 
             for label in (

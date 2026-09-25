@@ -155,7 +155,7 @@ class ComparableUITests(unittest.TestCase):
         self.assertIn('Para aceptar las relaciones, primero debe resolverse esa propuesta.', detail.text)
         response = self.client.post(f'/aportes/{sid}/decidir', data={
             'decision': decision, 'alternative_id': '1',
-            'relations_resolution': 'REJECTED', 'morphology_resolution': 'REJECTED',
+            'relations_resolution': 'REJECTED', 'morphology_resolution': 'ACCEPTED' if decision == 'new' else 'REJECTED',
             'review_note': 'No aceptar la relación propuesta',
         })
         self.assertEqual(302, response.status_code)

@@ -81,6 +81,9 @@ class LexicalUITests(unittest.TestCase):
         return response.get_data(as_text=True)
 
     def post(self, sid, **form):
+        from tests.form_client import hidden
+        if 'lexical_preview_token' not in form:
+            form['lexical_preview_token'] = hidden(self.page(sid), 'lexical_preview_token')
         return self.client.post(f'/aportes/{sid}/decidir', data=form)
 
     def test_preview_table_presentation_preserves_calculated_values(self):

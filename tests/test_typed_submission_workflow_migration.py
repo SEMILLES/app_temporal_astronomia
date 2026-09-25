@@ -36,51 +36,8 @@ def insert_foundation(connection):
 def create_legacy_database(path):
     connection = sqlite3.connect(path)
     connection.execute("PRAGMA foreign_keys = ON")
-    database.crear_esquema(connection)
-    for table in (
-        "grammar_submission",
-        "alternative_submission_relation",
-        "alternative_submission",
-        "occurrence_concept_reference",
-        "occurrence_draft",
-        "concept_proposal",
-        "submission",
-    ):
-        connection.execute(f"DROP TABLE {table}")
-    connection.executescript("""
-        CREATE TABLE submission (
-            submission_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            occurrence_id INTEGER NOT NULL UNIQUE,
-            proposed_concept_id INTEGER,
-            proposed_concept_label TEXT,
-            proposed_concept_note TEXT,
-            proposed_alternative_id INTEGER,
-            proposed_alternative_label TEXT,
-            proposed_concept_status TEXT,
-            concept_uncertainty_note TEXT,
-            proposed_relation_answer TEXT,
-            proposed_related_alternative_id INTEGER,
-            proposed_related_submission_id INTEGER,
-            proposed_phonological_parameter TEXT,
-            alternative_uncertainty_note TEXT,
-            proposal_type TEXT NOT NULL,
-            status TEXT NOT NULL,
-            submitted_at TEXT NOT NULL,
-            submitted_by TEXT,
-            reviewed_at TEXT,
-            reviewed_by TEXT,
-            review_comment TEXT,
-            FOREIGN KEY (occurrence_id) REFERENCES occurrence(occurrence_id),
-            FOREIGN KEY (proposed_concept_id) REFERENCES concept(concept_id),
-            FOREIGN KEY (proposed_alternative_id) REFERENCES alternative(alternative_id),
-            FOREIGN KEY (proposed_related_alternative_id) REFERENCES alternative(alternative_id),
-            FOREIGN KEY (proposed_related_submission_id) REFERENCES submission(submission_id)
-        );
-        CREATE INDEX idx_submission_status ON submission(status);
-        CREATE INDEX idx_submission_occurrence ON submission(occurrence_id);
-        CREATE INDEX idx_submission_related_pending_submission
-            ON submission(proposed_related_submission_id);
-    """)
+    # Frozen historical schema: never install current tables or triggers here.
+    connection.executescript((ROOT / 'tests/fixtures/pre_008_schema.sql').read_text(encoding='utf-8'))
     insert_foundation(connection)
     connection.execute(
         "INSERT INTO assignment (occurrence_id, alternative_id) VALUES (2, 2)"

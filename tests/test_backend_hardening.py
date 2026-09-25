@@ -20,6 +20,7 @@ class LexicalStaleTests(unittest.TestCase):
     setUp = lexical_fixture.AtomicLexicalReviewTests.setUp
     tearDown = lexical_fixture.AtomicLexicalReviewTests.tearDown
     submission = lexical_fixture.AtomicLexicalReviewTests.submission
+    new_submission = lexical_fixture.AtomicLexicalReviewTests.new_submission
     dump = lexical_fixture.AtomicLexicalReviewTests.dump
 
     def token(self, sid):
@@ -29,14 +30,14 @@ class LexicalStaleTests(unittest.TestCase):
     def apply(self, sid, token, new=False):
         with Flask(__name__).app_context():
             kwargs = dict(access_role='reviewer', review_note='Reviewed', expected_preview_token=token)
-            return review_as_new(self.db, sid, **kwargs) if new else review_as_existing(self.db, sid, 4, **kwargs)
+            return review_as_new(self.db, sid, morphology_resolution='ACCEPTED', **kwargs) if new else review_as_existing(self.db, sid, 4, **kwargs)
 
     def test_unchanged_existing_and_new(self):
         sid = self.submission()
         self.apply(sid, self.token(sid))
         self.db.close()
         self.setUp()
-        sid = self.submission()
+        sid = self.new_submission()
         self.apply(sid, self.token(sid), new=True)
 
     def test_stale_changes_block_before_any_write(self):

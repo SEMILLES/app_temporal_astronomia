@@ -277,7 +277,7 @@ class WorkflowIntegrityTests(unittest.TestCase):
 
     def test_concept_permissions_and_atomic_history(self):
         app = self.client.application
-        app.register_blueprint(concepts_bp)
+        self.assertIn('concepts', app.blueprints)  # Registered by the shared fixture.
 
         app.add_url_rule(
             '/trabajo',
@@ -285,11 +285,7 @@ class WorkflowIntegrityTests(unittest.TestCase):
             view_func=lambda: '',
         )
 
-        app.add_url_rule(
-            '/conceptos/<int:concept_id>/alternativas',
-            endpoint='alternatives.alternativas',
-            view_func=lambda concept_id: '',
-        )
+        self.assertIn('alternatives.alternativas', app.view_functions)
 
         install_access_context(app)
 

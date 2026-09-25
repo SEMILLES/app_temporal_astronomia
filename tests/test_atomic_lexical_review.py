@@ -41,7 +41,7 @@ class AtomicLexicalReviewTests(unittest.TestCase):
 
     def stored(self, concept):
         return dict(self.db.execute(
-            "SELECT alternative_id,working_label FROM alternative WHERE concept_id=?",
+            "SELECT alternative_id,working_label FROM alternative WHERE concept_id=? AND retired_at IS NULL",
             (concept,)))
 
 
@@ -84,21 +84,26 @@ class AtomicLexicalReviewTests(unittest.TestCase):
         plan = plan_lexical_review(self.db,1,2,destination=4)
         self.existing(sid)
         self.assert_plan(plan)
-        self.assertEqual(self.stored(1),{1:'2a',2:'1a'})
+        self.assertEqual(self.stored(1),{2:'1a'})
         self.assertEqual(self.stored(2),{3:'2a',4:'1a'})
         self.assertEqual([tuple(r) for r in self.db.execute('SELECT concept_id,created_from_submission_id,origin FROM renumber_event ORDER BY concept_id')],[(1,sid,'automatic_assisted'),(2,sid,'automatic_assisted')])
-        self.assertIsNone(self.db.execute('SELECT retired_at FROM alternative WHERE alternative_id=1').fetchone()[0])
+        retired = self.db.execute('SELECT working_label,retired_at FROM alternative WHERE alternative_id=1').fetchone()
+        self.assertEqual(retired['working_label'], '1a')
+        self.assertIsNotNone(retired['retired_at'])
+        self.assertEqual(1, self.db.execute('SELECT count(*) FROM assignment WHERE alternative_id=1 AND is_current=0').fetchone()[0])
         origin = calculate_nomenclature_preview(self.db,1)
-        self.assertIsNone(next(r for r in origin['rows'] if r['alternative_id']==1)['reference_year'])
+        self.assertNotIn(1, [r['alternative_id'] for r in origin['rows']])
 
-    def test_empty_origin_keeps_relations_and_participates(self):
+    def test_empty_origin_preserves_retired_relations_as_history(self):
         self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,2,'CM_1')")
         self.db.commit()
         sid=self.submission()
         relations=[tuple(r) for r in self.db.execute('SELECT * FROM alternative_relation')]
         self.existing(sid)
-        self.assertEqual(relations,[tuple(r) for r in self.db.execute('SELECT * FROM alternative_relation')])
-        self.assertEqual(self.stored(1),{1:'1b',2:'1a'})
+        historical = [tuple(r) for r in self.db.execute('SELECT * FROM alternative_relation')]
+        self.assertEqual([r[:4] + (0,) + r[5:] for r in relations], historical)
+        self.assertIsNotNone(self.db.execute('SELECT retired_at FROM alternative WHERE alternative_id=1').fetchone()[0])
+        self.assertEqual(self.stored(1),{2:'1a'})
 
     def test_new_cross_concept_virtual_materialized_and_preview_equal(self):
         sid=self.new_submission()
@@ -242,6 +247,10 @@ class AtomicLexicalReviewTests(unittest.TestCase):
         self.assertEqual(self.db.execute('SELECT count(*) FROM assignment').fetchone()[0],4)
 
     def test_existing_capacity_failure_in_origin_blocks_destination(self):
+        # A second current assignment keeps the hub active after occurrence 1 moves.
+        self.db.execute("INSERT INTO occurrence(occurrence_id,source_id,original_gloss,occurrence_year) VALUES(30,1,'Retained evidence',1991)")
+        self.db.execute('INSERT INTO occurrence_concept_reference(occurrence_id,concept_id) VALUES(30,1)')
+        self.db.execute('INSERT INTO assignment(occurrence_id,alternative_id) VALUES(30,1)')
         for aid in range(5,30):
             self.db.execute("INSERT INTO alternative(alternative_id,concept_id,working_label) VALUES(?,1,NULL)",(aid,))
             self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,?,'CM_1')",(aid,))

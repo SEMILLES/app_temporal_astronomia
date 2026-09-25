@@ -132,9 +132,11 @@ class PostSmokeFunctionalTests(unittest.TestCase):
         page = self.client.get('/aportes/1').text
         selector = re.search(r'<select name="concept_id".*?</select>', page, re.S)[0]
         self.assertIn('EMPTY — sin alternativas vigentes', selector)
+        destination_page = self.client.get('/aportes/1?metadata_target=2').text
         response = self.client.post('/aportes/1/concepto', data=dict(concept_action='USE_EXISTING',
-            concept_id='2', concept_note='Corresponde al concepto sin alternativas vigentes',
-            concept_edit_token=hidden(page, 'concept_edit_token')))
+            concept_id='2', metadata_target='2',
+            concept_note='Corresponde al concepto sin alternativas vigentes',
+            concept_edit_token=hidden(destination_page, 'concept_edit_token')))
         self.assertEqual(response.status_code, 302, response.text)
         db = self.connect()
         self.assertEqual(db.execute('SELECT concept_id FROM submission_concept_resolution WHERE is_current=1').fetchone()[0], 2)

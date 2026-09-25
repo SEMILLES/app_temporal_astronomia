@@ -268,7 +268,7 @@ class ScopedConceptConcurrencyTests(unittest.TestCase):
         state = edit_state(self.db,'submission_concept',self.sid)
         self.assertEqual([],state['classification_history'])
         self.assertEqual([],state['memberships'])
-        self.save(token,concept_metadata={'classifications':{self.sf:self.fields[1:2]}},metadata_reviewed=True,metadata_target=1)
+        self.save(token,metadata_target=1)
 
     def test_related_metadata_does_invalidate(self):
         token = self.token()
@@ -291,14 +291,24 @@ class ScopedConceptConcurrencyTests(unittest.TestCase):
         with self.assertRaises(StaleEdit):
             self.save(token)
 
-    def test_destination_must_match_signature_with_or_without_payload(self):
+    def test_destination_must_match_signature(self):
         token = self.token()
-        for payload in (None,{'classifications':{self.sf:self.fields[:1]}}):
-            with self.subTest(payload=payload), self.assertRaises(ConceptResolutionError):
-                self.save(token,target=2,metadata_target=2,concept_metadata=payload)
+        before = '\n'.join(self.db.iterdump())
+        with self.assertRaises(ConceptResolutionError):
+            self.save(token,target=2,metadata_target=2)
+        self.assertEqual(before, '\n'.join(self.db.iterdump()))
         scope = unsign(token)['concept_scope']
         self.assertEqual([1],scope['concept_ids'])
         self.assertEqual(1,scope['target_concept_id'])
+
+    def test_existing_destination_rejects_classification_payload_with_valid_token(self):
+        from concept_classification import ClassificationError
+        token = self.token(2)
+        before = '\n'.join(self.db.iterdump())
+        with self.assertRaises(ClassificationError):
+            self.save(token, target=2, metadata_target=2,
+                      concept_metadata={'classifications': {self.sf: self.fields[:1]}})
+        self.assertEqual(before, '\n'.join(self.db.iterdump()))
 
     def test_fresh_destination_token_validates_and_protects_new_target(self):
         token = self.token(2)
@@ -332,7 +342,8 @@ class ScopedConceptConcurrencyTests(unittest.TestCase):
 
     def test_create_new_is_supported_without_existing_destination(self):
         token = self.token()
-        save_resolution(self.db,self.sid,'CREATE_NEW',label='NUEVO',note='Concept nuevo',access_role='reviewer',expected_edit_token=token)
+        save_resolution(self.db,self.sid,'CREATE_NEW',label='NUEVO',note='Concept nuevo',access_role='reviewer',expected_edit_token=token,
+                        concept_metadata={'classifications': {self.sf: self.fields[:1]}})
         self.assertEqual(3,self.db.execute('SELECT concept_id FROM submission_concept_resolution WHERE submission_id=?',(self.sid,)).fetchone()[0])
 
 

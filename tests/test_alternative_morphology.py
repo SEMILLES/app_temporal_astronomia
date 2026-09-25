@@ -124,7 +124,13 @@ class MorphologyReviewTests(unittest.TestCase):
         sid=self.proposal();new=review_as_new(self.db,sid,approve_morphology=True,nomenclature_mode="automatic", access_role="reviewer", review_note="Revision documentada");row=self.db.execute("SELECT * FROM alternative_morphology WHERE alternative_id=? AND is_current=1",(new,)).fetchone();self.assertEqual((row["component_count"],row["created_from_submission_id"]),(2,sid));self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_component WHERE alternative_morphology_id=?",(row["alternative_morphology_id"],)).fetchone()[0],2)
 
     def test_review_new_explicit_rejection_does_not_materialize_but_history_remains(self):
-        sid=self.proposal();new=review_as_new(self.db,sid,nomenclature_mode="automatic", access_role="reviewer", morphology_resolution="REJECTED", review_note="Revision documentada");self.assertEqual(self.db.execute("SELECT count(*) FROM alternative_morphology WHERE alternative_id=?",(new,)).fetchone()[0],0);self.assertIsNotNone(submission_morphology(self.db,sid))
+        sid = self.proposal()
+        before = '\n'.join(self.db.iterdump())
+        with self.assertRaisesRegex(AlternativeWorkflowError, 'morfol'):
+            review_as_new(self.db, sid, access_role='reviewer',
+                          morphology_resolution='REJECTED', review_note='Revision documentada')
+        self.assertEqual(before, '\n'.join(self.db.iterdump()))
+        self.assertIsNotNone(submission_morphology(self.db, sid))
 
     def test_resolve_existing_and_reject_never_apply_proposal(self):
         existing,_=create_or_replace_alternative_morphology(self.db,1,component_count=1,note="Stable")

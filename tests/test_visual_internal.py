@@ -7,6 +7,7 @@ from unittest.mock import patch
 from urllib.parse import urlsplit
 
 from flask import Response
+from jinja2 import nodes
 from playwright.sync_api import sync_playwright
 
 from access_control import install_access_context
@@ -19,6 +20,7 @@ from routes.sources import sources_bp
 from routes.collaborators import collaborators_bp
 from routes.conflicts import conflicts_bp
 from routes.catalog import catalog_bp
+from routes.work_assignments import work_assignments_bp
 from tests import test_alternative_routes as fixtures
 
 
@@ -33,8 +35,9 @@ class InternalVisualTests(unittest.TestCase):
         self.addCleanup(env.stop)
         self.client = self.fixture.client
         app = self.client.application
+        app.secret_key = 'synthetic-internal-visual-tests'
         app.static_folder = str(fixtures.ROOT / 'static')
-        for bp in (main_bp, sources_bp, collaborators_bp, conflicts_bp, catalog_bp):
+        for bp in (main_bp, sources_bp, collaborators_bp, conflicts_bp, catalog_bp, work_assignments_bp):
             app.register_blueprint(bp)
         app.jinja_env.filters.update(human_concept_label=human_concept_label,
                                      source_period=format_source_period,
@@ -61,8 +64,8 @@ class InternalVisualTests(unittest.TestCase):
 
     def test_navigation_exact_links_for_each_role_and_restricted_routes(self):
         shared = ['/trabajo', '/ocurrencias', '/borradores', '/fuentes', '/conceptos', '/aportes', '/catalogo-interno']
-        review = ['/aportes/pendientes', '/conflictos']
-        admin = ['/colaboradores', '/actualizar-catalogo', '/publicaciones']
+        review = ['/administracion/asignaciones', '/aportes/pendientes', '/conflictos']
+        admin = ['/colaboradores', '/administracion/clasificaciones', '/actualizar-catalogo', '/publicaciones']
         before = self.snapshot()
         for role in ('analyst', 'reviewer', 'master'):
             prefix = f'/visual-{role}'
@@ -70,6 +73,8 @@ class InternalVisualTests(unittest.TestCase):
             self.assertEqual(response.status_code, 200)
             header = re.search(r'<aside id="lesico-internal-context".*?</aside>', response.text, re.S)[0]
             expected = shared + (review if role != 'analyst' else []) + (admin if role == 'master' else [])
+            if role == 'analyst':
+                expected.insert(1, '/mi-trabajo')
             self.assertEqual(re.findall(r'href="([^"]+)"', header), [prefix + path for path in expected])
             self.assertEqual(re.findall(r'<strong>(.*?)</strong>', header),
                              ['ANÁLISIS', 'CATÁLOGO'] + (['REVISIÓN'] if role != 'analyst' else []) +
@@ -79,6 +84,8 @@ class InternalVisualTests(unittest.TestCase):
             for path in review + admin:
                 allowed = role == 'master' or (role == 'reviewer' and path in review)
                 self.assertEqual(self.client.get(prefix + path).status_code, 200 if allowed else 404)
+            self.assertEqual(self.client.get(prefix + '/mi-trabajo').status_code,
+                             200 if role == 'analyst' else 404)
             if role != 'master':
                 self.assertEqual(self.client.post(prefix + '/colaboradores', data={'display_name': 'No'}).status_code, 404)
                 self.assertEqual(self.client.post(prefix + '/actualizar-catalogo').status_code, 404)
@@ -120,7 +127,11 @@ class InternalVisualTests(unittest.TestCase):
             if path.name.startswith('_') or path.name == 'catalogo_lesico.html':
                 continue
             with self.subTest(template=path.name):
-                self.assertIn('{% extends "_visual_base.html" %}', path.read_text(encoding='utf-8'))
+                tree = self.client.application.jinja_env.parse(path.read_text(encoding='utf-8'))
+                parents = list(tree.find_all(nodes.Extends))
+                self.assertEqual(len(parents), 1)
+                self.assertIsInstance(parents[0].template, nodes.Const)
+                self.assertEqual(parents[0].template.value, '_visual_base.html')
 
     def test_browser_internal_pages_desktop_and_narrow(self):
         # Create a pending analysis through the existing workflow, in this disposable fixture only.

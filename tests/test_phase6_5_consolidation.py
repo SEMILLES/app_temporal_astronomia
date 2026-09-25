@@ -22,16 +22,28 @@ ROOT=Path(__file__).resolve().parents[1]
 
 class MigrationCliSafetyTests(unittest.TestCase):
     def test_cli_requires_explicit_database_and_does_not_touch_prototype(self):
-        prototype=ROOT/"lesico_prototipo.db"
-        before=prototype.stat().st_mtime_ns
-        environment=os.environ.copy();environment.pop("LESICO_DATABASE_PATH",None)
-        result=subprocess.run(
-            [sys.executable,str(ROOT/"migrations"/"012_collaboration_activity.py")],
-            cwd=ROOT,env=environment,capture_output=True,text=True,
-        )
-        self.assertNotEqual(result.returncode,0)
-        self.assertIn("LESICO_DATABASE_PATH",result.stderr)
-        self.assertEqual(prototype.stat().st_mtime_ns,before)
+        import shutil
+        with tempfile.TemporaryDirectory() as raw:
+            bundle = Path(raw)
+            scripts = bundle / 'migrations'
+            scripts.mkdir()
+            for name in ('012_collaboration_activity.py', 'migration_cli.py'):
+                shutil.copyfile(ROOT / 'migrations' / name, scripts / name)
+            prototype = bundle / 'lesico_prototipo.db'
+            db = sqlite3.connect(prototype)
+            db.execute('CREATE TABLE sentinel(value TEXT)')
+            db.execute("INSERT INTO sentinel VALUES('not the migration target')")
+            db.commit(); db.close()
+            before = prototype.read_bytes(), prototype.stat().st_mtime_ns
+            environment=os.environ.copy();environment.pop("LESICO_DATABASE_PATH",None)
+            result=subprocess.run(
+                [sys.executable,str(scripts / '012_collaboration_activity.py')],
+                cwd=bundle,env=environment,capture_output=True,text=True,
+            )
+            self.assertNotEqual(result.returncode,0)
+            self.assertIn("LESICO_DATABASE_PATH",result.stderr)
+            self.assertEqual((prototype.read_bytes(), prototype.stat().st_mtime_ns), before)
+            self.assertEqual({p.name for p in bundle.glob('*.db')}, {'lesico_prototipo.db'})
 
     def test_cli_respects_environment_and_names_backup_for_selected_database(self):
         with tempfile.TemporaryDirectory() as raw:

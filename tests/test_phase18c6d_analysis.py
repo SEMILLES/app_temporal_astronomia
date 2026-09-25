@@ -93,25 +93,35 @@ class AnalysisFlowTests(unittest.TestCase):
         data['review_note'] = 'Resuelvo la duda'
         self.assertEqual(400, self.client.post(self.base+'confirmar', data=data).status_code)
 
-    def test_preview_passes_every_target_to_existing_nomenclature_algorithm(self):
-        from alternative_workflow import calculate_nomenclature_preview
+    def test_preview_incorporates_every_target_in_atomic_plan(self):
+        from alternative_workflow import plan_lexical_review
+        from tests.test_submission_lexical_ui import PreviewTableParser
+        import re
         self.role = 'reviewer'
         with self.database() as db:
-            db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'2')")
+            unrelated = db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'3a')").lastrowid
+            plan = plan_lexical_review(db, 1, 1, targets=[(1, 'CM_1'), (2, 'N_MANOS')])
+        virtual = 'new_alternative:1'
+        edges = {(r.right, r.parameter) for r in plan['effective_state'].relations if r.left == virtual}
+        self.assertEqual({(1, 'CM_1'), (2, 'N_MANOS')}, edges)
+        expected = plan['affected_concepts'][1]['final_labels']
+        self.assertEqual(len({expected[k][:-1] for k in (virtual, 1, 2)}), 1)
+        self.assertNotEqual(expected[unrelated][:-1], expected[virtual][:-1])
         data = self.payload(relation_target_id=['1', '2'])
         before = self.dump()
-        with patch('alternative_workflow.calculate_nomenclature_preview', wraps=calculate_nomenclature_preview) as calculate:
+        for overrides in ({}, dict(immediate_mode='modify', canonical_decision='new',
+                                  relations_resolution='REJECTED', morphology_resolution='ACCEPTED',
+                                  review_note='Obsolete override')):
+            data.update(overrides)
             response = self.client.post(self.base+'preview', data=data)
-        self.assertEqual(200, response.status_code, response.text)
-        self.assertEqual([1, 2], [target for _, target in calculate.call_args.kwargs['extra_edges']])
-        self.assertEqual(before, self.dump())
-        data.update(immediate_mode='modify', canonical_decision='new', relations_resolution='REJECTED',
-                    morphology_resolution='ACCEPTED', review_note='Descarto las relaciones')
-        with patch('alternative_workflow.calculate_nomenclature_preview', wraps=calculate_nomenclature_preview) as calculate:
-            response = self.client.post(self.base+'preview', data=data)
-        self.assertEqual(200, response.status_code, response.text)
-        self.assertEqual([1, 2], [target for _, target in calculate.call_args.kwargs['extra_edges']])
-        self.assertEqual(before, self.dump())
+            self.assertEqual(200, response.status_code, response.text)
+            table = re.search(r'<table class="preview-table">.*?</table>', response.text, re.S)
+            self.assertIsNotNone(table)
+            parser = PreviewTableParser()
+            parser.feed(table[0])
+            actual = {virtual if row[0] == 'Nueva' else int(row[0]): row[2] for row in parser.rows[1:]}
+            self.assertEqual(expected, actual)
+            self.assertEqual(before, self.dump())
 
     def test_obsolete_post_overrides_cannot_change_existing_destination(self):
         self.role = 'reviewer'
@@ -138,20 +148,72 @@ class AnalysisFlowTests(unittest.TestCase):
     def test_incomplete_duplicate_or_misaligned_relations_are_rejected(self):
         self.role = 'reviewer'
         before = self.dump()
-        for changes, message in [
-            (dict(relation_target_type=[], relation_target_id=[], relation_parameter=[]), 'al menos una relación completa'),
-            (dict(relation_parameter=['CM_1', '']), 'destino y un parámetro'),
-            (dict(relation_target_id=['1', '']), 'destino y un parámetro'),
-            (dict(relation_parameter=['CM_1']), 'al menos una relación completa'),
-            (dict(relation_target_id=['1', '1'], relation_parameter=['CM_1', 'CM_1']), 'duplicada'),
-            (dict(relation_target_id=['1', '1']), 'destino'),
-        ]:
-            for url in ('/ocurrencias/1/clasificar', self.base+'preview', self.base+'confirmar'):
+
+        invalid_cases = [
+            (
+                dict(
+                    relation_target_type=[],
+                    relation_target_id=[],
+                    relation_parameter=[],
+                ),
+                'al menos una relación completa',
+            ),
+            (
+                dict(relation_parameter=['CM_1', '']),
+                'destino y un parámetro',
+            ),
+            (
+                dict(relation_target_id=['1', '']),
+                'destino y un parámetro',
+            ),
+            (
+                dict(relation_parameter=['CM_1']),
+                'al menos una relación completa',
+            ),
+            (
+                dict(
+                    relation_target_id=['1', '1'],
+                    relation_parameter=['CM_1', 'CM_1'],
+                ),
+                'duplicada',
+            ),
+            (
+                dict(relation_target_id=['1', '1']),
+                'destino',
+            ),
+        ]
+
+        for changes, message in invalid_cases:
+            for url in (
+                '/ocurrencias/1/clasificar',
+                self.base + 'preview',
+            ):
                 with self.subTest(url=url, changes=changes):
-                    response = self.client.post(url, data=self.payload(**changes))
+                    response = self.client.post(
+                        url,
+                        data=self.payload(**changes),
+                    )
                     self.assertEqual(400, response.status_code)
                     self.assertIn(message, response.text)
                     self.assertEqual(before, self.dump())
+
+        for changes in (
+            dict(
+                relation_target_id=['1', '1'],
+                relation_parameter=['CM_1', 'CM_1'],
+            ),
+            dict(relation_target_id=['1', '1']),
+        ):
+            with self.subTest(
+                url=self.base + 'confirmar',
+                changes=changes,
+            ):
+                response = self.client.post(
+                    self.base + 'confirmar',
+                    data=self.payload(**changes),
+                )
+                self.assertEqual(409, response.status_code)
+                self.assertEqual(before, self.dump())
 
     def test_normal_submission_one_and_multiple_relations(self):
         self.role = 'analyst'

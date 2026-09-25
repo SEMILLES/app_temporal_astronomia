@@ -30,7 +30,6 @@ from tests.test_import_astronomia_dry_run import EXPECTATIONS, FIXTURES
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "import_astronomia.py"
-PROTOTYPE = ROOT / "lesico_prototipo.db"
 
 
 class AstronomyApplyCliTests(unittest.TestCase):
@@ -596,14 +595,19 @@ class AstronomyApplyCliTests(unittest.TestCase):
         self.assertEqual(occurrences, expected)
 
     def test_apply_does_not_modify_prototype_or_create_real_candidate(self):
-        before = self.file_hash(PROTOTYPE)
+        import database
+        from contextlib import chdir
+        prototype = self.directory / 'lesico_prototipo.db'
+        self.create_current_database(prototype)
+        before = self.file_hash(prototype)
         database_path = self.directory / "isolated.db"
-        result = self.run_cli(
-            "--apply", FIXTURES, "--database", database_path
-        )
+        with chdir(self.directory), patch.object(database, 'BASE_DATOS', prototype), \
+                patch.object(database, 'DEFAULT_BASE_DATOS', prototype):
+            result = self.run_cli("--apply", FIXTURES, "--database", database_path)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.file_hash(PROTOTYPE), before)
-        self.assertFalse((ROOT / "lesico_astronomia_candidate.db").exists())
+        self.assertTrue(database_path.is_file())
+        self.assertEqual(self.file_hash(prototype), before)
+        self.assertEqual({p.name for p in self.directory.iterdir()}, {'lesico_prototipo.db', 'isolated.db'})
 
     def test_success_creates_no_history_or_workflow(self):
         database_path = self.directory / "no-history.db"

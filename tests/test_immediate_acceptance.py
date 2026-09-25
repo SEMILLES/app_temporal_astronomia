@@ -28,12 +28,14 @@ class ImmediateAcceptanceTests(unittest.TestCase):
     def tearDown(self):self.db.close()
 
     def test_shared_proposal_requires_local_decision_and_never_changes_global_state(self):
-        self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('C','rejected')")
-        self.db.execute("UPDATE occurrence_concept_reference SET concept_id=NULL,concept_proposal_id=1")
+        self.db.execute("INSERT INTO concept_proposal(proposed_label,status) VALUES('C','pending')")
+        self.db.execute(
+            "UPDATE occurrence_concept_reference "
+            "SET concept_id=NULL,concept_proposal_id=1,proposal_origin='SELECTED_PENDING'"
+        )
+        self.db.execute("UPDATE concept_proposal SET status='rejected' WHERE concept_proposal_id=1")
         self.db.commit()
         proposal={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology":{"component_count_not_applicable":True}}
-        category = self.db.execute("SELECT system_id,category_id FROM classification_category JOIN classification_system USING(system_id) WHERE classification_system.code='semantic-fields' ORDER BY category_id").fetchone()
-        proposal['concept_metadata'] = {'classifications': {category[0]: [category[1]]}}
         decision={"decision":"existing","alternative_id":1}
         before='\n'.join(self.db.iterdump())
         with self.assertRaises(ImmediateAcceptanceError):
@@ -69,7 +71,7 @@ class ImmediateAcceptanceTests(unittest.TestCase):
         result=confirm_operation(self.db,operation)["result"];sid=result["submission_id"]
         self.assertEqual(1,self.db.execute("SELECT alternative_id FROM assignment WHERE occurrence_id=2 AND is_current=1").fetchone()[0]);self.assertEqual(1,self.db.execute("SELECT resolved_alternative_id FROM alternative_submission WHERE submission_id=?",(sid,)).fetchone()[0])
 
-    def test_explicit_morphology_rejection_requires_note_and_is_not_pending(self):
+    def test_explicit_morphology_rejection_rolls_back_even_with_note(self):
         from alternative_workflow import AlternativeWorkflowError
         proposal={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology":{"component_count":None,"component_count_not_applicable":True,"free_permutation":"N/A","components":[]}}
         decision={"decision":"new","approve_morphology":False,"nomenclature_mode":"automatic"}
@@ -78,11 +80,11 @@ class ImmediateAcceptanceTests(unittest.TestCase):
         with self.assertRaises(AlternativeWorkflowError):preview_operation(self.db,operation)
         self.assertEqual(before,'\n'.join(self.db.iterdump()))
         operation=alternative_operation(2,proposal,decision,actor_context=self.actor,review_note='Morphology rejected')
-        preview=preview_operation(self.db,operation)
-        self.assertEqual([],preview['non_blocking']);self.assertEqual(before,'\n'.join(self.db.iterdump()))
-        result=confirm_operation(self.db,operation)
-        self.assertEqual([],result['non_blocking'])
-        self.assertEqual('REJECTED',self.db.execute('SELECT morphology_resolution FROM submission_lexical_decision').fetchone()[0])
+        for execute in (preview_operation, confirm_operation):
+            with self.subTest(operation=execute.__name__):
+                with self.assertRaisesRegex(AlternativeWorkflowError, 'morfol'):
+                    execute(self.db, operation)
+                self.assertEqual(before, '\n'.join(self.db.iterdump()))
 
     def test_new_can_materialize_morphology_and_unsure_requires_decision(self):
         proposal={"proposal_kind":"NEW","phonological_relation_answer":"NO","morphology":{"component_count":None,"component_count_not_applicable":True,"free_permutation":"N/A","components":[]}}
@@ -193,24 +195,37 @@ class ImmediateAcceptanceTests(unittest.TestCase):
     def test_changed_proposals_require_note_and_record_assignment_effect(self):
         from alternative_workflow import AlternativeWorkflowError
         cases = [('EXISTING', 'new', 1, 'REPLACED'), ('UNSURE', 'new', 2, 'CREATED'),
+                 ('NEW', 'new', 1, 'REPLACED'), ('NEW', 'new', 2, 'CREATED'),
                  ('UNSURE', 'existing', 2, 'CREATED'), ('EXISTING', 'existing', 1, 'REUSED')]
         for kind, action, occurrence, effect in cases:
             with self.subTest(kind=kind, action=action):
                 proposal = {'proposal_kind': kind, 'analysis_note': 'Uncertain',
                             'proposed_existing_alternative_id': 1 if kind == 'EXISTING' else None}
                 decision = {'decision': action, 'alternative_id': 1}
+                if kind == 'NEW':
+                    proposal.update(phonological_relation_answer='NO',
+                                    morphology={'component_count_not_applicable': True})
+                    decision['morphology_resolution'] = 'ACCEPTED'
                 before = '\n'.join(self.db.iterdump())
-                if kind == 'UNSURE' or action == 'new':
+                if kind == 'UNSURE' or (kind == 'EXISTING' and action == 'new'):
                     with self.assertRaises(AlternativeWorkflowError):
                         confirm_operation(self.db, alternative_operation(occurrence, proposal, decision, actor_context=self.actor))
                     self.assertEqual(before, '\n'.join(self.db.iterdump()))
+                if action == 'new' and kind != 'NEW':
+                    # A note cannot replace the missing morphology proposal.
+                    with self.assertRaisesRegex(AlternativeWorkflowError, 'morfol'):
+                        confirm_operation(self.db, alternative_operation(occurrence, proposal, decision,
+                                          actor_context=self.actor, review_note='Reviewed'))
+                    self.assertEqual(before, '\n'.join(self.db.iterdump()))
+                    continue
                 def checked(connection):
                     result = alternative_operation(occurrence, proposal, decision,
                         actor_context=self.actor, review_note='Reviewed')(connection)
                     row = connection.execute('SELECT * FROM submission_lexical_decision WHERE submission_id=?',
                                              (result['submission_id'],)).fetchone()
                     self.assertEqual(effect, row['assignment_effect'])
-                    self.assertEqual(('NOT_PROPOSED', 'NOT_PROPOSED'), (row['relations_resolution'], row['morphology_resolution']))
+                    self.assertEqual(('NOT_PROPOSED', 'ACCEPTED' if kind == 'NEW' else 'NOT_PROPOSED'),
+                                     (row['relations_resolution'], row['morphology_resolution']))
                     return result
                 preview_operation(self.db, checked)
                 self.assertEqual(before, '\n'.join(self.db.iterdump()))
@@ -229,15 +244,15 @@ class ImmediateAcceptanceTests(unittest.TestCase):
 
 
     def test_new_rejected_relations_and_morphology_do_not_materialize(self):
-        result = confirm_operation(self.db, alternative_operation(2, self.grouped_proposal(), {
+        from alternative_workflow import AlternativeWorkflowError
+        operation = alternative_operation(2, self.grouped_proposal(), {
             'decision': 'new', 'relations_resolution': 'REJECTED',
             'morphology_resolution': 'REJECTED'}, actor_context=self.actor,
-            review_note='Reject proposed groups'))
-        self.assertEqual([], result['non_blocking'])
-        for table in ('alternative_relation', 'alternative_morphology'):
-            self.assertEqual(0, self.db.execute('SELECT count(*) FROM ' + table).fetchone()[0])
-        self.assertEqual(('REJECTED', 'REJECTED'), tuple(self.db.execute(
-            'SELECT relations_resolution,morphology_resolution FROM submission_lexical_decision').fetchone()))
+            review_note='Reject proposed groups')
+        before = '\n'.join(self.db.iterdump())
+        with self.assertRaisesRegex(AlternativeWorkflowError, 'morfol'):
+            confirm_operation(self.db, operation)
+        self.assertEqual(before, '\n'.join(self.db.iterdump()))
 
     def test_existing_a_to_b_requires_note_and_replaces_assignment(self):
         from alternative_workflow import AlternativeWorkflowError

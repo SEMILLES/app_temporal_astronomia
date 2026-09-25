@@ -71,6 +71,8 @@ class ActivityTests(unittest.TestCase):
         with self.assertRaises(InvalidActivity): record_activity(self.db,"bad",access_role="visitor")
 
     def test_rollback_removes_success_event(self):
+        self.db.commit()  # Finish schema seeds before the transaction under test.
+        self.assertFalse(self.db.in_transaction)
         self.db.execute("BEGIN")
         record_activity(self.db,"temporary",access_role="reviewer")
         self.db.rollback()

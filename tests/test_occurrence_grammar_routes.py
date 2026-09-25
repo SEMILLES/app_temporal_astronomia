@@ -310,7 +310,10 @@ assert.equal(form.elements.plural.value,'REDUP.');
         page=self.client.get("/aportes/pendientes").get_data(as_text=True); self.assertIn("Propuesta del analista",page); self.assertIn("DECISIÓN DEL REVISOR",page)
         db=self.connect(); canonical_before=tuple(db.execute("SELECT count(*) FROM alternative").fetchone())+tuple(db.execute("SELECT count(*) FROM assignment").fetchone()); db.close()
         db=self.connect(); save_resolution(db,sid,"CONFIRM_REFERENCE",access_role="reviewer"); db.close()
-        self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"rejected","review_note":"Resto rechazado"}).status_code,302)
+        from tests.form_client import hidden
+        token = hidden(self.client.get(f'/aportes/{sid}').text, 'lexical_preview_token')
+        self.assertTrue(token)
+        self.assertEqual(self.client.post(f"/aportes/{sid}/decidir",data={"decision":"rejected","review_note":"Resto rechazado", "lexical_preview_token": token}).status_code,302)
         db=self.connect(); row=db.execute("SELECT status,resolution FROM submission WHERE submission_id=?",(sid,)).fetchone(); canonical_after=tuple(db.execute("SELECT count(*) FROM alternative").fetchone())+tuple(db.execute("SELECT count(*) FROM assignment").fetchone()); db.close()
         self.assertEqual(tuple(row),("resolved","rejected")); self.assertEqual(canonical_after,canonical_before)
 
