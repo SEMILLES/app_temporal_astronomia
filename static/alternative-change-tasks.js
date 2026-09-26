@@ -1,12 +1,43 @@
 (() => {
   const components = document.getElementById('morphology-components');
   if (components) {
+    const form = document.getElementById('morphology-proposal');
     const addComponent = document.getElementById('add-component');
+    const removeComponent = document.getElementById('remove-last-component');
+    const controls = document.getElementById('identified-component-controls');
+    const count = form.elements.component_count;
+    const permutation = form.elements.free_permutation;
     let index = Number(components.dataset.nextIndex);
     addComponent.hidden = false;
-    components.querySelectorAll('[data-remove-component]').forEach(button => {button.hidden = false;});
-    components.addEventListener('click', event => {
-      if (event.target.matches('[data-remove-component]')) event.target.closest('[data-component-row]').remove();
+    removeComponent.hidden = false;
+    const refresh = () => {
+      const simple = Number(count.value.trim()) === 1;
+      const notApplicable = count.value.trim() === 'N/A';
+      document.getElementById('morphology-permutation').hidden = simple || notApplicable;
+      permutation.disabled = simple || notApplicable;
+      document.getElementById('component-identification').hidden = simple;
+      controls.hidden = simple || form.querySelector('[name="ui_identified"]:checked')?.value !== 'yes';
+      components.querySelectorAll('[data-component-row]').forEach(row => {
+        row.disabled = controls.hidden;
+        const existing = row.querySelector('[type="radio"]:checked')?.value === 'existing';
+        const target = row.querySelector('select');
+        row.querySelector('[data-existing-component]').hidden = !existing;
+        target.disabled = !existing;
+        target.required = existing && !controls.hidden;
+        const unavailable = row.querySelector('[data-unavailable-reference]');
+        if (unavailable) unavailable.disabled = !existing || !!target.value;
+        const label = row.querySelector('[name$="_label"]');
+        const note = row.querySelector('[name$="_note"]');
+        label.setCustomValidity(!controls.hidden && !existing && !label.value.trim() && !note.value.trim()
+          ? 'Describa el componente o añada una nota.' : '');
+      });
+      removeComponent.disabled = components.children.length <= 1;
+    };
+    form.addEventListener('change', refresh);
+    form.addEventListener('input', refresh);
+    removeComponent.addEventListener('click', () => {
+      if (components.children.length > 1) components.lastElementChild.remove();
+      refresh();
     });
     addComponent.addEventListener('click', () => {
       const nextPosition = Math.max(0, ...Array.from(components.querySelectorAll('[name$="_position"]'), input => Number(input.value) || 0)) + 1;
@@ -14,7 +45,9 @@
       template.innerHTML = document.getElementById('component-template').innerHTML.replaceAll('__index__', String(index++));
       template.content.querySelector('[name$="_position"]').value = nextPosition;
       components.append(template.content);
+      refresh();
     });
+    refresh();
   }
   const form = document.getElementById('relation-proposals');
   if (!form) return;

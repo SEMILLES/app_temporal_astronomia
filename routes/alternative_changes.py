@@ -1,4 +1,5 @@
 import json
+import re
 import secrets
 import sqlite3
 from flask import Blueprint, abort, g, redirect, render_template, request, session, url_for
@@ -10,6 +11,7 @@ from edit_concurrency import sign, unsign
 from phonological_parameters import PHONOLOGICAL_PARAMETERS
 from routes.alternatives import _components_from_form
 from source_details import occurrence_presentation
+from concept_labels import alternative_display_label
 
 alternative_changes_bp = Blueprint('alternative_changes', __name__)
 
@@ -47,6 +49,42 @@ def _context(db, aid):
     return dict(alternative=target,morphology=morphology,components=components,relations=relations,evidence=[occurrence_presentation(o) for o in evidence],options=options,parameters=PHONOLOGICAL_PARAMETERS)
 
 
+def _morphology_form_context(db, context, form=None):
+    """Keep raw form values separate from canonical state and stored proposals."""
+    options = [dict(row) for row in db.execute('''
+        SELECT a.alternative_id,a.working_label,c.preferred_label
+        FROM alternative a JOIN concept c USING(concept_id)
+        WHERE a.retired_at IS NULL AND a.alternative_id!=?
+        ORDER BY c.preferred_label,a.working_label,a.alternative_id
+    ''', (context['alternative']['alternative_id'],)).fetchall()]
+    for option in options:
+        option['display_label'] = alternative_display_label(
+            option['preferred_label'], option['working_label']) or option['preferred_label'] + ' · Sin etiqueta'
+    if form is not None:
+        values = form.to_dict()
+        indexes = sorted({int(match.group(1)) for key in form
+                          if (match := re.fullmatch(r'component_(\d+)_position', key))})
+        rows = [dict(index=i, position=form.get(f'component_{i}_position', ''),
+                     component_alternative_id=form.get(f'component_{i}_alternative_id', ''),
+                     component_label=form.get(f'component_{i}_label', ''),
+                     note=form.get(f'component_{i}_note', ''),
+                     kind=form.get(f'ui_component_type_{i}', '')) for i in indexes]
+    else:
+        morphology = context['morphology']
+        values = dict(component_count=('N/A' if morphology['component_count_not_applicable']
+                      else morphology['component_count'] or '') if morphology else '',
+                      free_permutation=morphology['free_permutation'] if morphology else 'SIN INFORMACIÓN',
+                      morphology_note=morphology['note'] or '' if morphology else '')
+        rows = [dict(row, index=i) for i, row in enumerate(map(dict, context['components']), 1)]
+    for row in rows:
+        row['component_alternative_id'] = str(row['component_alternative_id'] or '')
+        row['kind'] = row.get('kind') or ('existing' if row['component_alternative_id'] else
+                                        'unapproved' if row['component_label'] or row['note'] else '')
+    values.setdefault('ui_identified', 'yes' if rows else 'no')
+    return dict(morphology_values=values, component_form_rows=rows,
+                component_options=options, component_option_ids=[str(o['alternative_id']) for o in options])
+
+
 @alternative_changes_bp.route('/alternativas/<int:alternative_id>/proponer', methods=['GET','POST'])
 @requires_analyst
 def propose(alternative_id):
@@ -71,9 +109,28 @@ def propose(alternative_id):
                     raise ValueError('La alternativa cambió; recargue la página antes de proponer.')
                 if kind == 'MORPHOLOGY':
                     count = request.form.get('component_count','').strip()
+                    components = _components_from_form(request.form)
+                    # UI choices are optional for already-open forms; never persist them.
+                    if request.form.get('ui_identified') == 'no':
+                        components = []
+                    elif count != '1':
+                        for key, component_kind in request.form.items():
+                            match = re.fullmatch(r'ui_component_type_(\d+)', key)
+                            if not match:
+                                continue
+                            prefix = f'component_{match.group(1)}_'
+                            target = request.form.get(prefix + 'alternative_id', '').strip()
+                            label = request.form.get(prefix + 'label', '').strip()
+                            note = request.form.get(prefix + 'note', '').strip()
+                            if component_kind == 'existing' and not target:
+                                raise ValueError('Seleccione una alternativa vigente para el componente.')
+                            if component_kind == 'unapproved' and (target or not (label or note)):
+                                raise ValueError('El componente con dudas requiere una descripción o nota, sin alternativa vinculada.')
+                            if component_kind not in ('existing', 'unapproved'):
+                                raise ValueError('Seleccione el tipo de componente.')
                     values = dict(component_count=None if count=='N/A' else count,
                         component_count_not_applicable=count=='N/A',free_permutation=request.form.get('free_permutation'),
-                        note=request.form.get('morphology_note'),components=_components_from_form(request.form))
+                        note=request.form.get('morphology_note'),components=components)
                 else:
                     targets, parameters = request.form.getlist('target_id'), request.form.getlist('parameter')
                     if len(targets)!=len(parameters):
@@ -90,6 +147,8 @@ def propose(alternative_id):
         pending = pending_changes(db,[alternative_id])[alternative_id]
         unavailable = [[r['alternative_high_id'] if r['alternative_low_id']==alternative_id else r['alternative_low_id'],r['phonological_parameter']] for r in context['relations']]
         unavailable += [[p['target_id'] if p['alternative_id']==alternative_id else p['alternative_id'],p['parameter']] for p in pending['RELATION']]
+        if mode == 'morphology':
+            context.update(_morphology_form_context(db, context, request.form if request.method == 'POST' else None))
         return render_template('alternative_change_propose.html',**context,tokens=tokens,csrf_token=csrf,error=error,mode=mode,pending=pending,unavailable=unavailable), 400 if error else 200
     finally:
         db.close()

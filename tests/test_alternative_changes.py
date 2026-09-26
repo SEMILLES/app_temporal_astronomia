@@ -1,4 +1,6 @@
 import importlib.util
+import json
+import re
 import sqlite3
 import subprocess
 import os
@@ -6,6 +8,7 @@ import sys
 import tempfile
 from contextlib import closing
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from database import crear_esquema
@@ -238,11 +241,59 @@ with sync_playwright() as pw:
         page.on('pageerror',lambda error:errors.append(str(error)))
         page.goto('http://local.test/a/alternativas/1/proponer?mode=morphology')
         expect(page.locator('select[name=free_permutation]')).to_have_value('SIN INFORMACIÓN')
+        expect(page.locator('#identified-component-controls')).to_be_hidden()
+        page.locator('[name=component_count]').fill('3')
+        page.locator('[name=ui_identified][value=yes]').check()
         expect(page.locator('#morphology-components [data-component-row]')).to_have_count(1)
+        first=page.locator('#morphology-components [data-component-row]').first
+        first.locator('[value=existing]').check()
+        first.locator('select').select_option('2')
+        first.locator('[name$=_label]').fill('Etiqueta conservada')
+        first.locator('[name$=_note]').fill('Nota conservada')
+        first.locator('[name$=_position]').fill('5')
         page.locator('#add-component').click()
         expect(page.locator('#morphology-components [data-component-row]')).to_have_count(2)
-        page.locator('#morphology-components [data-remove-component]').last.click()
+        page.locator('#remove-last-component').click()
         expect(page.locator('#morphology-components [data-component-row]')).to_have_count(1)
+        first.locator('[value=unapproved]').check()
+        expect(first.locator('select')).to_be_disabled()
+        expect(first.locator('[name$=_label]')).to_have_value('Etiqueta conservada')
+        first.locator('[value=existing]').check()
+        expect(first.locator('select')).to_have_value('2')
+        page.locator('[name=component_count]').fill('1')
+        expect(page.locator('#identified-component-controls')).to_be_hidden()
+        expect(first.locator('[name$=_position]')).to_be_disabled()
+        page.locator('[name=component_count]').fill('N/A')
+        expect(page.locator('#identified-component-controls')).to_be_visible()
+        expect(page.locator('[name=free_permutation]')).to_be_disabled()
+        page.locator('[name=component_count]').fill('0')
+        page.locator('[name=morphology_note]').fill('Observación enviada')
+        page.locator('#lesico-collaborator').select_option('1')
+        page.get_by_role('button',name='Enviar propuesta de morfología').click()
+        expect(page.locator('[role=alert]')).to_contain_text('al menos 1')
+        first=page.locator('#morphology-components [data-component-row]').first
+        expect(first.locator('select')).to_have_value('2')
+        expect(first.locator('[name$=_label]')).to_have_value('Etiqueta conservada')
+        expect(first.locator('[name$=_note]')).to_have_value('Nota conservada')
+        expect(first.locator('[name$=_position]')).to_have_value('5')
+        expect(page.locator('[name=morphology_note]')).to_have_value('Observación enviada')
+        page.locator('[name=component_count]').fill('12')
+        page.locator('[name=ui_identified][value=no]').check()
+        expect(first.locator('[name$=_position]')).to_be_disabled()
+        page.locator('[name=ui_identified][value=yes]').check()
+        expect(first.locator('[name$=_label]')).to_have_value('Etiqueta conservada')
+        expect(page.locator('#morphology-proposal [name=collaborator_id]')).to_have_value('1')
+        page.get_by_role('button',name='Enviar propuesta de morfología').click()
+        expect(page.locator('h1')).to_contain_text('Aporte #')
+        with closing(conectar()) as db:
+            import json
+            from alternative_change_workflow import review_proposal
+            proposal=db.execute("SELECT submission_id,payload FROM alternative_change_submission WHERE change_kind='MORPHOLOGY' ORDER BY submission_id DESC").fetchone()
+            values=json.loads(proposal['payload'])
+            assert values['component_count']==12 and len(values['components'])==1,values
+            assert values['components'][0]==dict(position=5,component_alternative_id=2,component_label='Etiqueta conservada',note='Nota conservada'),values
+            assert db.execute('SELECT COUNT(*) FROM alternative_morphology WHERE is_current=1').fetchone()[0]==1
+            review_proposal(db,proposal['submission_id'],'rejected',collaborator_id=1,access_role='reviewer',note='Prueba de interfaz')
         page.goto('http://local.test/a/alternativas/2/proponer?mode=relation')
         page.locator('#lesico-collaborator').select_option('1')
         expect(page.locator('#prepare-relation')).to_be_disabled()
@@ -272,6 +323,147 @@ assert 'id="relation-proposals"' not in page.text
 '''
             result=subprocess.run([sys.executable,'-c',script],cwd=ROOT,env=env,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+
+
+class MorphologyProposalRouteTests(unittest.TestCase):
+    def setUp(self):
+        from flask import Flask, g
+        from routes.alternative_changes import alternative_changes_bp
+        self.folder = tempfile.TemporaryDirectory()
+        self.addCleanup(self.folder.cleanup)
+        self.path = Path(self.folder.name) / 'morphology.db'
+        with closing(self.connect()) as db:
+            crear_esquema(db)
+            db.execute("INSERT INTO collaborator(display_name) VALUES('Ana')")
+            db.executemany('INSERT INTO concept(preferred_label) VALUES(?)', [('SOL',), ('LUNA',)])
+            db.executemany('INSERT INTO alternative(concept_id,working_label) VALUES(?,?)',
+                           [(1, '1a'), (1, '2a'), (2, '1a'), (2, '2a')])
+            db.execute('UPDATE alternative SET retired_at=CURRENT_TIMESTAMP WHERE alternative_id=4')
+            db.commit()
+        app = Flask(__name__, template_folder=str(ROOT / 'templates'))
+        app.config.update(TESTING=True, SECRET_KEY='test-only')
+        app.register_blueprint(alternative_changes_bp)
+        @app.before_request
+        def analyst():
+            g.current_access_role = 'analyst'
+        self.client = app.test_client()
+        connection_patch = patch('routes.alternative_changes.conectar', self.connect)
+        connection_patch.start()
+        self.addCleanup(connection_patch.stop)
+        self.url = '/alternativas/1/proponer?mode=morphology'
+
+    def connect(self):
+        db = sqlite3.connect(self.path)
+        db.row_factory = sqlite3.Row
+        db.execute('PRAGMA foreign_keys=ON')
+        return db
+
+    def form(self):
+        page = self.client.get(self.url)
+        self.assertEqual(page.status_code, 200)
+        from html import unescape
+        values = {name: unescape(re.search(r'name="' + name + r'" value="([^"]*)"', page.text)[1])
+                  for name in ('csrf_token', 'state_token', 'kind')}
+        values.update(collaborator_id='1', component_count='3', free_permutation='NO',
+                      morphology_note='Observación', component_7_position='5',
+                      component_7_alternative_id='3', component_7_label='Etiqueta', component_7_note='Nota')
+        return values
+
+    def canonical(self):
+        with closing(self.connect()) as db:
+            return {table: [tuple(row) for row in db.execute('SELECT * FROM ' + table)] for table in
+                    ('alternative', 'alternative_morphology', 'alternative_component', 'alternative_relation')}
+
+    def test_selector_is_global_active_and_excludes_self(self):
+        page = self.client.get(self.url).text
+        select = re.search(r'<select name="component_1_alternative_id">(.*?)</select>', page, re.S)[1]
+        self.assertIn('value="2">SOL-2a', select)
+        self.assertIn('value="3">LUNA-1a', select)
+        self.assertNotIn('value="1"', select)
+        self.assertNotIn('value="4"', select)
+        self.assertNotIn('<input name="component_1_alternative_id"', page)
+
+    def test_existing_component_preserves_exact_payload_and_canonical_state(self):
+        data = self.form()  # Already-open forms do not send the new UI controls.
+        before = self.canonical()
+        response = self.client.post(self.url, data=data)
+        self.assertEqual(response.status_code, 302, response.text)
+        self.assertEqual(before, self.canonical())
+        with closing(self.connect()) as db:
+            payload = json.loads(db.execute('SELECT payload FROM alternative_change_submission').fetchone()[0])
+            self.assertEqual(payload, dict(component_count=3, component_count_not_applicable=0,
+                free_permutation='NO', note='Observación', components=[dict(position=5,
+                component_alternative_id=3, component_label='Etiqueta', note='Nota')]))
+            self.assertEqual(tuple(db.execute('SELECT submission_type,status FROM submission').fetchone()),
+                             ('ALTERNATIVE_CHANGE', 'pending'))
+
+    def test_uncertain_component_keeps_label_and_note(self):
+        data = self.form()
+        data.update(ui_identified='yes', ui_component_type_7='unapproved', component_7_alternative_id='')
+        before = self.canonical()
+        response = self.client.post(self.url, data=data)
+        self.assertEqual(response.status_code, 302, response.text)
+        self.assertEqual(before, self.canonical())
+        with closing(self.connect()) as db:
+            payload = json.loads(db.execute('SELECT payload FROM alternative_change_submission').fetchone()[0])
+        self.assertEqual(payload['components'], [dict(position=5, component_alternative_id=None,
+                                                     component_label='Etiqueta', note='Nota')])
+        self.assertEqual(set(payload), {'component_count', 'component_count_not_applicable',
+                                       'free_permutation', 'note', 'components'})
+
+    def test_count_one_na_and_large_counts_keep_existing_rules(self):
+        for count, expected_count, expected_components in [('1', 1, 0), ('N/A', None, 1), ('12', 12, 1)]:
+            with self.subTest(count=count):
+                data = self.form()
+                data.update(component_count=count, ui_identified='yes', ui_component_type_7='existing')
+                response = self.client.post(self.url, data=data)
+                self.assertEqual(response.status_code, 302, response.text)
+                with closing(self.connect()) as db:
+                    row = db.execute('SELECT submission_id,payload FROM alternative_change_submission ORDER BY submission_id DESC').fetchone()
+                    payload = json.loads(row['payload'])
+                    self.assertEqual(payload['component_count'], expected_count)
+                    self.assertEqual(payload['free_permutation'], 'NO' if count == '12' else 'N/A')
+                    self.assertEqual(len(payload['components']), expected_components)
+                    review_proposal(db, row['submission_id'], 'rejected', collaborator_id=1,
+                                    access_role='reviewer', note='Siguiente caso')
+
+    def test_validation_error_preserves_sent_values_and_rejects_invalid_targets(self):
+        for target in ('1', '4', '999'):
+            with self.subTest(target=target):
+                data = self.form()
+                data.update(component_7_alternative_id=target, ui_identified='yes', ui_component_type_7='existing')
+                before = self.canonical()
+                response = self.client.post(self.url, data=data)
+                self.assertEqual(response.status_code, 400)
+                self.assertEqual(before, self.canonical())
+                self.assertIn('name="component_7_label" value="Etiqueta"', response.text)
+                self.assertIn('name="component_7_note">Nota</textarea>', response.text)
+                self.assertIn('name="morphology_note">Observación</textarea>', response.text)
+                self.assertIn('value="' + target + '" data-unavailable-reference', response.text)
+                with closing(self.connect()) as db:
+                    self.assertEqual(db.execute('SELECT count(*) FROM submission').fetchone()[0], 0)
+
+    def test_canonical_preload_keeps_all_component_fields(self):
+        with closing(self.connect()) as db:
+            create_or_replace_alternative_morphology(db, 1, component_count=3, free_permutation='SÍ',
+                note='Observación previa', components=[dict(position=5, component_alternative_id=3,
+                component_label='Etiqueta previa', note='Nota previa')])
+        page = self.client.get(self.url).text
+        self.assertIn('value="3" selected>LUNA-1a', page)
+        self.assertIn('value="Etiqueta previa"', page)
+        self.assertIn('>Nota previa</textarea>', page)
+        self.assertIn('>Observación previa</textarea>', page)
+        self.assertIn('value="yes" checked', page)
+
+    def test_invalid_permutation_is_preserved_for_correction(self):
+        data = self.form()
+        data['free_permutation'] = 'Valor reenviado'
+        response = self.client.post(self.url, data=data)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('<option selected value="Valor reenviado">Valor reenviado</option>', response.text)
+        data['free_permutation'] = 'SÍ'
+        response = self.client.post(self.url, data=data)
+        self.assertEqual(response.status_code, 302, response.text)
 
 
 class Migration027Tests(unittest.TestCase):

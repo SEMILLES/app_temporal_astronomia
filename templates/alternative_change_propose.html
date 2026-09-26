@@ -9,27 +9,48 @@
 {% if mode=='morphology' %}
 {% if pending.MORPHOLOGY %}
 {% for p in pending.MORPHOLOGY %}<p><a href="{{url_for('alternative_changes.detail',submission_id=p.submission_id)}}">En revisión · Aporte #{{p.submission_id}}</a></p>{% endfor %}
-{% else %}
+{% endif %}
+{% if not pending.MORPHOLOGY or error %}
 <section id="morfologia"><h2>Proponer morfología</h2>
-<form method="post"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="state_token" value="{{tokens.MORPHOLOGY}}"><input type="hidden" name="kind" value="MORPHOLOGY">
-<label>Cantidad de componentes (1 para seña simple; N/A para no aplica) <input name="component_count" required value="{{'N/A' if morphology and morphology.component_count_not_applicable else (morphology.component_count if morphology and morphology.component_count else '')}}"></label>
-<label>Permutación libre <select name="free_permutation">{% for value in ['SIN INFORMACIÓN','SÍ','NO'] %}<option{% if morphology and morphology.free_permutation==value %} selected{% endif %}>{{value}}</option>{% endfor %}</select></label>
-<label>Nota <input name="morphology_note" value="{{morphology.note if morphology and morphology.note else ''}}"></label>
-<fieldset><legend>Componentes identificados (pueden ser menos que la cantidad total)</legend>
-<div id="morphology-components" data-next-index="{{components|length+2}}">
-{% for i in range(1,components|length+2) %}{% set c=components[i-1] if components|length>=i else none %}
-<p data-component-row><label>Posición <input name="component_{{i}}_position" size="3" value="{{c.position if c else ((components|map(attribute='position')|max)+1 if components else 1)}}"></label>
-<label>ID alternativa <input name="component_{{i}}_alternative_id" size="6" value="{{c.component_alternative_id if c and c.component_alternative_id else ''}}"></label>
-<label>Etiqueta <input name="component_{{i}}_label" value="{{c.component_label if c and c.component_label else ''}}"></label>
-<label>Nota <input name="component_{{i}}_note" value="{{c.note if c and c.note else ''}}"></label><button type="button" data-remove-component hidden>Quitar componente</button></p>{% endfor %}
-</div><button type="button" id="add-component" hidden>Agregar componente</button>
-<template id="component-template"><p data-component-row>
-<label>Posición <input name="component___index___position" size="3"></label>
-<label>ID alternativa <input name="component___index___alternative_id" size="6"></label>
-<label>Etiqueta <input name="component___index___label"></label>
-<label>Nota <input name="component___index___note"></label><button type="button" data-remove-component>Quitar componente</button>
-</p></template>
-</fieldset><button>Enviar propuesta de morfología</button></form></section>
+<form method="post" id="morphology-proposal"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="state_token" value="{{tokens.MORPHOLOGY}}"><input type="hidden" name="kind" value="MORPHOLOGY">
+{% if error and morphology_values.get('collaborator_id') %}<input type="hidden" name="collaborator_id" value="{{morphology_values['collaborator_id']}}">{% endif %}
+<p><label>Cantidad de componentes <input name="component_count" required value="{{morphology_values.get('component_count', '')}}" aria-describedby="component-count-help"></label></p>
+<p id="component-count-help">Indique un entero positivo (1 para una seña simple) o N/A. Puede registrar solo los componentes identificados, aunque sean menos que la cantidad total.</p>
+<p id="morphology-permutation"><label>¿Los componentes admiten permutación libre? <select name="free_permutation">
+{% set permutation_values=['SIN INFORMACIÓN','SÍ','NO','N/A'] %}
+{% if error and morphology_values.get('free_permutation', '') not in permutation_values %}<option selected value="{{morphology_values.get('free_permutation', '')}}">{{morphology_values.get('free_permutation') or 'Seleccione'}}</option>{% endif %}
+{% for value in permutation_values %}<option{% if morphology_values.get('free_permutation')==value %} selected{% endif %}>{{value}}</option>{% endfor %}</select></label></p>
+<fieldset id="component-identification"><legend>¿Se identificaron componentes?</legend>
+<label><input type="radio" name="ui_identified" value="yes"{% if morphology_values.get('ui_identified')=='yes' %} checked{% endif %}> Sí</label>
+<label><input type="radio" name="ui_identified" value="no"{% if morphology_values.get('ui_identified')!='yes' %} checked{% endif %}> No</label>
+</fieldset>
+{% macro component_row(i, c={}) %}
+{% set target=c.get('component_alternative_id', '') %}
+<fieldset data-component-row><legend>Componente</legend>
+<p><label>Posición <input name="component_{{i}}_position" type="number" min="1" value="{{c.get('position', 1)}}" required></label></p>
+<p>Tipo de componente:
+<label><input type="radio" name="ui_component_type_{{i}}" value="existing"{% if c.get('kind')=='existing' %} checked{% endif %} required> Alternativa existente</label>
+<label><input type="radio" name="ui_component_type_{{i}}" value="unapproved"{% if c.get('kind')=='unapproved' %} checked{% endif %} required> Componente no aprobado / con dudas</label></p>
+<p data-existing-component><label>Alternativa vigente <select name="component_{{i}}_alternative_id">
+<option value="">Seleccione</option>
+{% if target and target not in component_option_ids %}<option value="" selected disabled>Referencia no disponible; seleccione una alternativa vigente</option>{% endif %}
+{% for option in component_options %}<option value="{{option.alternative_id}}"{% if target == (option.alternative_id|string) %} selected{% endif %}>{{option.display_label}}</option>{% endfor %}
+</select></label>
+{% if target and target not in component_option_ids %}<input type="hidden" name="component_{{i}}_alternative_id" value="{{target}}" data-unavailable-reference>{% endif %}</p>
+<p><label>Descripción del componente <input name="component_{{i}}_label" value="{{c.get('component_label') or ''}}"></label></p>
+<p><label>Nota del componente <textarea name="component_{{i}}_note">{{c.get('note') or ''}}</textarea></label></p>
+</fieldset>
+{% endmacro %}
+<div id="identified-component-controls">
+<div id="morphology-components" data-next-index="{{(component_form_rows|map(attribute='index')|max)+1 if component_form_rows else 2}}">
+{% for c in component_form_rows %}{{component_row(c.index, c)}}{% else %}{{component_row(1)}}{% endfor %}
+</div>
+<button type="button" id="add-component" hidden>Agregar componente identificado</button>
+<button type="button" id="remove-last-component" hidden>Eliminar último componente</button>
+</div>
+<template id="component-template">{{component_row('__index__')}}</template>
+<p><label>Observación general <textarea name="morphology_note">{{morphology_values.get('morphology_note', '')}}</textarea></label></p>
+<button>Enviar propuesta de morfología</button></form></section>
 {% endif %}{% endif %}
 {% if mode=='relation' %}
 <section id="relaciones"><h2>Proponer relación fonológica</h2>
