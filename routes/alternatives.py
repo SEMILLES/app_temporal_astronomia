@@ -6,6 +6,7 @@ import sqlite3
 import re
 
 from database import conectar
+from source_details import occurrence_presentation
 from activity import record_activity
 from access_control import requires_reviewer
 from alternative_video_service import (AlternativeVideoError, add_video,
@@ -273,8 +274,14 @@ def alternativas(concept_id):
             o.occurrence_year,
             o.original_gloss,
             o.source_locator,
+            o.source_detail_1,
+            o.source_detail_1_status,
+            o.source_detail_2,
+            o.source_detail_2_status,
+            o.source_detail_2_applicability_override,
             o.hyperlink,
             s.source_name,
+            s.source_type,
             s.start_year,
             s.end_year,
             s.end_year_status
@@ -289,7 +296,7 @@ def alternativas(concept_id):
 
     for occurrence in occurrence_rows:
         alternatives[occurrence["alternative_id"]]["occurrences"].append(
-            occurrence
+            occurrence_presentation(occurrence)
         )
 
     for group in alternatives.values():

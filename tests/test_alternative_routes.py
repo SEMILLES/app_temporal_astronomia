@@ -120,6 +120,54 @@ class AlternativeRouteTests(unittest.TestCase):
         self.assertLess(first_alternative.index("OCC-000004"), first_alternative.index("OCC-000001"))
         self.assertLess(second_alternative.index("OCC-000002"), second_alternative.index("OCC-000003"))
 
+    def test_alternatives_page_source_references(self):
+        cases = [
+            ("MATERIAL_IMPRESO", "Sección solar", "VALUE", "15", "VALUE", None,
+             "Página legacy", "Submaterial / sección: Sección solar · Página: 15"),
+            ("UN_VIDEO_VARIAS_SENAS", "Video solar", "VALUE", "2:15", "VALUE", None,
+             "Tiempo legacy", "Título del video: Video solar · Tiempo: 2:15"),
+            ("VIDEO_POR_SENA", "Video individual", "VALUE", "1:20", "VALUE", 1,
+             "Tiempo legacy", "Título / identificador del video: Video individual · Tiempo: 1:20"),
+            ("OTRO", "UNKNOWN", "UNKNOWN", "NA", "NA", None,
+             "Ficha 8", "Ficha 8"),
+            ("OTRO", None, "UNKNOWN", None, "UNKNOWN", None, None, ""),
+            ("MESA_DE_TRABAJO", None, "NA", None, "NA", None,
+             "Localizador artificial", ""),
+        ]
+        for source_type, detail1, status1, detail2, status2, override, locator, expected in cases:
+            with self.subTest(source_type=source_type, locator=locator):
+                db = self.connect()
+                db.execute("UPDATE source SET source_type=? WHERE source_id=1", (source_type,))
+                db.execute("""UPDATE occurrence SET source_detail_1=?, source_detail_1_status=?,
+                    source_detail_2=?, source_detail_2_status=?, source_detail_2_applicability_override=?,
+                    source_locator=?, hyperlink='https://example.org/evidence' WHERE occurrence_id=1""",
+                    (detail1, status1, detail2, status2, override, locator))
+                db.commit(); db.close()
+
+                response = self.client.get('/conceptos/1/alternativas')
+                self.assertEqual(response.status_code, 200)
+                page = response.get_data(as_text=True)
+                for value in ('Synthetic', 'KNOWN', 'Año de la ocurrencia:',
+                              'Período de la fuente:', 'https://example.org/evidence'):
+                    self.assertIn(value, page)
+                self.assertEqual(page.count('Referencia en la fuente:'), int(bool(expected)))
+                if expected:
+                    self.assertEqual(page.count(expected), 1)
+                if locator and locator != expected:
+                    self.assertNotIn(locator, page)
+
+    def test_alternatives_page_excludes_noncurrent_assignments(self):
+        db = self.connect()
+        db.execute("INSERT INTO assignment(occurrence_id,alternative_id,is_current) VALUES(2,1,0)")
+        db.commit(); db.close()
+
+        response = self.client.get('/conceptos/1/alternativas')
+        self.assertEqual(response.status_code, 200)
+        page = response.get_data(as_text=True)
+        self.assertIn('OCC-000001', page)
+        self.assertNotIn('OCC-000002', page)
+        self.assertNotIn('TO-ANALYZE', page)
+
     def test_isolated_alternative_keeps_move_option(self):
         page = self.client.get("/alternativas/1/gestionar").get_data(as_text=True)
         self.assertIn('name="action" value="preview_move"', page)
