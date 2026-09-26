@@ -1,5 +1,16 @@
 {% if alternative_changes %}
 <section><h2>Aportes sobre alternativas existentes</h2>
-{% for p in alternative_changes %}<p><a href="{{ url_for('alternative_changes.detail',submission_id=p.submission_id) }}">#{{p.submission_id}} · {{p.concept_label_snapshot}} · Alternativa {{p.alternative_label_snapshot or p.alternative_id}} · {{'Morfología' if p.change_kind=='MORPHOLOGY' else 'Relación fonológica'}}</a>
-· {{p.submitted_by}} · {{'Pendiente' if p.status=='pending' else ('Aprobado' if p.resolution=='accepted' else 'Rechazado')}}</p>{% endfor %}
+{% for p in alternative_changes %}
+{% if alternative_change_dropdown %}
+{% set kind_label='Morfología' if p.change_kind=='MORPHOLOGY' else 'Relación fonológica' %}
+{% set status_label='Pendiente' if p.status=='pending' else ('Aprobado' if p.resolution=='accepted' else 'Rechazado') %}
+<section id="submission-{{p.submission_id}}"><details>
+<summary><strong>#{{p.submission_id}} · {{p.concept_label_snapshot}} · Alternativa {{p.alternative_label_snapshot or p.alternative_id}}</strong><br>Propuesta: {{kind_label}} · Autor: {{p.submitted_by}} · {{'Revisar' if p.status=='pending' else status_label}}</summary>
+<p><strong>Tipo de aporte:</strong> {{kind_label}} · <strong>Autor:</strong> {{p.submitted_by}} · <strong>Estado:</strong> {{status_label}}</p>
+<p><a href="{{ url_for('alternative_changes.detail',submission_id=p.submission_id) }}">{{'Revisar' if p.status=='pending' else status_label}}</a></p>
+</details></section>
+{% else %}
+<p><a href="{{ url_for('alternative_changes.detail',submission_id=p.submission_id) }}">#{{p.submission_id}} · {{p.concept_label_snapshot}} · Alternativa {{p.alternative_label_snapshot or p.alternative_id}} · {{'Morfología' if p.change_kind=='MORPHOLOGY' else 'Relación fonológica'}}</a>
+· {{p.submitted_by}} · {{'Pendiente' if p.status=='pending' else ('Aprobado' if p.resolution=='accepted' else 'Rechazado')}}</p>
+{% endif %}{% endfor %}
 </section>{% endif %}

@@ -1,5 +1,6 @@
 """Ordinary review UI, using disposable synthetic databases only."""
 import unittest
+import re
 from copy import deepcopy
 from html.parser import HTMLParser
 
@@ -85,6 +86,51 @@ class LexicalUITests(unittest.TestCase):
         if 'lexical_preview_token' not in form:
             form['lexical_preview_token'] = hidden(self.page(sid), 'lexical_preview_token')
         return self.client.post(f'/aportes/{sid}/decidir', data=form)
+
+    def test_existing_alternative_changes_use_closed_dropdowns_only_in_review(self):
+        from routes.alternative_changes import alternative_changes_bp, proposal_rows
+        from alternative_change_workflow import create_proposal
+        self.client.application.register_blueprint(alternative_changes_bp)
+        ordinary_id = self.create(groups=False)
+        db = self.connect()
+        db.execute("INSERT INTO collaborator(display_name) VALUES('Ana')")
+        db.commit()
+        ids = [create_proposal(db, 1, kind, values, collaborator_id=1, access_role='analyst')
+               for kind, values in [('MORPHOLOGY', {'component_count': 1}),
+                                    ('RELATION', {'relation_answer': 'NO'})]]
+        changes = [dict(row) for row in proposal_rows(db)]
+        before = self.dump()
+        response = self.client.get('/aportes/pendientes')
+        self.assertEqual(response.status_code, 200)
+        for sid, kind in zip(ids, ('Morfología', 'Relación fonológica')):
+            block = re.search(r'<section id="submission-' + str(sid) + r'"><details>(.*?)</details></section>',
+                              response.text, re.S)
+            self.assertIsNotNone(block, response.text)
+            summary = re.search(r'<summary>(.*?)</summary>', block[1], re.S)[1]
+            for value in ('#' + str(sid), 'TEST', 'Alternativa 1', kind, 'Autor: Ana', 'Revisar'):
+                self.assertIn(value, summary)
+            self.assertIn('Estado:</strong> Pendiente', block[1])
+            self.assertIn(f'<a href="/aportes/alternativas/{sid}">Revisar</a>', block[1])
+        self.assertIn(f'<section id="submission-{ordinary_id}"><details><summary>', response.text)
+        general = self.client.get('/aportes')
+        self.assertEqual(general.status_code, 200)
+        for sid, kind in zip(ids, ('Morfología', 'Relación fonológica')):
+            self.assertIn(f'<p><a href="/aportes/alternativas/{sid}">#{sid} · TEST · Alternativa 1 · {kind}</a>', general.text)
+            self.assertNotIn(f'<section id="submission-{sid}"><details>', general.text)
+        with self.client.application.test_request_context():
+            plain = render_template('_alternative_change_list.html', alternative_changes=changes)
+            explicit_plain = render_template('_alternative_change_list.html', alternative_changes=changes,
+                                             alternative_change_dropdown=False)
+            self.assertEqual(plain, explicit_plain)
+            for resolution, label in [('accepted', 'Aprobado'), ('rejected', 'Rechazado')]:
+                resolved = dict(changes[0], status='resolved', resolution=resolution)
+                html = render_template('_alternative_change_list.html', alternative_changes=[resolved],
+                                       alternative_change_dropdown=True)
+                self.assertIn('<details>', html)
+                self.assertNotIn('<details open', html)
+                self.assertIn(label + '</summary>', html)
+                self.assertNotIn('Revisar', html)
+        self.assertEqual(before, self.dump())
 
     def test_preview_table_presentation_preserves_calculated_values(self):
         preview = {'rows': [
