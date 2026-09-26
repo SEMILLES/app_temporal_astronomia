@@ -14,9 +14,15 @@
 <section id="morfologia"><h2>Proponer morfología</h2>
 <form method="post" id="morphology-proposal"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="state_token" value="{{tokens.MORPHOLOGY}}"><input type="hidden" name="kind" value="MORPHOLOGY">
 {% if error and morphology_values.get('collaborator_id') %}<input type="hidden" name="collaborator_id" value="{{morphology_values['collaborator_id']}}">{% endif %}
-<p><label>Cantidad de componentes <input name="component_count" required value="{{morphology_values.get('component_count', '')}}" aria-describedby="component-count-help"></label></p>
-<p id="component-count-help">Indique un entero positivo (1 para una seña simple) o N/A. Puede registrar solo los componentes identificados, aunque sean menos que la cantidad total.</p>
-<p id="morphology-permutation"><label>¿Los componentes admiten permutación libre? <select name="free_permutation">
+{% set count_value=morphology_values.get('component_count', '')|string %}
+{% set count_options=['', 'N/A'] + (range(1, 13)|map('string')|list) %}
+{% set show_permutation=count_value.isdigit() and count_value|int >= 2 %}
+<p><label>Cantidad de componentes <select name="component_count" required aria-describedby="component-count-help">
+{% if count_value not in count_options %}<option value="{{count_value}}" selected>{{count_value}} (valor conservado)</option>{% endif %}
+{% for value in count_options %}<option value="{{value}}"{% if count_value==value %} selected{% endif %}>{{value or 'Seleccione'}}</option>{% endfor %}
+</select></label></p>
+<p id="component-count-help">Seleccione la cantidad (1 para una seña simple) o N/A si no está determinada. Puede registrar solo los componentes identificados, aunque sean menos que la cantidad total.</p>
+<p id="morphology-permutation"{% if not show_permutation %} hidden{% endif %}><label>¿Los componentes admiten permutación libre? <select name="free_permutation"{% if not show_permutation %} disabled{% endif %}>
 {% set permutation_values=['SIN INFORMACIÓN','SÍ','NO','N/A'] %}
 {% if error and morphology_values.get('free_permutation', '') not in permutation_values %}<option selected value="{{morphology_values.get('free_permutation', '')}}">{{morphology_values.get('free_permutation') or 'Seleccione'}}</option>{% endif %}
 {% for value in permutation_values %}<option{% if morphology_values.get('free_permutation')==value %} selected{% endif %}>{{value}}</option>{% endfor %}</select></label></p>

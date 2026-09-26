@@ -431,9 +431,17 @@ with sync_playwright() as pw:
         page=browser.new_page();page.route('**/*',serve);errors=[]
         page.on('pageerror',lambda error:errors.append(str(error)))
         page.goto('http://local.test/a/alternativas/1/proponer?mode=morphology')
+        count=page.locator('select[name=component_count]')
+        expect(count).to_have_value('')
+        expect(count).to_have_attribute('required','')
+        expect(page.locator('#morphology-permutation')).to_be_hidden()
+        expect(page.locator('[name=free_permutation]')).to_be_disabled()
         expect(page.locator('select[name=free_permutation]')).to_have_value('SIN INFORMACIÓN')
         expect(page.locator('#identified-component-controls')).to_be_hidden()
-        page.locator('[name=component_count]').fill('3')
+        count.select_option('2')
+        expect(page.locator('#morphology-permutation')).to_be_visible()
+        expect(page.locator('[name=free_permutation]')).to_be_enabled()
+        page.locator('[name=free_permutation]').select_option('NO')
         page.locator('[name=ui_identified][value=yes]').check()
         expect(page.locator('#morphology-components [data-component-row]')).to_have_count(1)
         first=page.locator('#morphology-components [data-component-row]').first
@@ -451,24 +459,41 @@ with sync_playwright() as pw:
         expect(first.locator('[name$=_label]')).to_have_value('Etiqueta conservada')
         first.locator('[value=existing]').check()
         expect(first.locator('select')).to_have_value('2')
-        page.locator('[name=component_count]').fill('1')
+        count.select_option('1')
+        expect(page.locator('#morphology-permutation')).to_be_hidden()
+        expect(page.locator('[name=free_permutation]')).to_be_disabled()
         expect(page.locator('#identified-component-controls')).to_be_hidden()
         expect(first.locator('[name$=_position]')).to_be_disabled()
-        page.locator('[name=component_count]').fill('N/A')
+        count.select_option('2')
+        expect(page.locator('#morphology-permutation')).to_be_visible()
+        expect(page.locator('[name=free_permutation]')).to_be_enabled()
+        expect(page.locator('[name=free_permutation]')).to_have_value('NO')
+        expect(page.locator('[name=ui_identified][value=yes]')).to_be_checked()
+        expect(first.locator('[value=existing]')).to_be_checked()
+        expect(first.locator('select')).to_have_value('2')
+        expect(first.locator('[name$=_label]')).to_have_value('Etiqueta conservada')
+        expect(first.locator('[name$=_note]')).to_have_value('Nota conservada')
+        expect(first.locator('[name$=_position]')).to_have_value('5')
+        count.select_option('N/A')
         expect(page.locator('#identified-component-controls')).to_be_visible()
+        expect(page.locator('#morphology-permutation')).to_be_hidden()
         expect(page.locator('[name=free_permutation]')).to_be_disabled()
-        page.locator('[name=component_count]').fill('0')
+        count.select_option('2')
+        page.locator('#morphology-proposal [name=state_token]').evaluate("input => input.value='invalid'")
         page.locator('[name=morphology_note]').fill('Observación enviada')
         page.locator('#lesico-collaborator').select_option('1')
         page.get_by_role('button',name='Enviar propuesta de morfología').click()
-        expect(page.locator('[role=alert]')).to_contain_text('al menos 1')
+        expect(page.locator('[role=alert]')).to_be_visible()
+        expect(count).to_have_value('2')
         first=page.locator('#morphology-components [data-component-row]').first
         expect(first.locator('select')).to_have_value('2')
         expect(first.locator('[name$=_label]')).to_have_value('Etiqueta conservada')
         expect(first.locator('[name$=_note]')).to_have_value('Nota conservada')
         expect(first.locator('[name$=_position]')).to_have_value('5')
         expect(page.locator('[name=morphology_note]')).to_have_value('Observación enviada')
-        page.locator('[name=component_count]').fill('12')
+        count.select_option('12')
+        expect(page.locator('#morphology-permutation')).to_be_visible()
+        expect(page.locator('[name=free_permutation]')).to_be_enabled()
         page.locator('[name=ui_identified][value=no]').check()
         expect(first.locator('[name$=_position]')).to_be_disabled()
         page.locator('[name=ui_identified][value=yes]').check()
@@ -674,7 +699,7 @@ class MorphologyProposalRouteTests(unittest.TestCase):
                                        'free_permutation', 'note', 'components'})
 
     def test_count_one_na_and_large_counts_keep_existing_rules(self):
-        for count, expected_count, expected_components in [('1', 1, 0), ('N/A', None, 1), ('12', 12, 1)]:
+        for count, expected_count, expected_components in [('1', 1, 0), ('N/A', None, 1), ('12', 12, 1), ('13', 13, 1)]:
             with self.subTest(count=count):
                 data = self.form()
                 data.update(component_count=count, ui_identified='yes', ui_component_type_7='existing')
@@ -684,10 +709,26 @@ class MorphologyProposalRouteTests(unittest.TestCase):
                     row = db.execute('SELECT submission_id,payload FROM alternative_change_submission ORDER BY submission_id DESC').fetchone()
                     payload = json.loads(row['payload'])
                     self.assertEqual(payload['component_count'], expected_count)
-                    self.assertEqual(payload['free_permutation'], 'NO' if count == '12' else 'N/A')
+                    self.assertEqual(payload['free_permutation'], 'NO' if count in ('12', '13') else 'N/A')
                     self.assertEqual(len(payload['components']), expected_components)
                     review_proposal(db, row['submission_id'], 'rejected', collaborator_id=1,
                                     access_role='reviewer', note='Siguiente caso')
+
+    def test_count_select_options_initial_state_and_error_recovery(self):
+        page = self.client.get(self.url).text
+        select = re.search(r'<select name="component_count" required[^>]*>(.*?)</select>', page, re.S)[1]
+        self.assertEqual(re.findall(r'<option value="([^"]*)"', select), ['', 'N/A'] + [str(i) for i in range(1, 13)])
+        self.assertIn('<option value="" selected>Seleccione</option>', select)
+        self.assertIn('id="morphology-permutation" hidden', page)
+        self.assertIn('<select name="free_permutation" disabled>', page)
+        for count in ('N/A', '1', '2', '12', '13', '0'):
+            with self.subTest(count=count):
+                data = self.form()
+                data.update(component_count=count, state_token='invalid')
+                response = self.client.post(self.url, data=data)
+                self.assertEqual(response.status_code, 400)
+                select = re.search(r'<select name="component_count" required[^>]*>(.*?)</select>', response.text, re.S)[1]
+                self.assertIn('<option value="' + count + '" selected>', select)
 
     def test_validation_error_preserves_sent_values_and_rejects_invalid_targets(self):
         for target in ('1', '4', '999'):

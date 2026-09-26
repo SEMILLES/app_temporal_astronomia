@@ -12,9 +12,9 @@
     removeComponent.hidden = false;
     const refresh = () => {
       const simple = Number(count.value.trim()) === 1;
-      const notApplicable = count.value.trim() === 'N/A';
-      document.getElementById('morphology-permutation').hidden = simple || notApplicable;
-      permutation.disabled = simple || notApplicable;
+      const showPermutation = Number.isInteger(Number(count.value)) && Number(count.value) >= 2;
+      document.getElementById('morphology-permutation').hidden = !showPermutation;
+      permutation.disabled = !showPermutation;
       document.getElementById('component-identification').hidden = simple;
       controls.hidden = simple || form.querySelector('[name="ui_identified"]:checked')?.value !== 'yes';
       components.querySelectorAll('[data-component-row]').forEach(row => {
