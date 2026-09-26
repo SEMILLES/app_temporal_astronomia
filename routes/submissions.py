@@ -288,11 +288,18 @@ def revisar_aportes():
         rows = _rows(db, True)
         from routes.alternative_changes import proposal_rows
         changes = proposal_rows(db, pending=True)
+        from routes.alternative_changes import _review_context, _csrf
+        from alternative_change_workflow import get_proposal
+        alternative_change_context = {row['submission_id']: _review_context(db, get_proposal(db, row['submission_id']))
+                                      for row in changes}
+        csrf_token = _csrf() if changes else None
         current = {row["occurrence_id"]: db.execute("SELECT * FROM occurrence_grammar WHERE occurrence_id=? AND is_current=1", (row["occurrence_id"],)).fetchone() for row in rows}
         alternative_context = _alternative_review_context(db, rows)
     finally:
         db.close()
-    return render_template("revision_aportes.html", aportes=rows, alternative_changes=changes, current_by_occurrence=current, alternative_context=alternative_context, grammar_vocabularies=GRAMMATICAL_MARK_VOCABULARIES)
+    return render_template("revision_aportes.html", aportes=rows, alternative_changes=changes,
+        alternative_change_context=alternative_change_context, csrf_token=csrf_token,
+        current_by_occurrence=current, alternative_context=alternative_context, grammar_vocabularies=GRAMMATICAL_MARK_VOCABULARIES)
 
 
 def _alternative_review_context(db, rows):

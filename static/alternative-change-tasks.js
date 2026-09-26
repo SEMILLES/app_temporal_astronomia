@@ -115,21 +115,21 @@
 })();
 
 (() => {
-  const form = document.getElementById('relation-review');
-  if (!form) return;
-  const negative = form.dataset.negative === 'true';
-  const update = () => {
-    const decision = form.querySelector('input[type="radio"]:checked')?.value;
-    const resolution = negative ? (decision === 'accepted' ? 'NO_CONFIRMED' : null) :
-      (decision === 'pending' ? null : decision);
-    let valid = !resolution;
-    form.querySelectorAll('[data-relation-preview]').forEach(section => {
-      section.hidden = section.dataset.relationPreview !== resolution;
-      if (!section.hidden) valid = section.dataset.valid === 'true';
-    });
-    form.elements.review_note.required = negative && decision === 'rejected';
-    document.getElementById('apply-relation-review').disabled = !decision || !valid;
-  };
-  form.addEventListener('change', update);
-  update();
+  document.querySelectorAll('.relation-review').forEach(form => {
+    const negative = form.dataset.negative === 'true';
+    const update = () => {
+      const decision = form.querySelector('input[type="radio"]:checked')?.value;
+      const resolution = negative ? (decision === 'accepted' ? 'NO_CONFIRMED' : null) :
+        (decision === 'pending' ? null : decision);
+      let valid = !resolution;
+      form.querySelectorAll('[data-relation-preview]').forEach(section => {
+        section.hidden = section.dataset.relationPreview !== resolution;
+        if (!section.hidden) valid = section.dataset.valid === 'true';
+      });
+      form.elements.review_note.required = negative && decision === 'rejected';
+      form.querySelector('.apply-relation-review').disabled = !decision || !valid;
+    };
+    form.addEventListener('change', update);
+    update();
+  });
 })();

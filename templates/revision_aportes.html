@@ -234,6 +234,7 @@ automáticamente la propuesta original con el resultado de la revisión.
 <!-- Compatibilidad de auditoría: TEST — [PENDIENTE # · Contexto al crear el aporte · Resolución final · Clasificación vigente actual · Preview de nomenclatura · Referencia temporal · Morfología propuesta originalmente · Crear alternativa sin aprobar morfología -->
 {% endif %}</details></section>{% else %}<p>No hay aportes pendientes.</p>{% endfor %}
 {% include '_submission_lexical_script.html' %}
+<script src="{{url_for('static',filename='alternative-change-tasks.js')}}" defer></script>
 <script>
 document.querySelectorAll('.grammar-review-decision').forEach(form=>{
     const selects=[...form.querySelectorAll('.grammar-reviewed-value')],

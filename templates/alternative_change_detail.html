@@ -4,46 +4,6 @@
 <h1>Aporte #{{proposal.submission_id}} · {{'Morfología' if proposal.change_kind=='MORPHOLOGY' else 'Relación fonológica'}}</h1>
 <p>Concepto al proponer: {{proposal.concept_label_snapshot}} · Alternativa {{proposal.alternative_label_snapshot or proposal.alternative_id}}</p>
 <p>Autor: {{proposal.submitted_by}} · {{proposal.submitted_at}} · {{'Pendiente' if proposal.status=='pending' else ('Aprobado' if proposal.resolution=='accepted' else 'Rechazado')}}</p>
-{% include '_alternative_change_context.html' %}
-<h2>Información propuesta</h2>
-{% if proposal.change_kind=='MORPHOLOGY' %}
-<p>Cantidad: {{'No aplica' if proposed.component_count_not_applicable else proposed.component_count}} · Permutación libre: {{'No aplica' if proposed.free_permutation=='N/A' else proposed.free_permutation}} · {{proposed.note or ''}}</p>
-{% for c in proposed.components %}<p>Posición {{c.position}} · {{c.component_label or ''}} {% if c.component_alternative_id %}Alternativa {{c.component_alternative_id}}{% endif %} {{c.note or ''}}</p>{% else %}<p>Sin componentes explícitos.</p>{% endfor %}
-{% elif proposed.relation_answer=='NO' %}<p>El analista propone que no falta ninguna relación fonológica y que debe normalizarse la nomenclatura según el grafo vigente.</p>
-{% else %}<p>Alternativa {{proposal.alternative_label_snapshot}} ↔ {% for option in options if option.alternative_id==proposed.target_id %}{{alternative.preferred_label}}-{{option.working_label}}{% else %}Destino no disponible{% endfor %} · {{proposed.parameter}}</p>
-{% endif %}
-{% if proposal.status=='pending' and g.current_access_role in ('reviewer','master') %}
-<form method="post"{% if proposal.change_kind=='RELATION' %} id="relation-review" data-negative="{{'true' if proposed.relation_answer=='NO' else 'false'}}"{% endif %} action="{{url_for('alternative_changes.decide',submission_id=proposal.submission_id)}}"><input type="hidden" name="csrf_token" value="{{csrf_token}}">
-<input type="hidden" name="review_token" value="{{review_token}}">
-{% if proposal.change_kind=='RELATION' %}
-{% if proposed.relation_answer=='NO' %}
-<input type="hidden" name="relations_resolution" value="NO_CONFIRMED">
-<fieldset><legend>Decisión sobre la propuesta</legend>
-<label><input type="radio" name="decision" value="accepted" required> Confirmar propuesta</label>
-<label><input type="radio" name="decision" value="rejected" required> Rechazar propuesta</label>
-<label><input type="radio" name="decision" value="pending" checked required> Dejar pendiente</label>
-</fieldset>
-{% else %}
-<input type="hidden" name="decision" value="accepted">
-<fieldset><legend>Decisión sobre la relación propuesta</legend>
-<label><input type="radio" name="relations_resolution" value="ACCEPTED" required> Aceptar relación propuesta</label>
-<label><input type="radio" name="relations_resolution" value="REJECTED" required> Confirmar que no corresponde esta relación</label>
-<label><input type="radio" name="relations_resolution" value="pending" checked required> Dejar pendiente</label>
-</fieldset>
-<p>Confirmar que no corresponde esta relación resuelve el aporte y aplica la nomenclatura del grafo vigente, sin añadir la relación propuesta.</p>
-{% endif %}
-{% for resolution in (['NO_CONFIRMED'] if proposed.relation_answer=='NO' else ['ACCEPTED','REJECTED']) %}
-{% set preview=previews.get(resolution) %}
-<section data-relation-preview="{{resolution}}" data-valid="{{'true' if preview and preview.conclusive else 'false'}}" hidden>
-{% if preview and preview.conclusive %}{% with existing_alternative_review=true %}{% include '_submission_lexical_preview.html' %}{% endwith %}
-{% else %}<p role="alert">{{preview_errors.get(resolution) or (preview.problems|join('; ') if preview else 'No fue posible calcular la nomenclatura.')}}</p>{% endif %}
-</section>
-{% endfor %}
-{% endif %}
-<label>Nota de revisión (obligatoria al rechazar{% if proposal.change_kind=='RELATION' %} el aporte completo{% endif %}) <textarea name="review_note"></textarea></label>
-{% if proposal.change_kind=='RELATION' %}<button id="apply-relation-review">Guardar decisión</button>
-{% else %}<button name="decision" value="accepted">Aprobar</button><button name="decision" value="rejected">Rechazar</button>{% endif %}</form>
-{% elif proposal.status=='resolved' %}<p>Revisado por {{proposal.reviewed_by}} · {{proposal.resolved_at}} · {{proposal.review_note or ''}}</p>{% endif %}
-{% if relation_history %}<p>Resolución: {{ {'ACCEPTED':'Relación aceptada', 'REJECTED':'La relación no corresponde; aporte resuelto', 'NO_CONFIRMED':'Propuesta de ninguna relación faltante confirmada', 'PROPOSAL_REJECTED':'Aporte rechazado por completo'}[relation_history.relations_resolution] }}.</p>{% endif %}
+{% include '_alternative_change_review.html' %}
 {% if proposal.change_kind=='RELATION' %}<script src="{{url_for('static',filename='alternative-change-tasks.js')}}" defer></script>{% endif %}
 {% endblock %}

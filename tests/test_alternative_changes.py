@@ -389,8 +389,9 @@ assert 'En revisión' in page.text and 'name="component_count"' not in page.text
 assert client.post('/a/alternativas/2/proponer?mode=morphology',data=data).status_code==400
 assert '/aportes/alternativas/'+str(sid) in client.get('/r/aportes/pendientes').text
 import re
-link=re.search('<a[^>]*href="/r/aportes/alternativas/'+str(sid)+'"[^>]*>',client.get('/r/aportes/pendientes').text)
-assert link and 'target=' not in link.group()
+inline=client.get('/r/aportes/pendientes').text
+assert 'action="/r/aportes/alternativas/'+str(sid)+'/decidir"' in inline
+assert 'href="/r/aportes/alternativas/'+str(sid)+'"' not in inline
 detail='/aportes/alternativas/'+str(sid)
 assert client.post('/a'+detail+'/decidir',data={}).status_code==404
 page=client.get('/r'+detail);assert page.status_code==200,page.text
@@ -563,18 +564,56 @@ with sync_playwright() as pw:
         rows.first.locator('[name=target_id]').select_option('1')
         expect(rows.first.locator('[name=parameter] option').filter(has_text='CM_2')).to_have_attribute('disabled','')
         expect(rows.first.locator('[name=parameter] option').filter(has_text='OR_M1')).to_have_attribute('disabled','')
-        for sid,decision in zip(pending,('ACCEPTED','REJECTED')):
-            page.goto('http://local.test/r/aportes/alternativas/'+str(sid))
-            page.locator('textarea[name=review_note]').fill('Revision individual')
-            expect(page.locator('[data-relation-preview]:visible')).to_have_count(0)
-            page.locator('[name=relations_resolution][value='+decision+']').check()
-            expect(page.locator('[data-relation-preview]:visible .preview-table tr')).to_have_count(3)
-            page.locator('#apply-relation-review').click()
         with closing(conectar()) as db:
-            assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==2
+            from alternative_change_workflow import create_proposal
             db.execute("INSERT INTO concept(preferred_label) VALUES('Concepto aislado')")
             db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(2,'1b')")
             db.commit()
+            negative_sid=create_proposal(db,3,'RELATION',{'relation_answer':'NO'},collaborator_id=1,access_role='analyst')
+        page.goto('http://local.test/r/aportes/pendientes')
+        expect(page.locator('.relation-review')).to_have_count(3)
+        for identifier in [*pending,negative_sid]:
+            dropdown=page.locator('#submission-'+str(identifier)+' > details')
+            expect(dropdown).not_to_have_attribute('open','')
+            dropdown.locator('summary').first.click()
+        first_review=page.locator('#submission-'+str(pending[0])+' .relation-review')
+        second_review=page.locator('#submission-'+str(pending[1])+' .relation-review')
+        negative_review=page.locator('#submission-'+str(negative_sid)+' .relation-review')
+        first_review.locator('[name=relations_resolution][value=ACCEPTED]').check()
+        expect(first_review.locator('[data-relation-preview]:visible')).to_have_count(1)
+        expect(second_review.locator('[data-relation-preview]:visible')).to_have_count(0)
+        negative_review.locator('[name=decision][value=accepted]').check()
+        expect(negative_review.locator('[name=review_note]')).not_to_have_attribute('required','')
+        expect(negative_review.locator('[data-relation-preview=NO_CONFIRMED]')).to_be_visible()
+        second_review.locator('[name=relations_resolution][value=REJECTED]').check()
+        expect(second_review.locator('[data-relation-preview=REJECTED]')).to_be_visible()
+        expect(first_review.locator('[data-relation-preview=ACCEPTED]')).to_be_visible()
+        negative_review.locator('[name=decision][value=rejected]').check()
+        expect(negative_review.locator('[data-relation-preview]:visible')).to_have_count(0)
+        expect(negative_review.locator('[name=review_note]')).to_have_attribute('required','')
+        expect(first_review.locator('[name=review_note]')).not_to_have_attribute('required','')
+        negative_review.locator('[name=decision][value=pending]').check()
+        expect(negative_review.locator('[name=review_note]')).not_to_have_attribute('required','')
+        negative_review.locator('[name=decision][value=rejected]').check()
+        expect(negative_review.locator('[name=review_note]')).to_have_attribute('required','')
+        negative_review.locator('[name=decision][value=accepted]').check()
+        expect(negative_review.locator('[name=review_note]')).not_to_have_attribute('required','')
+        negative_review.locator('[name=decision][value=rejected]').check()
+        negative_review.locator('[name=review_note]').fill('Revisar propuesta negativa')
+        negative_review.locator('.apply-relation-review').click()
+        expect(page.locator('h1')).to_contain_text('Revisión de aportes pendientes')
+        for sid,decision in zip(pending,('ACCEPTED','REJECTED')):
+            dropdown=page.locator('#submission-'+str(sid)+' > details')
+            dropdown.locator('summary').first.click()
+            review=dropdown.locator('.relation-review')
+            review.locator('textarea[name=review_note]').fill('Revision inline')
+            expect(review.locator('[data-relation-preview]:visible')).to_have_count(0)
+            review.locator('[name=relations_resolution][value='+decision+']').check()
+            expect(review.locator('[data-relation-preview]:visible .preview-table tr')).to_have_count(3)
+            review.locator('.apply-relation-review').click()
+            expect(page.locator('h1')).to_contain_text('Revisión de aportes pendientes')
+        with closing(conectar()) as db:
+            assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==2
         page.goto('http://local.test/a/alternativas/3/proponer?mode=relation')
         page.locator('#relation-answer').select_option('NO')
         expect(page.locator('#send-relations')).to_be_enabled()
@@ -595,7 +634,7 @@ with sync_playwright() as pw:
         page.locator('[name=decision][value=accepted]').check()
         expect(page.locator('textarea[name=review_note]')).not_to_have_attribute('required','')
         expect(page.locator('[data-relation-preview]:visible .preview-table tr')).to_have_count(2)
-        page.locator('#apply-relation-review').click()
+        page.locator('.apply-relation-review').click()
         expect(page.locator('body')).to_contain_text('Propuesta de ninguna relación faltante confirmada')
         with closing(conectar()) as db:
             assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==2

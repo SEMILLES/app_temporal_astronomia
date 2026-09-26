@@ -7,7 +7,14 @@
 <section id="submission-{{p.submission_id}}"><details>
 <summary><strong>#{{p.submission_id}} · {{p.concept_label_snapshot}} · Alternativa {{p.alternative_label_snapshot or p.alternative_id}}</strong><br>Propuesta: {{kind_label}} · Autor: {{p.submitted_by}} · {{'Revisar' if p.status=='pending' else status_label}}</summary>
 <p><strong>Tipo de aporte:</strong> {{kind_label}} · <strong>Autor:</strong> {{p.submitted_by}} · <strong>Estado:</strong> {{status_label}}</p>
-<p><a href="{{ url_for('alternative_changes.detail',submission_id=p.submission_id) }}">{{'Revisar' if p.status=='pending' else status_label}}</a></p>
+{% set review=alternative_change_context[p.submission_id] %}
+{% with inline_review=true, proposal=review.proposal, proposed=review.proposed,
+    alternative=review.alternative, morphology=review.morphology, components=review.components,
+    relations=review.relations, evidence=review.evidence, options=review.options,
+    previews=review.previews, preview_errors=review.preview_errors,
+    relation_history=review.relation_history, review_token=review.review_token %}
+{% include '_alternative_change_review.html' %}
+{% endwith %}
 </details></section>
 {% else %}
 <p><a href="{{ url_for('alternative_changes.detail',submission_id=p.submission_id) }}">#{{p.submission_id}} · {{p.concept_label_snapshot}} · Alternativa {{p.alternative_label_snapshot or p.alternative_id}} · {{'Morfología' if p.change_kind=='MORPHOLOGY' else 'Relación fonológica'}}</a>

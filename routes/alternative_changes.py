@@ -189,6 +189,23 @@ def propose(alternative_id):
         db.close()
 
 
+def _review_context(db, proposal):
+    context=_context(db,proposal['alternative_id'])
+    proposed=json.loads(proposal['payload'])
+    previews={}; preview_errors={}
+    if proposal['status']=='pending' and proposal['change_kind']=='RELATION':
+        resolutions = ('NO_CONFIRMED',) if proposed.get('relation_answer') == 'NO' else ('ACCEPTED', 'REJECTED')
+        for resolution in resolutions:
+            try:
+                previews[resolution]=relation_review_preview(db,proposal['alternative_id'],proposed,resolution)
+            except (ValueError,TypeError) as exc:
+                preview_errors[resolution]=str(exc)
+    context.update(proposal=proposal, proposed=proposed, previews=previews, preview_errors=preview_errors,
+        relation_history=relation_review_history(db,proposal['submission_id']) if proposal['change_kind']=='RELATION' else None,
+        review_token=sign({'sid':proposal['submission_id'],'baseline':baseline(db,proposal['alternative_id'],proposal['change_kind'])}) if proposal['status']=='pending' and not context['alternative']['retired_at'] else '')
+    return context
+
+
 @alternative_changes_bp.get('/aportes/alternativas/<int:submission_id>')
 @requires_analyst
 def detail(submission_id):
@@ -197,21 +214,7 @@ def detail(submission_id):
         db.execute('BEGIN')
         proposal=get_proposal(db,submission_id)
         if not proposal:abort(404)
-        context=_context(db,proposal['alternative_id'])
-        proposed=json.loads(proposal['payload'])
-        previews={}; preview_errors={}
-        if proposal['status']=='pending' and proposal['change_kind']=='RELATION':
-            resolutions = ('NO_CONFIRMED',) if proposed.get('relation_answer') == 'NO' else ('ACCEPTED', 'REJECTED')
-            for resolution in resolutions:
-                try:
-                    previews[resolution]=relation_review_preview(db,proposal['alternative_id'],proposed,resolution)
-                except (ValueError,TypeError) as exc:
-                    preview_errors[resolution]=str(exc)
-        return render_template('alternative_change_detail.html',**context,proposal=proposal,
-            proposed=proposed,previews=previews,preview_errors=preview_errors,
-            relation_history=relation_review_history(db,submission_id) if proposal['change_kind']=='RELATION' else None,
-            csrf_token=_csrf(),
-            review_token=sign({'sid':submission_id,'baseline':baseline(db,proposal['alternative_id'],proposal['change_kind'])}) if proposal['status']=='pending' and not context['alternative']['retired_at'] else '')
+        return render_template('alternative_change_detail.html', **_review_context(db, proposal), csrf_token=_csrf())
     finally:db.close()
 
 
@@ -236,6 +239,8 @@ def decide(submission_id):
         review_proposal(db,submission_id,decision,collaborator_id=request.form.get('collaborator_id'),
             access_role=g.current_access_role,note=request.form.get('review_note'),expected_baseline=expected,
             relations_resolution=resolution)
+        if request.form.get('return_to') == 'pending_reviews':
+            return redirect(url_for('submissions.revisar_aportes'))
         return redirect(url_for('alternative_changes.detail',submission_id=submission_id))
     except (ValueError,sqlite3.IntegrityError) as exc:
         return render_template('alternative_change_error.html',error='No fue posible aplicar el cambio.' if isinstance(exc,sqlite3.IntegrityError) else str(exc),submission_id=submission_id),400

@@ -88,8 +88,9 @@ class LexicalUITests(unittest.TestCase):
         return self.client.post(f'/aportes/{sid}/decidir', data=form)
 
     def test_existing_alternative_changes_use_closed_dropdowns_only_in_review(self):
-        from routes.alternative_changes import alternative_changes_bp, proposal_rows
-        from alternative_change_workflow import create_proposal
+        from routes.alternative_changes import alternative_changes_bp, proposal_rows, _review_context
+        from alternative_change_workflow import create_proposal, get_proposal
+        self.client.application.config['SECRET_KEY'] = 'test-only'
         self.client.application.register_blueprint(alternative_changes_bp)
         ordinary_id = self.create(groups=False)
         db = self.connect()
@@ -98,6 +99,10 @@ class LexicalUITests(unittest.TestCase):
         ids = [create_proposal(db, 1, kind, values, collaborator_id=1, access_role='analyst')
                for kind, values in [('MORPHOLOGY', {'component_count': 1}),
                                     ('RELATION', {'relation_answer': 'NO'})]]
+        db.executemany("INSERT INTO alternative(concept_id,working_label) VALUES(1,?)", [('2a',), ('3a',)])
+        db.commit()
+        positives = [create_proposal(db, 2, 'RELATION', {'target_id': 3, 'parameter': parameter},
+                                    collaborator_id=1, access_role='analyst') for parameter in ('CM_1', 'OR_M1')]
         changes = [dict(row) for row in proposal_rows(db)]
         before = self.dump()
         response = self.client.get('/aportes/pendientes')
@@ -110,7 +115,22 @@ class LexicalUITests(unittest.TestCase):
             for value in ('#' + str(sid), 'TEST', 'Alternativa 1', kind, 'Autor: Ana', 'Revisar'):
                 self.assertIn(value, summary)
             self.assertIn('Estado:</strong> Pendiente', block[1])
-            self.assertIn(f'<a href="/aportes/alternativas/{sid}">Revisar</a>', block[1])
+            self.assertNotIn(f'href="/aportes/alternativas/{sid}"', block[1])
+            self.assertIn(f'action="/aportes/alternativas/{sid}/decidir"', block[1])
+            self.assertRegex(block[1], r'<input type="hidden" name="csrf_token" value="[^"]+">')
+            self.assertRegex(block[1], r'<input type="hidden" name="review_token" value="[^"]+">')
+            self.assertIn('name="return_to" value="pending_reviews"', block[1])
+            self.assertIn('Aprobar' if sid == ids[0] else 'Confirmar propuesta', block[1])
+        for sid in positives:
+            block = re.search(r'<section id="submission-' + str(sid) + r'"><details>(.*?)</details></section>', response.text, re.S)[1]
+            for text in ('Aceptar relación propuesta', 'Confirmar que no corresponde esta relación',
+                         'Dejar pendiente', 'data-relation-preview="ACCEPTED"', 'data-relation-preview="REJECTED"',
+                         'VISTA PREVIA DE CAMBIOS'):
+                self.assertIn(text, block)
+        self.assertEqual(response.text.count('class="relation-review"'), 3)
+        self.assertNotIn('id="relation-review"', response.text)
+        self.assertNotIn('id="apply-relation-review"', response.text)
+        self.assertEqual(response.text.count('alternative-change-tasks.js'), 1)
         self.assertIn(f'<section id="submission-{ordinary_id}"><details><summary>', response.text)
         general = self.client.get('/aportes')
         self.assertEqual(general.status_code, 200)
@@ -123,14 +143,60 @@ class LexicalUITests(unittest.TestCase):
                                              alternative_change_dropdown=False)
             self.assertEqual(plain, explicit_plain)
             for resolution, label in [('accepted', 'Aprobado'), ('rejected', 'Rechazado')]:
-                resolved = dict(changes[0], status='resolved', resolution=resolution)
+                resolved = dict(get_proposal(db, ids[1]), status='resolved', resolution=resolution)
                 html = render_template('_alternative_change_list.html', alternative_changes=[resolved],
-                                       alternative_change_dropdown=True)
+                                       alternative_change_dropdown=True,
+                                       alternative_change_context={ids[1]: _review_context(db, resolved)})
                 self.assertIn('<details>', html)
                 self.assertNotIn('<details open', html)
                 self.assertIn(label + '</summary>', html)
                 self.assertNotIn('Revisar', html)
         self.assertEqual(before, self.dump())
+
+    def test_inline_review_redirect_tokens_and_individual_compatibility(self):
+        from html import unescape
+        from routes.alternative_changes import alternative_changes_bp
+        from alternative_change_workflow import create_proposal, get_proposal
+        self.client.application.config['SECRET_KEY'] = 'test-only'
+        self.client.application.register_blueprint(alternative_changes_bp)
+        db = self.connect()
+        db.execute("INSERT INTO collaborator(display_name) VALUES('Ana')")
+        db.commit()
+        morphology = create_proposal(db, 1, 'MORPHOLOGY', {'component_count': 1}, collaborator_id=1, access_role='analyst')
+        negative = create_proposal(db, 1, 'RELATION', {'relation_answer': 'NO'}, collaborator_id=1, access_role='analyst')
+        original = get_proposal(db, negative)['payload']
+
+        def form(sid, path='/aportes/pendientes'):
+            page = self.client.get(path)
+            self.assertEqual(page.status_code, 200)
+            html = re.search(r'<form[^>]*action="/aportes/alternativas/' + str(sid) + r'/decidir"[^>]*>(.*?)</form>', page.text, re.S)[1]
+            data = {name: unescape(value) for name, value in re.findall(r'<input type="hidden" name="([^"]+)" value="([^"]*)">', html)}
+            data['collaborator_id'] = '1'
+            return data
+
+        data = form(negative)
+        before = self.dump()
+        response = self.client.post(f'/aportes/alternativas/{negative}/decidir', data=dict(data, decision='accepted', csrf_token='invalid'))
+        self.assertEqual(response.status_code, 400)
+        response = self.client.post(f'/aportes/alternativas/{negative}/decidir', data=dict(data, decision='accepted', review_token='invalid'))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(before, self.dump())
+        response = self.client.post(f'/aportes/alternativas/{negative}/decidir', data=dict(data, decision='pending'))
+        self.assertEqual(response.location, '/aportes/pendientes')
+        self.assertEqual(before, self.dump())
+        response = self.client.post(f'/aportes/alternativas/{negative}/decidir', data=dict(form(negative), decision='accepted'))
+        self.assertEqual(response.location, '/aportes/pendientes')
+        self.assertEqual(get_proposal(db, negative)['payload'], original)
+        self.assertEqual(db.execute('SELECT count(*) FROM alternative_relation').fetchone()[0], 0)
+        data = form(morphology, f'/aportes/alternativas/{morphology}')
+        self.assertNotIn('return_to', data)
+        response = self.client.post(f'/aportes/alternativas/{morphology}/decidir',
+                                    data=dict(data, decision='rejected', review_note='Motivo', return_to='https://example.invalid'))
+        self.assertEqual(response.location, f'/aportes/alternativas/{morphology}')
+        morphology = create_proposal(db, 1, 'MORPHOLOGY', {'component_count': 1}, collaborator_id=1, access_role='analyst')
+        response = self.client.post(f'/aportes/alternativas/{morphology}/decidir', data=dict(form(morphology), decision='accepted'))
+        self.assertEqual(response.location, '/aportes/pendientes')
+        self.assertEqual(get_proposal(db, morphology)['resolution'], 'accepted')
 
     def test_preview_table_presentation_preserves_calculated_values(self):
         preview = {'rows': [
