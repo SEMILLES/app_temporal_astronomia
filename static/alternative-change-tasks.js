@@ -51,41 +51,85 @@
   }
   const form = document.getElementById('relation-proposals');
   if (!form) return;
-  const target = form.querySelector('[name="target_id"]');
-  const parameter = form.querySelector('[name="parameter"]');
-  const list = document.getElementById('prepared-relations');
-  const add = document.getElementById('prepare-relation');
+  const list = document.getElementById('relation-rows');
+  const add = document.getElementById('add-relation');
   const send = document.getElementById('send-relations');
-  const message = document.getElementById('relation-message');
+  const answer = document.getElementById('relation-answer');
+  const positiveControls = document.getElementById('positive-relation-controls');
   const key = (id, value) => JSON.stringify([String(id), value]);
   const blocked = new Set(JSON.parse(document.getElementById('unavailable-relations').textContent).map(([id, value]) => key(id, value)));
-  const prepared = new Set();
-  target.removeAttribute('name');
-  parameter.removeAttribute('name');
   add.hidden = false;
   const update = () => {
-    const duplicate = blocked.has(key(target.value, parameter.value)) || prepared.has(key(target.value, parameter.value));
-    add.disabled = duplicate;
-    send.disabled = !prepared.size;
-    message.textContent = duplicate ? 'Esta relación ya está vigente, en revisión o preparada.' : '';
+    positiveControls.hidden = answer.value !== 'YES';
+    positiveControls.disabled = answer.value !== 'YES';
+    document.getElementById('no-relation-explanation').hidden = answer.value !== 'NO';
+    const rows = [...list.querySelectorAll('[data-relation-row]')];
+    const selections = rows.map(row => ({
+      target: row.querySelector('[name="target_id"]'),
+      parameter: row.querySelector('[name="parameter"]')
+    }));
+    let valid = 0;
+    rows.forEach((row, index) => {
+      const {target, parameter} = selections[index];
+      const otherPairs = new Set(selections.filter((_, i) => i !== index)
+        .map(other => key(other.target.value, other.parameter.value)));
+      row.querySelector('legend').textContent = 'Relación ' + (index + 1);
+      row.querySelector('[data-remove-relation]').hidden = false;
+      const unavailable = pair => blocked.has(pair) || otherPairs.has(pair);
+      // Keep selected values intact, including invalid POSTs, so users can correct them.
+      for (const option of parameter.options) {
+        option.disabled = !!option.value && !option.selected &&
+          (option.hasAttribute('data-invalid') || (!!target.value && unavailable(key(target.value, option.value))));
+      }
+      for (const option of target.options) {
+        option.disabled = !!option.value && !option.selected &&
+          (option.hasAttribute('data-invalid') || (!!parameter.value && unavailable(key(option.value, parameter.value))));
+      }
+      const complete = !!target.value && !!parameter.value;
+      const duplicate = complete && unavailable(key(target.value, parameter.value));
+      const invalid = target.selectedOptions[0]?.hasAttribute('data-invalid') || parameter.selectedOptions[0]?.hasAttribute('data-invalid');
+      const message = invalid ? 'Seleccione un destino y un parámetro disponibles.' :
+        duplicate ? 'Esta relación ya está vigente, en revisión o en otra fila.' : '';
+      parameter.setCustomValidity(message);
+      row.querySelector('[data-relation-message]').textContent = message;
+      if (complete && !message) valid++;
+    });
+    send.disabled = answer.value === 'NO' ? false : answer.value !== 'YES' || !valid || valid !== rows.length;
   };
-  target.addEventListener('change', update);
-  parameter.addEventListener('change', update);
-  add.addEventListener('click', () => {
-    const identity = key(target.value, parameter.value);
-    if (blocked.has(identity) || prepared.has(identity)) return;
-    prepared.add(identity);
-    const row = document.createElement('li');
-    row.append(document.createTextNode(target.selectedOptions[0].textContent + ' · ' + parameter.value + ' '));
-    for (const [name, value] of [['target_id', target.value], ['parameter', parameter.value]]) {
-      const input = document.createElement('input');
-      input.type = 'hidden'; input.name = name; input.value = value; row.append(input);
+  form.addEventListener('change', update);
+  list.addEventListener('click', event => {
+    if (event.target.matches('[data-remove-relation]')) {
+      event.target.closest('[data-relation-row]').remove();
+      update();
     }
-    const remove = document.createElement('button');
-    remove.type = 'button'; remove.textContent = 'Quitar';
-    remove.addEventListener('click', () => {prepared.delete(identity); row.remove(); update();});
-    row.append(remove); list.append(row); update();
   });
-  form.addEventListener('submit', event => {if (!prepared.size) event.preventDefault();});
+  add.addEventListener('click', () => {
+    list.append(document.getElementById('relation-row-template').content.cloneNode(true));
+    update();
+  });
+  form.addEventListener('submit', event => {
+    update();
+    if (send.disabled) event.preventDefault();
+  });
+  update();
+})();
+
+(() => {
+  const form = document.getElementById('relation-review');
+  if (!form) return;
+  const negative = form.dataset.negative === 'true';
+  const update = () => {
+    const decision = form.querySelector('input[type="radio"]:checked')?.value;
+    const resolution = negative ? (decision === 'accepted' ? 'NO_CONFIRMED' : null) :
+      (decision === 'pending' ? null : decision);
+    let valid = !resolution;
+    form.querySelectorAll('[data-relation-preview]').forEach(section => {
+      section.hidden = section.dataset.relationPreview !== resolution;
+      if (!section.hidden) valid = section.dataset.valid === 'true';
+    });
+    form.elements.review_note.required = negative && decision === 'rejected';
+    document.getElementById('apply-relation-review').disabled = !decision || !valid;
+  };
+  form.addEventListener('change', update);
   update();
 })();

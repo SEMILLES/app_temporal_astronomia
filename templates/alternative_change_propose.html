@@ -54,16 +54,43 @@
 {% endif %}{% endif %}
 {% if mode=='relation' %}
 <section id="relaciones"><h2>Proponer relación fonológica</h2>
-{% for p in pending.RELATION %}<p><a href="{{url_for('alternative_changes.detail',submission_id=p.submission_id)}}">En revisión · Aporte #{{p.submission_id}}</a> · Alternativas {{p.alternative_id}} ↔ {{p.target_id}} · {{p.parameter}}</p>{% endfor %}
-{% if options %}
+{% if relation_needs_review %}<aside><h3>Revisión necesaria</h3><p>La etiqueta actual de esta alternativa sugiere que pertenece a una red de variación fonológica, pero no tiene ninguna relación fonológica vigente. Verifique si falta registrar una relación o si debe quedar como una alternativa independiente.</p></aside>{% endif %}
+{% for p in pending.RELATION %}<p><a href="{{url_for('alternative_changes.detail',submission_id=p.submission_id)}}">En revisión · Aporte #{{p.submission_id}}</a> · {{'No falta ninguna relación' if p.relation_answer=='NO' else p.parameter}}</p>{% endfor %}
+<details id="relation-context"><summary>Alternativas vigentes del concepto</summary>
+{% for a in relation_options %}<section><h3>{{a.display_label}}</h3>
+{% for item in a.occurrences %}<p>{{item.original_gloss or 'Sin glosa'}}{% include '_work_occurrence_context.html' %}</p>{% else %}<p>Sin ocurrencias actualmente asignadas.</p>{% endfor %}
+</section>{% else %}<p>No hay otras alternativas vigentes.</p>{% endfor %}
+</details>
 <form method="post" id="relation-proposals"><input type="hidden" name="csrf_token" value="{{csrf_token}}"><input type="hidden" name="state_token" value="{{tokens.RELATION}}"><input type="hidden" name="kind" value="RELATION">
-<label>Otra alternativa del concepto <select name="target_id" id="relation-target" required>{% for a in options %}<option value="{{a.alternative_id}}">{{a.working_label or 'Sin etiqueta'}} · ID {{a.alternative_id}}</option>{% endfor %}</select></label>
-<label>Parámetro <select name="parameter" id="relation-parameter">{% for p in parameters %}<option>{{p}}</option>{% endfor %}</select></label>
-<button type="button" id="prepare-relation" hidden>Agregar relación</button>
-<p id="relation-message" role="status"></p><ul id="prepared-relations"></ul>
+{% if error and relation_collaborator %}<input type="hidden" name="collaborator_id" value="{{relation_collaborator}}">{% endif %}
+<p><label>¿Esta alternativa está relacionada fonológicamente con otra alternativa?
+<select name="relation_answer" id="relation-answer" required>
+<option value=""{% if not relation_answer %} selected{% endif %}>Seleccione</option>
+<option value="YES"{% if relation_answer=='YES' %} selected{% endif %}{% if not options %} disabled{% endif %}>Sí</option>
+<option value="NO"{% if relation_answer=='NO' %} selected{% endif %}>No</option>
+</select></label></p>
+{% if not options %}<p>No hay otras alternativas activas de este concepto con las cuales establecer una relación fonológica.</p>{% endif %}
+<p id="no-relation-explanation"{% if relation_answer!='NO' %} hidden{% endif %}>Se propondrá que no falta ninguna relación fonológica para esta alternativa y que su nomenclatura debe normalizarse de acuerdo con el grafo vigente.</p>
+{% macro relation_row(target='', parameter='', number=1) %}
+<fieldset data-relation-row><legend>Relación {{number}}</legend>
+<label>Destino <select name="target_id" required>
+<option value="">Seleccione</option>
+{% if target and target not in relation_option_ids %}<option value="{{target}}" selected data-invalid>Destino no disponible; seleccione una alternativa vigente</option>{% endif %}
+{% for a in relation_options %}<option value="{{a.alternative_id}}"{% if target == (a.alternative_id|string) %} selected{% endif %}>{{a.display_label}}</option>{% endfor %}
+</select></label>
+<label>Parámetro <select name="parameter" required><option value="">Seleccione</option>
+{% if parameter and parameter not in parameters %}<option value="{{parameter}}" selected data-invalid>{{parameter}} (no válido)</option>{% endif %}
+{% for p in parameters %}<option{% if parameter==p %} selected{% endif %}>{{p}}</option>{% endfor %}</select></label>
+<p data-relation-message role="status"></p><button type="button" data-remove-relation hidden>Quitar</button>
+</fieldset>
+{% endmacro %}
+<fieldset id="positive-relation-controls"{% if relation_answer!='YES' %} hidden disabled{% endif %}><legend>Relaciones propuestas</legend>
+<div id="relation-rows">{% for target, parameter in relation_rows %}{{relation_row(target, parameter, loop.index)}}{% endfor %}</div>
+<template id="relation-row-template">{{relation_row()}}</template>
+<button type="button" id="add-relation" hidden>Agregar otra relación</button>
+</fieldset>
 <button id="send-relations">Enviar propuestas</button></form>
 <script type="application/json" id="unavailable-relations">{{unavailable|tojson}}</script>
-{% else %}<p>No hay otras alternativas activas de este concepto con las cuales establecer una relación fonológica.</p>{% endif %}
 </section>{% endif %}
 <script src="{{url_for('static',filename='alternative-change-tasks.js')}}" defer></script>
 {% endblock %}

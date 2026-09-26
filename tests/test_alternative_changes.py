@@ -34,8 +34,8 @@ class AlternativeChangeTests(unittest.TestCase):
     def propose(self, kind='MORPHOLOGY', values=None):
         return create_proposal(self.db, 2, kind, values or {'component_count': 1}, collaborator_id=1, access_role='analyst')
 
-    def review(self, sid, decision='accepted', role='reviewer'):
-        return review_proposal(self.db, sid, decision, collaborator_id=1, access_role=role, note='Revisado')
+    def review(self, sid, decision='accepted', role='reviewer', **kwargs):
+        return review_proposal(self.db, sid, decision, collaborator_id=1, access_role=role, note='Revisado', **kwargs)
 
     def canonical(self):
         return {t: [tuple(r) for r in self.db.execute('SELECT * FROM '+t)] for t in
@@ -68,7 +68,7 @@ class AlternativeChangeTests(unittest.TestCase):
         self.db.commit()
         self.assertEqual(len(concept_diagnostics(self.db,[1])[1]['relations']),1)
         before=self.canonical();sid=self.propose('RELATION',{'target_id':1,'parameter':'CM_1'})
-        self.assertEqual(before,self.canonical());self.review(sid)
+        self.assertEqual(before,self.canonical());self.review(sid, relations_resolution='ACCEPTED')
         rows=self.db.execute('SELECT * FROM alternative_relation WHERE is_current=1').fetchall()
         self.assertEqual(len(rows),1);self.assertEqual((rows[0]['alternative_low_id'],rows[0]['alternative_high_id']),(1,2))
         self.assertEqual(concept_diagnostics(self.db,[1])[1]['relations'],[])
@@ -107,7 +107,7 @@ class AlternativeChangeTests(unittest.TestCase):
         self.assertEqual(pending[2]['RELATION'][0]['submission_id'],sid)
         other=self.propose('RELATION',{'target_id':1,'parameter':'OR_M1'})
         self.assertNotEqual(sid,other)
-        self.review(sid);self.review(other,'rejected')
+        self.review(sid, relations_resolution='ACCEPTED');self.review(other,'rejected')
 
     def test_relation_batch_is_atomic_and_independently_reviewed(self):
         from alternative_change_workflow import create_relation_proposals, baseline
@@ -120,12 +120,12 @@ class AlternativeChangeTests(unittest.TestCase):
         ids=create_relation_proposals(self.db,2,values,**actor)
         self.assertEqual(len(set(ids)),2)
         stale=baseline(self.db,2,'RELATION')
-        self.review(ids[0])
+        self.review(ids[0], relations_resolution='ACCEPTED')
         before=list(self.db.iterdump())
         with self.assertRaises(ValueError):
-            review_proposal(self.db,ids[1],'accepted',collaborator_id=1,access_role='reviewer',expected_baseline=stale)
+            review_proposal(self.db,ids[1],'accepted',collaborator_id=1,access_role='reviewer',expected_baseline=stale,relations_resolution='ACCEPTED')
         self.assertEqual(before,list(self.db.iterdump()))
-        review_proposal(self.db,ids[1],'accepted',collaborator_id=1,access_role='reviewer',expected_baseline=baseline(self.db,2,'RELATION'))
+        review_proposal(self.db,ids[1],'accepted',collaborator_id=1,access_role='reviewer',expected_baseline=baseline(self.db,2,'RELATION'),relations_resolution='ACCEPTED')
         rows=self.db.execute('SELECT alternative_low_id,alternative_high_id FROM alternative_relation WHERE is_current=1').fetchall()
         self.assertEqual([tuple(r) for r in rows],[(1,2),(1,2)])
 
@@ -143,6 +143,196 @@ class AlternativeChangeTests(unittest.TestCase):
                 results=list(pool.map(lambda _:propose(),range(2)))
             self.assertEqual(sum(sid is not None for sid in results),1)
 
+    def test_negative_payload_pending_diagnostic_and_exclusive_contract(self):
+        from alternative_change_workflow import get_proposal, create_relation_proposals
+        before = self.canonical()
+        sid = self.propose('RELATION', {'relation_answer': 'NO'})
+        self.assertEqual(self.canonical(), before)
+        self.assertEqual(json.loads(get_proposal(self.db, sid)['payload']), {'relation_answer': 'NO'})
+        task = concept_diagnostics(self.db, [1])[1]['relations'][0]
+        self.assertEqual(task['pending_changes']['RELATION'][0]['submission_id'], sid)
+        for values in ({'relation_answer': 'NO'}, {'relation_answer': 'NO', 'target_id': 1},
+                       {'relation_answer': 'NO', 'parameter': 'CM_1'}, {},
+                       {'target_id': 1, 'parameter': 'CM_1', 'uncertain': True}):
+            with self.subTest(values=values), self.assertRaises(ValueError):
+                create_proposal(self.db, 2, 'RELATION', values, collaborator_id=1, access_role='analyst')
+        with self.assertRaises(ValueError):
+            create_relation_proposals(self.db, 2, [], collaborator_id=1, access_role='analyst')
+        with self.assertRaises(ValueError):
+            create_relation_proposals(self.db, 1, [{'relation_answer': 'NO'}], collaborator_id=1, access_role='analyst')
+
+    def test_relation_previews_use_the_full_current_concept_and_optional_edge(self):
+        from alternative_change_workflow import relation_review_preview
+        positive = dict(target_id=1, parameter='CM_1')
+        accepted = relation_review_preview(self.db, 2, positive, 'ACCEPTED')
+        rejected = relation_review_preview(self.db, 2, positive, 'REJECTED')
+        negative = relation_review_preview(self.db, 2, {'relation_answer': 'NO'}, 'NO_CONFIRMED')
+        self.assertEqual(accepted['suggestions'], {1: '1a', 2: '1b'})
+        self.assertEqual(rejected['suggestions'], {1: '1a', 2: '2a'})
+        self.assertEqual(negative['suggestions'], rejected['suggestions'])
+        self.assertEqual({r['alternative_id'] for r in negative['rows']}, {1, 2})
+
+    def test_accepted_relation_requires_explicit_compatible_resolution(self):
+        for values, valid, incompatible in [
+                ({'target_id': 1, 'parameter': 'CM_1'}, 'ACCEPTED', 'NO_CONFIRMED'),
+                ({'relation_answer': 'NO'}, 'NO_CONFIRMED', 'ACCEPTED')]:
+            with self.subTest(values=values):
+                self.db.execute('SAVEPOINT scenario')
+                sid = self.propose('RELATION', values)
+                before = list(self.db.iterdump())
+                for resolution in (None, '', 'INVALID', incompatible):
+                    kwargs = {} if resolution is None else {'relations_resolution': resolution}
+                    with self.subTest(resolution=resolution), self.assertRaises(ValueError):
+                        self.review(sid, **kwargs)
+                    self.assertEqual(before, list(self.db.iterdump()))
+                self.review(sid, relations_resolution=valid)
+                self.assertEqual(self.db.execute('SELECT resolution FROM submission WHERE submission_id=?',
+                                                (sid,)).fetchone()[0], 'accepted')
+                self.db.execute('ROLLBACK TO scenario'); self.db.execute('RELEASE scenario')
+
+    def test_linguistic_resolutions_normalize_without_edges_and_preserve_payload(self):
+        from alternative_change_workflow import get_proposal, relation_review_history
+        for values, resolution in [({'relation_answer': 'NO'}, 'NO_CONFIRMED'),
+                                   ({'target_id': 1, 'parameter': 'CM_1'}, 'REJECTED')]:
+            with self.subTest(resolution=resolution):
+                self.db.execute('SAVEPOINT scenario')
+                sid = self.propose('RELATION', values)
+                payload = get_proposal(self.db, sid)['payload']
+                result = review_proposal(self.db, sid, 'accepted', collaborator_id=1,
+                    access_role='reviewer', relations_resolution=resolution, note='Nota humana')
+                self.assertIsNone(result)
+                proposal = get_proposal(self.db, sid)
+                self.assertEqual((proposal['status'], proposal['resolution'], proposal['review_note']),
+                                 ('resolved', 'accepted', 'Nota humana'))
+                self.assertEqual(proposal['payload'], payload)
+                self.assertEqual(self.db.execute('SELECT count(*) FROM alternative_relation').fetchone()[0], 0)
+                self.assertEqual(self.db.execute('SELECT working_label FROM alternative WHERE alternative_id=2').fetchone()[0], '2a')
+                self.assertEqual(concept_diagnostics(self.db, [1])[1]['relations'], [])
+                history = relation_review_history(self.db, sid)
+                self.assertEqual(history['relations_resolution'], resolution)
+                self.assertIsNotNone(history['renumber_event_id'])
+                self.db.execute('ROLLBACK TO scenario'); self.db.execute('RELEASE scenario')
+
+    def test_negative_confirmation_keeps_historical_relations(self):
+        self.db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter,is_current) VALUES(1,2,'CM_2',0)")
+        self.db.commit()
+        edges = [tuple(r) for r in self.db.execute('SELECT * FROM alternative_relation')]
+        self.review(self.propose('RELATION', {'relation_answer': 'NO'}), relations_resolution='NO_CONFIRMED')
+        self.assertEqual(edges, [tuple(r) for r in self.db.execute('SELECT * FROM alternative_relation')])
+
+    def test_current_relation_blocks_negative_creation_at_either_endpoint(self):
+        from alternative_relations import create_current_relation
+        create_current_relation(self.db, 1, 2, 'CM_1')
+        before = list(self.db.iterdump())
+        for aid in (1, 2):
+            with self.subTest(aid=aid), self.assertRaisesRegex(ValueError, 'relaciones fonológicas vigentes'):
+                create_proposal(self.db, aid, 'RELATION', {'relation_answer': 'NO'},
+                                collaborator_id=1, access_role='analyst')
+            self.assertEqual(before, list(self.db.iterdump()))
+
+    def test_new_current_relation_blocks_negative_confirmation_even_after_reload(self):
+        from alternative_change_workflow import baseline, relation_review_preview
+        from alternative_relations import create_current_relation
+        sid = self.propose('RELATION', {'relation_answer': 'NO'})
+        create_current_relation(self.db, 1, 2, 'CM_1')
+        before = list(self.db.iterdump())
+        with patch('alternative_change_workflow.apply_nomenclature') as apply:
+            with self.assertRaisesRegex(ValueError, 'relaciones fonológicas vigentes'):
+                review_proposal(self.db, sid, 'accepted', collaborator_id=1, access_role='reviewer',
+                                expected_baseline=baseline(self.db, 2, 'RELATION'), relations_resolution='NO_CONFIRMED')
+            apply.assert_not_called()
+        with self.assertRaisesRegex(ValueError, 'relaciones fonológicas vigentes'):
+            relation_review_preview(self.db, 2, {'relation_answer': 'NO'}, 'NO_CONFIRMED')
+        self.assertEqual(before, list(self.db.iterdump()))
+
+    def test_pending_positive_blocks_negative_at_either_endpoint(self):
+        self.propose('RELATION', {'target_id': 1, 'parameter': 'CM_1'})
+        before = list(self.db.iterdump())
+        for aid in (1, 2):
+            with self.subTest(aid=aid), self.assertRaisesRegex(ValueError, 'contradice'):
+                create_proposal(self.db, aid, 'RELATION', {'relation_answer': 'NO'},
+                                collaborator_id=1, access_role='analyst')
+            self.assertEqual(before, list(self.db.iterdump()))
+
+    def test_pending_negative_blocks_positive_origin_and_destination_only(self):
+        self.propose('RELATION', {'relation_answer': 'NO'})
+        before = list(self.db.iterdump())
+        for origin, target in ((2, 1), (1, 2)):
+            with self.subTest(origin=origin), self.assertRaisesRegex(ValueError, 'contradice'):
+                create_proposal(self.db, origin, 'RELATION', {'target_id': target, 'parameter': 'CM_1'},
+                                collaborator_id=1, access_role='analyst')
+            self.assertEqual(before, list(self.db.iterdump()))
+        self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'3a')")
+        self.db.commit()
+        from alternative_change_workflow import create_relation_proposals
+        ids = create_relation_proposals(self.db, 1,
+            [{'target_id': 3, 'parameter': 'CM_1'}, {'target_id': 3, 'parameter': 'OR_M1'}],
+            collaborator_id=1, access_role='analyst')
+        self.assertEqual(len(set(ids)), 2)
+
+    def test_relation_pending_is_noop_and_full_rejection_never_changes_canonical(self):
+        from alternative_change_workflow import get_proposal, relation_review_history
+        for values in ({'relation_answer': 'NO'}, {'target_id': 1, 'parameter': 'CM_1'}):
+            sid = self.propose('RELATION', values)
+            before = list(self.db.iterdump())
+            self.review(sid, 'pending')
+            self.assertEqual(before, list(self.db.iterdump()))
+            with self.assertRaises(ValueError):
+                review_proposal(self.db, sid, 'rejected', collaborator_id=1, access_role='reviewer')
+            canonical = self.canonical()
+            self.review(sid, 'rejected')
+            self.assertEqual(canonical, self.canonical())
+            self.assertEqual(get_proposal(self.db, sid)['resolution'], 'rejected')
+            self.assertEqual(relation_review_history(self.db, sid)['relations_resolution'], 'PROPOSAL_REJECTED')
+
+    def test_no_edge_resolution_checks_review_baseline(self):
+        from alternative_change_workflow import baseline
+        from alternative_relations import create_current_relation
+        for values, resolution in [({'relation_answer': 'NO'}, 'NO_CONFIRMED'),
+                                   ({'target_id': 1, 'parameter': 'CM_1'}, 'REJECTED')]:
+            with self.subTest(resolution=resolution):
+                self.db.execute('SAVEPOINT scenario')
+                sid = self.propose('RELATION', values)
+                token = baseline(self.db, 2, 'RELATION')
+                create_current_relation(self.db, 1, 2, 'CM_2')
+                before = list(self.db.iterdump())
+                with self.assertRaisesRegex(ValueError, 'abrir'):
+                    review_proposal(self.db, sid, 'accepted', collaborator_id=1, access_role='reviewer',
+                                    expected_baseline=token, relations_resolution=resolution)
+                self.assertEqual(before, list(self.db.iterdump()))
+                self.db.execute('ROLLBACK TO scenario'); self.db.execute('RELEASE scenario')
+
+    def test_relation_resolution_rollback_for_nomenclature_activity_and_invalid_preview(self):
+        for values, resolution in [({'relation_answer': 'NO'}, 'NO_CONFIRMED'),
+                                   ({'target_id': 1, 'parameter': 'CM_1'}, 'ACCEPTED')]:
+            for function in ('apply_nomenclature', 'record_activity', 'validate_final_labels'):
+                with self.subTest(resolution=resolution, function=function):
+                    self.db.execute('SAVEPOINT scenario')
+                    sid = self.propose('RELATION', values)
+                    before = list(self.db.iterdump())
+                    with patch('alternative_change_workflow.' + function, side_effect=ValueError('injected')):
+                        with self.assertRaises(ValueError):
+                            review_proposal(self.db, sid, 'accepted', collaborator_id=1,
+                                            access_role='reviewer', relations_resolution=resolution)
+                    self.assertEqual(before, list(self.db.iterdump()))
+                    self.db.execute('ROLLBACK TO scenario'); self.db.execute('RELEASE scenario')
+
+    def test_inconclusive_graph_cannot_be_applied(self):
+        from alternative_change_workflow import relation_review_preview
+        self.db.executemany('INSERT INTO alternative(concept_id,working_label) VALUES(1,?)',
+                            [(str(i) + 'a',) for i in range(3, 29)])
+        self.db.executemany("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(?,?,'CM_1')",
+                            [(1, 3)] + [(i, i + 1) for i in range(3, 28)])
+        self.db.commit()
+        sid = self.propose('RELATION', {'relation_answer': 'NO'})
+        preview = relation_review_preview(self.db, 2, {'relation_answer': 'NO'}, 'NO_CONFIRMED')
+        self.assertFalse(preview['conclusive'])
+        self.assertEqual(len(preview['rows']), 28)
+        before = list(self.db.iterdump())
+        with self.assertRaisesRegex(ValueError, 'nomenclatura'):
+            self.review(sid, relations_resolution='NO_CONFIRMED')
+        self.assertEqual(before, list(self.db.iterdump()))
+
     def test_failures_roll_back_everything(self):
         for kind, table, event in [('MORPHOLOGY','alternative_morphology','INSERT'),
                                   ('MORPHOLOGY','alternative_morphology','UPDATE'),
@@ -158,7 +348,8 @@ class AlternativeChangeTests(unittest.TestCase):
                 sid=self.propose(kind,values)
                 self.db.execute(f"CREATE TEMP TRIGGER fail_write BEFORE {event} ON {table} BEGIN SELECT RAISE(ABORT,'injected'); END")
                 before=list(self.db.iterdump())
-                with self.assertRaises(sqlite3.IntegrityError):self.review(sid)
+                with self.assertRaises(sqlite3.IntegrityError):
+                    self.review(sid, **({'relations_resolution': 'ACCEPTED'} if kind == 'RELATION' else {}))
                 self.assertEqual(before,list(self.db.iterdump()))
                 self.db.execute('ROLLBACK TO fixture');self.db.execute('RELEASE fixture')
 
@@ -203,7 +394,7 @@ assert link and 'target=' not in link.group()
 detail='/aportes/alternativas/'+str(sid)
 assert client.post('/a'+detail+'/decidir',data={}).status_code==404
 page=client.get('/r'+detail);assert page.status_code==200,page.text
-data=Forms(page.text).forms[0];data.update(decision='accepted',collaborator_id='1')
+data=Forms(page.text).forms[0];data.update(decision='accepted',collaborator_id='1',relations_resolution='ACCEPTED')
 response=client.post('/r'+detail+'/decidir',data=data);assert response.status_code==302,response.text
 with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM alternative_morphology WHERE is_current=1').fetchone()[0]==1
@@ -211,14 +402,14 @@ page=client.get('/a/alternativas/2/proponer?mode=relation')
 assert 'name="component_count"' not in page.text
 assert 'value="2"' not in re.search('<select name="target_id".*?</select>',page.text,re.S).group()
 data=next(f for f in Forms(page.text).forms if f.get('kind')=='RELATION')
-data.update(target_id='1',parameter='CM_1',collaborator_id='1')
+data.update(target_id='1',parameter='CM_1',collaborator_id='1',relation_answer='YES')
 response=client.post('/a/alternativas/2/proponer?mode=relation',data=data);assert response.status_code==302,response.text
 with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM alternative_relation').fetchone()[0]==0
     sid=db.execute('SELECT max(submission_id) FROM submission').fetchone()[0]
 detail='/aportes/alternativas/'+str(sid)
 page=client.get('/m'+detail);assert page.status_code==200,page.text
-data=Forms(page.text).forms[0];data.update(decision='accepted',collaborator_id='1')
+data=Forms(page.text).forms[0];data.update(decision='accepted',collaborator_id='1',relations_resolution='ACCEPTED')
 response=client.post('/m'+detail+'/decidir',data=data);assert response.status_code==302,response.text
 with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==1
@@ -296,21 +487,91 @@ with sync_playwright() as pw:
             review_proposal(db,proposal['submission_id'],'rejected',collaborator_id=1,access_role='reviewer',note='Prueba de interfaz')
         page.goto('http://local.test/a/alternativas/2/proponer?mode=relation')
         page.locator('#lesico-collaborator').select_option('1')
-        expect(page.locator('#prepare-relation')).to_be_disabled()
-        for parameter in ('CM_2','OR_M1'):
-            page.locator('#relation-parameter').select_option(parameter)
-            page.locator('#prepare-relation').click()
-            expect(page.locator('#prepare-relation')).to_be_disabled()
-        expect(page.locator('#prepared-relations li')).to_have_count(2)
+        rows=page.locator('#relation-rows [data-relation-row]')
+        expect(rows).to_have_count(1)
+        expect(page.locator('#relation-context')).not_to_have_attribute('open','')
+        expect(page.locator('#send-relations')).to_be_disabled()
+        expect(page.locator('#positive-relation-controls')).to_be_hidden()
+        page.locator('#relation-answer').select_option('YES')
+        rows.first.locator('[data-remove-relation]').click()
+        expect(rows).to_have_count(0)
+        expect(page.locator('#send-relations')).to_be_disabled()
+        page.locator('#add-relation').click()
+        rows.first.locator('[name=target_id]').select_option('1')
+        expect(rows.first.locator('[name=parameter] option').filter(has_text='CM_1')).to_have_attribute('disabled','')
+        rows.first.locator('[name=parameter]').select_option('CM_2')
+        expect(page.locator('#send-relations')).to_be_enabled()
+        page.locator('#add-relation').click()
+        rows.last.locator('[name=target_id]').select_option('1')
+        expect(rows.last.locator('[name=parameter] option').filter(has_text='CM_2')).to_have_attribute('disabled','')
+        rows.last.locator('[name=parameter]').select_option('OR_M1')
+        expect(page.locator('#send-relations')).to_be_enabled()
+        page.locator('#add-relation').click()
+        expect(page.locator('#send-relations')).to_be_disabled()
+        rows.last.locator('[data-remove-relation]').click()
+        expect(rows).to_have_count(2)
+        page.locator('#relation-answer').select_option('NO')
+        expect(page.locator('#positive-relation-controls')).to_be_hidden()
+        expect(rows.first.locator('[name=target_id]')).to_be_disabled()
+        assert page.locator('#relation-proposals').evaluate("form => !new FormData(form).has('target_id') && !new FormData(form).has('parameter')")
+        expect(page.locator('#send-relations')).to_be_enabled()
+        page.locator('#relation-answer').select_option('YES')
+        expect(rows.first.locator('[name=parameter]')).to_have_value('CM_2')
+        expect(rows.last.locator('[name=parameter]')).to_have_value('OR_M1')
+        page.locator('#relation-proposals [name=state_token]').evaluate("input => input.value='invalid'")
+        page.locator('#send-relations').click()
+        expect(page.locator('[role=alert]')).to_be_visible()
+        expect(rows).to_have_count(2)
+        expect(rows.first.locator('[name=target_id]')).to_have_value('1')
+        expect(rows.first.locator('[name=parameter]')).to_have_value('CM_2')
+        expect(rows.last.locator('[name=parameter]')).to_have_value('OR_M1')
+        expect(page.locator('#relation-proposals [name=collaborator_id]')).to_have_value('1')
         page.locator('#send-relations').click()
         with closing(conectar()) as db:
             pending=[r[0] for r in db.execute("SELECT submission_id FROM submission WHERE status='pending'")]
             assert len(pending)==2
             assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==1
-        for sid,decision in zip(pending,('accepted','rejected')):
+            payloads=[json.loads(r[0]) for r in db.execute("SELECT payload FROM alternative_change_submission JOIN submission USING(submission_id) WHERE status='pending' ORDER BY submission_id")]
+            assert payloads==[dict(target_id=1,parameter='CM_2'),dict(target_id=1,parameter='OR_M1')],payloads
+        page.locator('#relation-answer').select_option('YES')
+        expect(rows.first.locator('[name=target_id]')).to_have_value('')
+        rows.first.locator('[name=target_id]').select_option('1')
+        expect(rows.first.locator('[name=parameter] option').filter(has_text='CM_2')).to_have_attribute('disabled','')
+        expect(rows.first.locator('[name=parameter] option').filter(has_text='OR_M1')).to_have_attribute('disabled','')
+        for sid,decision in zip(pending,('ACCEPTED','REJECTED')):
             page.goto('http://local.test/r/aportes/alternativas/'+str(sid))
             page.locator('textarea[name=review_note]').fill('Revision individual')
-            page.locator('button[value='+decision+']').click()
+            expect(page.locator('[data-relation-preview]:visible')).to_have_count(0)
+            page.locator('[name=relations_resolution][value='+decision+']').check()
+            expect(page.locator('[data-relation-preview]:visible .preview-table tr')).to_have_count(3)
+            page.locator('#apply-relation-review').click()
+        with closing(conectar()) as db:
+            assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==2
+            db.execute("INSERT INTO concept(preferred_label) VALUES('Concepto aislado')")
+            db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(2,'1b')")
+            db.commit()
+        page.goto('http://local.test/a/alternativas/3/proponer?mode=relation')
+        page.locator('#relation-answer').select_option('NO')
+        expect(page.locator('#send-relations')).to_be_enabled()
+        page.locator('#relation-proposals [name=state_token]').evaluate("input => input.value='invalid'")
+        page.locator('#send-relations').click()
+        expect(page.locator('#relation-answer')).to_have_value('NO')
+        expect(page.locator('#positive-relation-controls')).to_be_hidden()
+        expect(page.locator('#relation-proposals [name=collaborator_id]')).to_have_value('1')
+        page.locator('#send-relations').click()
+        expect(page.locator('h1')).to_contain_text('Aporte #')
+        with closing(conectar()) as db:
+            sid,payload=db.execute('SELECT submission_id,payload FROM alternative_change_submission ORDER BY submission_id DESC').fetchone()
+            assert json.loads(payload)=={'relation_answer':'NO'}
+        page.goto('http://local.test/r/aportes/alternativas/'+str(sid))
+        page.locator('[name=decision][value=rejected]').check()
+        expect(page.locator('textarea[name=review_note]')).to_have_attribute('required','')
+        expect(page.locator('[data-relation-preview]:visible')).to_have_count(0)
+        page.locator('[name=decision][value=accepted]').check()
+        expect(page.locator('textarea[name=review_note]')).not_to_have_attribute('required','')
+        expect(page.locator('[data-relation-preview]:visible .preview-table tr')).to_have_count(2)
+        page.locator('#apply-relation-review').click()
+        expect(page.locator('body')).to_contain_text('Propuesta de ninguna relación faltante confirmada')
         with closing(conectar()) as db:
             assert db.execute('SELECT COUNT(*) FROM alternative_relation WHERE is_current=1').fetchone()[0]==2
         assert not errors,errors
@@ -319,7 +580,8 @@ with closing(conectar()) as db:
     db.execute("UPDATE alternative SET retired_at=CURRENT_TIMESTAMP WHERE alternative_id=1");db.commit()
 page=client.get('/a/alternativas/2/proponer?mode=relation')
 assert 'No hay otras alternativas activas' in page.text
-assert 'id="relation-proposals"' not in page.text
+assert 'id="relation-proposals"' in page.text
+assert 'value="YES" disabled' in page.text
 '''
             result=subprocess.run([sys.executable,'-c',script],cwd=ROOT,env=env,capture_output=True,text=True)
             self.assertEqual(result.returncode,0,result.stdout+result.stderr)
@@ -464,6 +726,234 @@ class MorphologyProposalRouteTests(unittest.TestCase):
         data['free_permutation'] = 'SÍ'
         response = self.client.post(self.url, data=data)
         self.assertEqual(response.status_code, 302, response.text)
+
+
+class RelationProposalRouteTests(unittest.TestCase):
+    connect = MorphologyProposalRouteTests.connect
+    canonical = MorphologyProposalRouteTests.canonical
+
+    def setUp(self):
+        MorphologyProposalRouteTests.setUp(self)
+        self.url = '/alternativas/1/proponer?mode=relation'
+        from routes.submissions import preview_group_changed, preview_proposed_order
+        self.client.application.jinja_env.filters.update(preview_group_changed=preview_group_changed, preview_proposed_order=preview_proposed_order)
+        with closing(self.connect()) as db:
+            db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'3a')")
+            db.execute("INSERT INTO source(source_name,source_type) VALUES('Libro solar','MATERIAL_IMPRESO')")
+            db.execute("INSERT INTO occurrence(source_id,original_gloss,source_detail_1,source_detail_1_status,source_detail_2,source_detail_2_status,source_locator) VALUES(1,'Glosa actual','Capítulo solar','VALUE','42','VALUE','LOCALIZADOR LEGACY')")
+            db.execute('INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,2)')
+            db.execute("INSERT INTO occurrence(source_id,original_gloss) VALUES(1,'Glosa histórica')")
+            db.execute('INSERT INTO assignment(occurrence_id,alternative_id,is_current) VALUES(2,2,0)')
+            db.commit()
+
+    def form(self, targets=('2',), parameters=('CM_1',)):
+        from html import unescape
+        from werkzeug.datastructures import MultiDict
+        page = self.client.get(self.url)
+        self.assertEqual(page.status_code, 200)
+        values = MultiDict({name: unescape(re.search(r'name="' + name + r'" value="([^"]*)"', page.text)[1])
+                            for name in ('csrf_token', 'state_token', 'kind')})
+        values['collaborator_id'] = '1'
+        values['relation_answer'] = 'YES'
+        values.setlist('target_id', targets)
+        values.setlist('parameter', parameters)
+        return values
+
+    def test_context_closed_current_evidence_and_readable_selector(self):
+        page = self.client.get(self.url).text
+        self.assertIn('<details id="relation-context">', page)
+        context = page.split('<details id="relation-context">', 1)[1].split('</details>', 1)[0]
+        for value in ('SOL-2a', 'SOL-3a', 'Glosa actual', 'Libro solar', 'Capítulo solar', 'Página: 42'):
+            self.assertIn(value, context)
+        for value in ('SOL-1a', 'LUNA', 'Glosa histórica', 'LOCALIZADOR LEGACY', '<input', '<select'):
+            self.assertNotIn(value, context)
+        rows = page.split('<div id="relation-rows">', 1)[1].split('</div>', 1)[0]
+        self.assertEqual(rows.count('data-relation-row'), 1)
+        target = re.search(r'<select name="target_id" required>(.*?)</select>', rows, re.S)[1]
+        self.assertIn('value="2">SOL-2a', target)
+        self.assertIn('value="5">SOL-3a', target)
+        self.assertNotIn('selected', target)
+        self.assertNotIn('ID', target)
+        for identifier in ('1', '3', '4'):
+            self.assertNotIn('value="' + identifier + '"', target)
+
+    def test_multiple_targets_and_parameters_preserve_exact_payload(self):
+        before = self.canonical()
+        response = self.client.post(self.url, data=self.form(('2', '2', '5'), ('CM_1', 'OR_M1', 'MOV_M1')))
+        self.assertEqual(response.status_code, 302, response.text)
+        self.assertEqual(before, self.canonical())
+        with closing(self.connect()) as db:
+            payloads = [json.loads(r[0]) for r in db.execute('SELECT payload FROM alternative_change_submission ORDER BY submission_id')]
+            self.assertEqual(payloads, [dict(target_id=2, parameter='CM_1'), dict(target_id=2, parameter='OR_M1'),
+                                        dict(target_id=5, parameter='MOV_M1')])
+            self.assertEqual(db.execute("SELECT count(*) FROM submission WHERE status='pending'").fetchone()[0], 3)
+
+    def test_duplicate_post_recovers_all_rows_and_collaborator(self):
+        before = self.canonical()
+        response = self.client.post(self.url, data=self.form(('2', '2', '5'), ('CM_1', 'CM_1', 'OR_M1')))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(before, self.canonical())
+        rows = response.text.split('<div id="relation-rows">', 1)[1].split('</div>', 1)[0]
+        self.assertEqual(rows.count('data-relation-row'), 3)
+        self.assertEqual(rows.count('value="2" selected'), 2)
+        self.assertIn('value="5" selected', rows)
+        self.assertEqual(rows.count('<option selected>CM_1</option>'), 2)
+        self.assertIn('<option selected>OR_M1</option>', rows)
+        self.assertIn('name="collaborator_id" value="1"', response.text)
+        with closing(self.connect()) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM submission').fetchone()[0], 0)
+
+    def test_misaligned_and_invalid_rows_are_not_dropped(self):
+        for targets, parameters in [(('2', '5'), ('CM_1',)), (('3', '4'), ('CM_1', 'INVALID'))]:
+            with self.subTest(targets=targets):
+                response = self.client.post(self.url, data=self.form(targets, parameters))
+                self.assertEqual(response.status_code, 400)
+                rows = response.text.split('<div id="relation-rows">', 1)[1].split('</div>', 1)[0]
+                self.assertEqual(rows.count('data-relation-row'), 2)
+                for target in targets:
+                    self.assertIn('value="' + target + '" selected', rows)
+                for parameter in parameters:
+                    self.assertIn(parameter, rows)
+
+    def test_pending_inverse_blocks_only_matching_parameter(self):
+        with closing(self.connect()) as db:
+            create_proposal(db, 2, 'RELATION', dict(target_id=1, parameter='CM_1'),
+                            collaborator_id=1, access_role='analyst')
+        page = self.client.get(self.url).text
+        unavailable = json.loads(re.search(r'id="unavailable-relations">(.*?)</script>', page, re.S)[1])
+        self.assertIn([2, 'CM_1'], unavailable)
+        self.assertNotIn([2, 'OR_M1'], unavailable)
+        self.assertEqual(self.client.post(self.url, data=self.form()).status_code, 400)
+        self.assertEqual(self.client.post(self.url, data=self.form(parameters=('OR_M1',))).status_code, 302)
+
+    def test_notice_answer_selector_negative_submission_and_error_recovery(self):
+        with closing(self.connect()) as db:
+            db.execute("UPDATE alternative SET working_label='1b' WHERE alternative_id=1")
+            db.commit()
+        page = self.client.get(self.url).text
+        self.assertIn('Revisión necesaria', page)
+        self.assertIn('<option value="" selected>Seleccione</option>', page)
+        self.assertIn('<option value="YES">Sí</option>', page)
+        self.assertIn('<option value="NO">No</option>', page)
+        data = self.form((), ())
+        data['relation_answer'] = 'NO'
+        token = data['state_token']
+        data['state_token'] = 'invalid'
+        before = self.canonical()
+        response = self.client.post(self.url, data=data)
+        self.assertEqual(response.status_code, 400)
+        self.assertIn('<option value="NO" selected>No</option>', response.text)
+        self.assertIn('name="collaborator_id" value="1"', response.text)
+        self.assertIn('id="positive-relation-controls" hidden disabled', response.text)
+        data['state_token'] = token
+        response = self.client.post(self.url, data=data)
+        self.assertEqual(response.status_code, 302, response.text)
+        self.assertEqual(before, self.canonical())
+        with closing(self.connect()) as db:
+            proposals = db.execute('SELECT change_kind,payload FROM alternative_change_submission').fetchall()
+            self.assertEqual(len(proposals), 1)
+            self.assertEqual(proposals[0]['change_kind'], 'RELATION')
+            self.assertEqual(json.loads(proposals[0]['payload']), {'relation_answer': 'NO'})
+        page = self.client.get(self.url).text
+        self.assertIn('En revisión', page)
+        self.assertIn('No falta ninguna relación', page)
+        self.assertNotIn('[null, null]', page)
+
+    def test_empty_positive_and_mixed_negative_are_invalid(self):
+        for answer, targets, parameters in [('YES', (), ()), ('', (), ()), ('NO', ('2',), ('CM_1',))]:
+            with self.subTest(answer=answer):
+                data = self.form(targets, parameters)
+                data['relation_answer'] = answer
+                response = self.client.post(self.url, data=data)
+                self.assertEqual(response.status_code, 400)
+                with closing(self.connect()) as db:
+                    self.assertEqual(db.execute('SELECT count(*) FROM submission').fetchone()[0], 0)
+
+    def test_analyst_requires_explicit_answer_even_with_valid_relation_rows(self):
+        for answer in (None, '', 'INVALID', 'yes'):
+            with self.subTest(answer=answer):
+                data = self.form()
+                if answer is None:
+                    del data['relation_answer']
+                else:
+                    data['relation_answer'] = answer
+                with closing(self.connect()) as db:
+                    before = list(db.iterdump())
+                response = self.client.post(self.url, data=data)
+                self.assertEqual(response.status_code, 400)
+                self.assertIn('Seleccione Sí o No', response.text)
+                self.assertNotIn('<option value="YES" selected', response.text)
+                self.assertIn('id="positive-relation-controls" hidden disabled', response.text)
+                with closing(self.connect()) as db:
+                    self.assertEqual(before, list(db.iterdump()))
+
+    def test_review_route_requires_explicit_relation_resolution(self):
+        from flask import g
+        from html import unescape
+        self.client.application.before_request_funcs[None].append(lambda: setattr(g, 'current_access_role', 'reviewer'))
+        for values in ({'relation_answer': 'NO'}, {'target_id': 2, 'parameter': 'CM_1'}):
+            with self.subTest(values=values):
+                with closing(self.connect()) as db:
+                    sid = create_proposal(db, 1, 'RELATION', values, collaborator_id=1, access_role='analyst')
+                url = '/aportes/alternativas/' + str(sid)
+                page = self.client.get(url)
+                data = {name: unescape(re.search(r'name="' + name + r'" value="([^"]*)"', page.text)[1])
+                        for name in ('csrf_token', 'review_token')}
+                data.update(collaborator_id='1', decision='accepted')
+                with closing(self.connect()) as db:
+                    before = list(db.iterdump())
+                for resolution in (None, '', 'INVALID'):
+                    if resolution is not None:
+                        data['relations_resolution'] = resolution
+                    response = self.client.post(url + '/decidir', data=data)
+                    self.assertEqual(response.status_code, 400)
+                    with closing(self.connect()) as db:
+                        self.assertEqual(before, list(db.iterdump()))
+                # Full rejection still needs only the human note, not a linguistic resolution.
+                del data['relations_resolution']
+                data.update(decision='rejected', review_note='Revisión completa')
+                self.assertEqual(self.client.post(url + '/decidir', data=data).status_code, 302)
+
+    def test_review_routes_preview_decisions_and_stale_token(self):
+        from flask import g
+        from html import unescape
+        self.client.application.before_request_funcs[None].append(lambda: setattr(g, 'current_access_role', 'reviewer'))
+        for values, resolution in [({'relation_answer': 'NO'}, 'NO_CONFIRMED'),
+                                   ({'target_id': 2, 'parameter': 'CM_1'}, 'REJECTED')]:
+            with self.subTest(values=values):
+                with closing(self.connect()) as db:
+                    sid = create_proposal(db, 1, 'RELATION', values, collaborator_id=1, access_role='analyst')
+                url = '/aportes/alternativas/' + str(sid)
+                page = self.client.get(url)
+                self.assertEqual(page.status_code, 200)
+                self.assertIn('VISTA PREVIA DE CAMBIOS', page.text)
+                self.assertRegex(page.text, r'<input\s+type="hidden"\s+name="csrf_token"\s+value="[^"]+">')
+                self.assertIn('3a', page.text)
+                data = {name: unescape(re.search(r'name="' + name + r'" value="([^"]*)"', page.text)[1])
+                        for name in ('csrf_token', 'review_token')}
+                data.update(collaborator_id='1', decision='pending')
+                if resolution != 'NO_CONFIRMED':
+                    data.update(decision='accepted', relations_resolution='pending')
+                with closing(self.connect()) as db:
+                    before = list(db.iterdump())
+                self.assertEqual(self.client.post(url + '/decidir', data=data).status_code, 302)
+                with closing(self.connect()) as db:
+                    self.assertEqual(before, list(db.iterdump()))
+                    db.execute("UPDATE alternative SET working_label='9b' WHERE alternative_id=1")
+                    db.commit()
+                data['decision'] = 'accepted'
+                if resolution:
+                    data['relations_resolution'] = resolution
+                self.assertEqual(self.client.post(url + '/decidir', data=data).status_code, 400)
+                page = self.client.get(url)
+                data['review_token'] = unescape(re.search(r'name="review_token" value="([^"]*)"', page.text)[1])
+                response = self.client.post(url + '/decidir', data=data)
+                self.assertEqual(response.status_code, 302, response.text)
+                page = self.client.get(url)
+                self.assertIn('Resolución:', page.text)
+                with closing(self.connect()) as db:
+                    self.assertEqual(db.execute('SELECT resolution FROM submission WHERE submission_id=?', (sid,)).fetchone()[0], 'accepted')
+                    self.assertEqual(db.execute('SELECT count(*) FROM alternative_relation').fetchone()[0], 0)
 
 
 class Migration027Tests(unittest.TestCase):
