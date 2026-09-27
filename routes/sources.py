@@ -72,16 +72,36 @@ def source_protection(source_id):
 def fuentes():
 
     conexion = conectar()
-    fuentes = conexion.execute("""
+    orden = request.args.get("orden", "id")
+    order_clauses = {
+        "id": "source_id ASC",
+        "nombre": "lower(source_name) ASC, source_id ASC",
+        "anio": (
+            "CASE WHEN start_year IS NULL THEN 1 ELSE 0 END ASC, "
+            "start_year ASC, source_id ASC"
+        ),
+    }
+    if orden not in order_clauses:
+        orden = "id"
+
+    fuentes = conexion.execute(f"""
         SELECT source_id, source_name, legacy_source_code, source_scope,
                source_type, source_reference, format_original, format_detail, start_year, end_year,
                end_year_status, region_description, characterization,
                reported_entry_count, analyst_protected, retired_at
-        FROM source WHERE retired_at IS NULL ORDER BY source_name
+        FROM source
+        WHERE retired_at IS NULL
+        ORDER BY {order_clauses[orden]}
     """).fetchall()
     can_create=getattr(g,"current_access_role",None) in ("reviewer","master") or analysts_may_create_sources(conexion)
     conexion.close()
-    return render_template("fuentes.html", fuentes=fuentes, can_create=can_create, source_types=SOURCE_TYPES)
+    return render_template(
+        "fuentes.html",
+        fuentes=fuentes,
+        can_create=can_create,
+        source_types=SOURCE_TYPES,
+        orden=orden,
+    )
 
 
 @sources_bp.route("/fuentes/nueva", methods=["POST"])

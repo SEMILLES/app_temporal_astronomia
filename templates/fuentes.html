@@ -3,23 +3,37 @@
 {% block content %}
 <h1>Fuentes</h1>
 
-    {% if can_create %}<h2>Registrar nueva fuente</h2>
+    {% if can_create %}
+    <details>
+        <summary><strong>Registrar nueva fuente</strong></summary>
 
-    <form
-        method="post"
-        action="{{ url_for('sources.nueva_fuente') }}"
-    >
+        <form
+            method="post"
+            action="{{ url_for('sources.nueva_fuente') }}"
+        >
 
-        {% include '_source_creation_fields.html' %}
+            {% include '_source_creation_fields.html' %}
 
-        <button type="submit" class="button-primary">
-            Guardar fuente
-        </button>
+            <button type="submit" class="button-primary">
+                Guardar fuente
+            </button>
 
-    </form>{% endif %}
+        </form>
+    </details>
+    {% endif %}
 
 
     <h2>Fuentes registradas</h2>
+
+    <form method="get" action="{{ url_for('sources.fuentes') }}">
+        <label for="orden-fuentes">Ordenar por:</label>
+        <select id="orden-fuentes" name="orden">
+            <option value="id" {% if orden == 'id' %}selected{% endif %}>ID</option>
+            <option value="nombre" {% if orden == 'nombre' %}selected{% endif %}>Nombre</option>
+            <option value="anio" {% if orden == 'anio' %}selected{% endif %}>A?o de inicio</option>
+        </select>
+        <button type="submit" class="button-secondary">Ordenar</button>
+    </form>
     {% if g.current_access_role in ('reviewer','master') %}<p><a href="{{ url_for('sources.source_retirement.retired_sources') }}">Consultar fuentes retiradas</a></p>{% endif %}
 
     <div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table class="source-table">

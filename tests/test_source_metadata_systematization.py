@@ -210,6 +210,12 @@ class SourceRouteTests(unittest.TestCase):
         connection.commit()
         connection.close()
         app = Flask(__name__, template_folder=str(ROOT / "templates"))
+        app.add_url_rule(
+            "/trabajo",
+            endpoint="main.trabajo",
+            view_func=lambda: "Trabajo",
+        )
+
         @app.before_request
         def reviewer_context():
             g.current_access_role = "reviewer"
@@ -220,6 +226,49 @@ class SourceRouteTests(unittest.TestCase):
     def tearDown(self):
         database.BASE_DATOS = self.previous_database_path
         self.temporary_directory.cleanup()
+
+    def test_source_list_ordering_and_collapsed_creation_form(self):
+        connection = sqlite3.connect(self.database_path)
+        connection.executemany(
+            "INSERT INTO source (source_name, source_type, start_year, end_year_status) "
+            "VALUES (?, 'OTRO', ?, ?)",
+            [
+                ("Zebra", 2020, "ongoing"),
+                ("Alpha", 2022, "ongoing"),
+                ("Sin a?o", None, None),
+            ],
+        )
+        connection.commit()
+        connection.close()
+
+        html = self.client.get("/fuentes").text
+        self.assertLess(html.index("Original"), html.index("Zebra"))
+        self.assertLess(html.index("Zebra"), html.index("Alpha"))
+        self.assertLess(html.index("Alpha"), html.index("Sin a?o"))
+        self.assertIn(
+            "<summary><strong>Registrar nueva fuente</strong></summary>",
+            html,
+        )
+        self.assertNotIn("<details open", html)
+        self.assertIn('value="id" selected', html)
+
+        html = self.client.get("/fuentes?orden=nombre").text
+        self.assertLess(html.index("Alpha"), html.index("Original"))
+        self.assertLess(html.index("Original"), html.index("Sin a?o"))
+        self.assertLess(html.index("Sin a?o"), html.index("Zebra"))
+        self.assertIn('value="nombre" selected', html)
+
+        html = self.client.get("/fuentes?orden=anio").text
+        self.assertLess(html.index("Zebra"), html.index("Alpha"))
+        self.assertLess(html.index("Alpha"), html.index("Original"))
+        self.assertLess(html.index("Original"), html.index("Sin a?o"))
+        self.assertIn('value="anio" selected', html)
+
+        html = self.client.get("/fuentes?orden=invalido").text
+        self.assertLess(html.index("Original"), html.index("Zebra"))
+        self.assertLess(html.index("Zebra"), html.index("Alpha"))
+        self.assertLess(html.index("Alpha"), html.index("Sin a?o"))
+        self.assertIn('value="id" selected', html)
 
     def test_edit_snapshots_metadata_and_preserves_compatibility_fields(self):
         response = self.client.post(
