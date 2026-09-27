@@ -4,6 +4,8 @@ This module deliberately composes the existing morphology, relation and
 nomenclature services.  It owns the transaction whenever several canonical
 objects must change together.
 """
+from concept_work_state import reconcile_completed_work_assignments
+
 
 from edit_concurrency import check_edit
 from alternative_preconditions import check_state
@@ -95,7 +97,7 @@ def update_morphology(connection, alternative_id, values, actor, *, edit_token=_
     try:
         if edit_token is not _INTERNAL:
             check_edit(connection, "morphology", alternative_id, edit_token)
-        _active_alternative(connection, alternative_id)
+        concept_id = _active_alternative(connection, alternative_id)["concept_id"]
         before = _blocking_ids(connection)
         morphology_id, changed = create_or_replace_alternative_morphology(
             connection, alternative_id, created_by=actor_name(connection, actor.get("collaborator_id")),
@@ -107,6 +109,8 @@ def update_morphology(connection, alternative_id, values, actor, *, edit_token=_
                             entity_type="alternative", entity_id=alternative_id,
                             collaborator_id=actor.get("collaborator_id"),
                             access_role=actor["access_role"])
+        reconcile_completed_work_assignments(connection, [concept_id],
+                                             actor.get("collaborator_id"), actor.get("access_role"))
         connection.commit()
         return morphology_id, changed
     except Exception:
@@ -198,6 +202,8 @@ def apply_relation_change(connection, alternative_id, *, action, target_id=None,
             record_activity(connection, "alternative_nomenclature_updated", entity_type="renumber_event",
                             entity_id=event_id, collaborator_id=actor.get("collaborator_id"),
                             access_role=actor["access_role"], comment=reason)
+        reconcile_completed_work_assignments(connection, [concept_id],
+                                             actor.get("collaborator_id"), actor.get("access_role"))
         connection.commit()
         return relation_pk, event_id
     except Exception:
@@ -224,6 +230,8 @@ def apply_direct_nomenclature(connection, concept_id, labels, *, mode, reason, a
             record_activity(connection, "alternative_nomenclature_updated", entity_type="renumber_event",
                             entity_id=event_id, collaborator_id=actor.get("collaborator_id"),
                             access_role=actor["access_role"], comment=reason)
+        reconcile_completed_work_assignments(connection, [concept_id],
+                                             actor.get("collaborator_id"), actor.get("access_role"))
         connection.commit()
         return event_id
     except Exception:

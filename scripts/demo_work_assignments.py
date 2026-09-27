@@ -23,6 +23,8 @@ def main():
         db.executemany('INSERT INTO concept(preferred_label) VALUES(?)',
                        [('Concepto A',), ('Concepto B',), ('Concepto C',)])
         db.executemany('INSERT INTO collaborator(display_name) VALUES(?)', [('Ana',), ('Carlos',)])
+        db.executemany("INSERT INTO alternative(concept_id,working_label) VALUES(?,'1a')",
+                       [(1,), (2,), (3,)])
         db.commit()
         assign(db, [1], [1, 2], actor_id=2, access_role='master')
         assign(db, [2], [2], actor_id=2, access_role='master')

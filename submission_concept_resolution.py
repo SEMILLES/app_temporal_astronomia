@@ -1,4 +1,5 @@
 """Versioned conceptual decisions belonging to individual lexical submissions."""
+from concept_work_state import reconcile_completed_work_assignments
 import json
 
 from activity import record_activity, resolve_collaborator
@@ -171,6 +172,8 @@ def save_resolution(connection, submission_id, action, *, concept_id=None,
         record_activity(connection, 'submission_concept_resolved', entity_type='submission',
             entity_id=submission_id, collaborator_id=actor_id, access_role=access_role,
             comment=json.dumps({'resolution_id':identifier,'reference_id':new_reference,'concept_id':concept_id,'note':note}, ensure_ascii=False))
+        reconcile_completed_work_assignments(connection,
+            [reference['concept_id'] if reference else None, concept_id], collaborator_id, access_role)
         connection.commit() if owns else connection.execute('RELEASE SAVEPOINT local_concept')
         return identifier
     except Exception:

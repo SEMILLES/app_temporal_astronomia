@@ -1,3 +1,4 @@
+from concept_work_state import reconcile_completed_work_assignments
 import sqlite3
 from dataclasses import replace
 from lexical_preconditions import check_submission_preview
@@ -480,6 +481,11 @@ def review_as_existing(connection, submission_id, alternative_id, *,
         if not (review_note or '').strip() and connection.execute(
                 "SELECT 1 FROM conflict WHERE conflict_id>? AND severity='blocking'", (conflict_before,)).fetchone():
             raise AlternativeWorkflowError('La aprobación genera conflictos bloqueantes; explique la decisión en la nota de revisión.')
+        reference_concepts = [r[0] for r in connection.execute(
+            'SELECT concept_id FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1',
+            (submission['occurrence_id'],))]
+        reconcile_completed_work_assignments(connection, [*plan['affected_concepts'], *reference_concepts],
+                                             collaborator_id, access_role)
         _finish(connection,name,owns); return int(alternative_id)
     except LexicalDecisionError as error:
         _rollback(connection,name,owns)
@@ -576,6 +582,11 @@ def review_as_new(connection, submission_id, *, concept_resolution=None,
         if not (review_note or '').strip() and connection.execute(
                 "SELECT 1 FROM conflict WHERE conflict_id>? AND severity='blocking'", (conflict_before,)).fetchone():
             raise AlternativeWorkflowError('La aprobación genera conflictos bloqueantes; explique la decisión en la nota de revisión.')
+        reference_concepts = [r[0] for r in connection.execute(
+            'SELECT concept_id FROM occurrence_concept_reference WHERE occurrence_id=? AND is_current=1',
+            (submission['occurrence_id'],))]
+        reconcile_completed_work_assignments(connection, [*plan['affected_concepts'], *reference_concepts],
+                                             collaborator_id, access_role)
         _finish(connection,name,owns); return new_id
     except LexicalDecisionError as error:
         _rollback(connection,name,owns)

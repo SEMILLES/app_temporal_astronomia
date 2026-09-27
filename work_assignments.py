@@ -1,4 +1,5 @@
 """Transactional Concept ↔ collaborator administration."""
+from concept_work_state import canonical_tasks, pending_counts
 from activity import resolve_collaborator
 from source_details import occurrence_presentation
 from alternative_change_workflow import pending_changes
@@ -12,49 +13,17 @@ WORK_TYPES = {
 
 
 def concept_diagnostics(db, concept_ids):
-    """Read canonical tasks and pending proposals in four batched queries."""
-    result = {identifier: dict(alternative_count=0, morphology=[], relations=[], grammar=[], assignment=[])
-              for identifier in concept_ids}
-    if not result:
-        return result
-    marks = ','.join('?' for _ in result)
-    alternatives = db.execute(f'''SELECT a.concept_id,a.alternative_id,a.working_label,
-        EXISTS(SELECT 1 FROM alternative_morphology m
-               WHERE m.alternative_id=a.alternative_id AND m.is_current=1) AS has_morphology,
-        EXISTS(SELECT 1 FROM alternative_relation r WHERE r.is_current=1 AND
-               (r.alternative_low_id=a.alternative_id OR r.alternative_high_id=a.alternative_id)) AS has_relation
-        FROM alternative a WHERE a.retired_at IS NULL AND a.concept_id IN ({marks})
-        ORDER BY a.concept_id,a.working_label,a.alternative_id''', tuple(result))
-    alternatives = list(alternatives)
-    pending = pending_changes(db, [row['alternative_id'] for row in alternatives])
-    for row in alternatives:
-        diagnostic = result[row['concept_id']]
-        diagnostic['alternative_count'] += 1
-        item = dict(row)
-        item['pending_changes'] = pending[row['alternative_id']]
-        if not row['has_morphology']:
-            diagnostic['morphology'].append(item)
-        suffix = (row['working_label'] or '').strip().lower()[-1:]
-        if suffix and 'b' <= suffix <= 'z' and not row['has_relation']:
-            diagnostic['relations'].append(item)
-    for row in db.execute(f'''SELECT a.concept_id,o.*,
-            a.alternative_id,a.working_label,src.source_name,src.legacy_source_code,src.source_type
-        FROM assignment s JOIN alternative a ON a.alternative_id=s.alternative_id
-        JOIN occurrence o ON o.occurrence_id=s.occurrence_id
-        JOIN source src ON src.source_id=o.source_id
-        WHERE s.is_current=1 AND a.retired_at IS NULL AND a.concept_id IN ({marks})
-          AND NOT EXISTS(SELECT 1 FROM occurrence_grammar g
-                         WHERE g.occurrence_id=o.occurrence_id AND g.is_current=1)
-        ORDER BY a.concept_id,o.occurrence_id''', tuple(result)):
-        result[row['concept_id']]['grammar'].append(occurrence_presentation(row))
-    for row in db.execute(f'''SELECT ref.concept_id,o.*,src.source_name,src.legacy_source_code,src.source_type
-        FROM occurrence_concept_reference ref JOIN occurrence o ON o.occurrence_id=ref.occurrence_id
-        JOIN source src ON src.source_id=o.source_id
-        WHERE ref.is_current=1 AND ref.concept_id IN ({marks})
-          AND NOT EXISTS(SELECT 1 FROM assignment s
-                         WHERE s.occurrence_id=o.occurrence_id AND s.is_current=1)
-        ORDER BY ref.concept_id,o.occurrence_id''', tuple(result)):
-        result[row['concept_id']]['assignment'].append(occurrence_presentation(row))
+    """Decorate shared canonical tasks with evidence and pending proposals."""
+    result = canonical_tasks(db, concept_ids)
+    items = {item['alternative_id']: item for tasks in result.values()
+             for kind in ('morphology', 'relations') for item in tasks[kind]}
+    pending = pending_changes(db, list(items))
+    for tasks in result.values():
+        for kind in ('morphology', 'relations'):
+            for item in tasks[kind]:
+                item['pending_changes'] = pending[item['alternative_id']]
+        for kind in ('grammar', 'assignment'):
+            tasks[kind] = [occurrence_presentation(row) for row in tasks[kind]]
     return result
 
 
@@ -155,9 +124,11 @@ def my_work(db, collaborator_id, *, search='', page=1, per_page=50):
     if identifier is None:
         return dict(collaborator_id=None, collaborator_name=None, concepts=[],
                     assignments={}, diagnostics={}, total=0, page=1, pages=1)
-    return dict(list_concepts(db, analyst_id=identifier, search=search, page=page,
-                              per_page=per_page), collaborator_id=identifier,
-                collaborator_name=name)
+    data = list_concepts(db, analyst_id=identifier, search=search, page=page,
+                         per_page=per_page, pending_only=True)
+    # Personal diagnostics keep their dimension totals; work_types is admin UI context.
+    data.pop('work_types', None)
+    return dict(data, collaborator_id=identifier, collaborator_name=name)
 
 
 def assign(db, concept_ids, analyst_ids, *, actor_id=None, access_role):
@@ -169,6 +140,8 @@ def assign(db, concept_ids, analyst_ids, *, actor_id=None, access_role):
         for identifier in concepts:
             if not db.execute('SELECT 1 FROM concept WHERE concept_id=?', (identifier,)).fetchone():
                 raise ValueError('Un concepto seleccionado ya no existe.')
+        if any(not any(counts.values()) for counts in pending_counts(db, concepts).values()):
+            raise ValueError('Solo se pueden asignar conceptos con trabajo pendiente.')
         names = {}
         for identifier in analysts:
             row = db.execute('SELECT display_name FROM collaborator WHERE collaborator_id=? AND active=1', (identifier,)).fetchone()

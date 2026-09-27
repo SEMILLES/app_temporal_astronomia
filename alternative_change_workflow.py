@@ -1,4 +1,6 @@
 """Existing-alternative proposals in the normal submission lifecycle."""
+from concept_work_state import reconcile_completed_work_assignments
+
 import json
 
 from activity import resolve_collaborator, record_activity
@@ -241,6 +243,8 @@ def review_proposal(db, submission_id, decision, *, collaborator_id, access_role
             reviewed_by=?,review_note=? WHERE submission_id=?""", (decision, name, note, submission_id))
         record_activity(db, 'alternative_change_' + decision, entity_type='submission', entity_id=submission_id,
                         collaborator_id=actor_id, access_role=access_role, comment=note)
+        if decision == 'accepted':
+            reconcile_completed_work_assignments(db, [target['concept_id']], actor_id, access_role)
         _finish(db, 'alternative_change_review', owns)
         return result_id
     except Exception:

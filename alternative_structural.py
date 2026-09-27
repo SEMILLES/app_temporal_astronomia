@@ -1,4 +1,6 @@
 """Transactional structural operations for canonical alternatives."""
+from concept_work_state import reconcile_completed_work_assignments
+
 
 import json
 import sqlite3
@@ -259,6 +261,8 @@ def apply_component_move(connection, source_id, destination_concept_id, *, reaso
                source_concept_id=plan['source']['concept_id'], destination_concept_id=int(destination_concept_id),
                relation_ids=[r['alternative_relation_id'] for r in plan['relations']],
                origin_renumber_event_id=events[0], destination_renumber_event_id=events[1])
+        reconcile_completed_work_assignments(connection, [plan['source']['concept_id'], destination_concept_id],
+                                             actor.get("collaborator_id"), actor.get("access_role"))
         connection.commit()
         return events
     except Exception:
@@ -311,6 +315,8 @@ def apply_retire(connection, alternative_id, resolutions, *, reason, actor, expe
         _persist_final_conflicts(connection,actor)
         _reject_new_blocking(connection,before)
         _event(connection,"alternative_retired",alternative_id,actor,reason,resolutions=resolutions,renumber_event_id=event)
+        reconcile_completed_work_assignments(connection, [source["concept_id"]],
+                                             actor.get("collaborator_id"), actor.get("access_role"))
         connection.commit(); return event
     except Exception: connection.rollback(); raise
 
@@ -359,6 +365,8 @@ def apply_merge(connection,source_id,target_id,relation_mode,*,reason,actor,expe
                     rid=connection.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter,supersedes_alternative_relation_id,created_by) VALUES(?,?,?,?,?)",(low,high,relation["phonological_parameter"],relation["alternative_relation_id"],actor_name(connection,actor.get("collaborator_id")))).lastrowid;created.append(rid)
         event=_nomenclature(connection,source["concept_id"],reason,actor_name(connection,actor.get("collaborator_id")));_persist_final_conflicts(connection,actor);_reject_new_blocking(connection,before)
         _event(connection,"alternative_merged",source_id,actor,reason,target_alternative_id=target_id,relation_mode=relation_mode,created_relation_ids=created,renumber_event_id=event)
+        reconcile_completed_work_assignments(connection, [source["concept_id"]],
+                                             actor.get("collaborator_id"), actor.get("access_role"))
         connection.commit();return event
     except Exception:connection.rollback();raise
 
@@ -394,6 +402,8 @@ def apply_split(connection,source_id,distribution,new_count,*,reason,actor,expec
             create_or_replace_assignment(connection,row["occurrence_id"],ids[int(index)-1],created_by=actor_name(connection,actor.get("collaborator_id")))
         event=_nomenclature(connection,source["concept_id"],reason,actor_name(connection,actor.get("collaborator_id")));_persist_final_conflicts(connection,actor);_reject_new_blocking(connection,before)
         _event(connection,"alternative_split",source_id,actor,reason,new_alternative_ids=ids,distribution=distribution,renumber_event_id=event)
+        reconcile_completed_work_assignments(connection, [source["concept_id"]],
+                                             actor.get("collaborator_id"), actor.get("access_role"))
         connection.commit();return ids,event
     except Exception:connection.rollback();raise
 
@@ -421,5 +431,7 @@ def apply_move(connection,source_id,destination_concept_id,*,reason,actor,expect
         connection.execute("UPDATE alternative SET concept_id=? WHERE alternative_id=?",(destination_concept_id,source_id))
         origin_event=_nomenclature(connection,source["concept_id"],reason,actor_name(connection,actor.get("collaborator_id")));destination_event=_nomenclature(connection,int(destination_concept_id),reason,actor_name(connection,actor.get("collaborator_id")));_persist_final_conflicts(connection,actor);_reject_new_blocking(connection,before)
         _event(connection,"alternative_moved",source_id,actor,reason,origin_concept_id=source["concept_id"],destination_concept_id=int(destination_concept_id),origin_renumber_event_id=origin_event,destination_renumber_event_id=destination_event,occurrence_context_snapshot=old_context)
+        reconcile_completed_work_assignments(connection, [source["concept_id"], destination_concept_id],
+                                             actor.get("collaborator_id"), actor.get("access_role"))
         connection.commit();return origin_event,destination_event
     except Exception:connection.rollback();raise

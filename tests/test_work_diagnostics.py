@@ -105,8 +105,9 @@ class WorkDiagnosticTests(unittest.TestCase):
         for concept in (1, 3):
             self.alternative('1b', concept=concept)
         self.db.commit()
-        assign(self.db, [2], [1], access_role='reviewer')
-        self.assertEqual(my_work(self.db, 1)['diagnostics'][2]['alternative_count'], 0)
+        with self.assertRaises(ValueError):
+            assign(self.db, [2], [1], access_role='reviewer')
+        self.assertEqual(my_work(self.db, 1)['concepts'], [])
         before = list(self.db.iterdump())
         self.db.execute('PRAGMA query_only=ON')
         queries = []

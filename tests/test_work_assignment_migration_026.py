@@ -26,6 +26,7 @@ class Migration026Tests(unittest.TestCase):
         self.db.execute('DROP TABLE concept_work_assignment')
         install_025(self.db)
         self.db.execute("INSERT INTO concept(preferred_label) VALUES('Concepto')")
+        self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1a')")
         self.db.executemany('INSERT INTO collaborator(display_name) VALUES(?)', [('Ana',), ('Carlos',)])
         self.db.commit()
 

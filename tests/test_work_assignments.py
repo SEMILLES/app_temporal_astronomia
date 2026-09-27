@@ -59,6 +59,12 @@ class WorkAssignmentTests(unittest.TestCase):
         self.db.close()
         self.tmp.cleanup()
 
+    def pending_concepts(self):
+        self.db.executemany(
+            "INSERT INTO alternative(concept_id,working_label) VALUES(?,'1a')",
+            [(1,), (2,), (3,)])
+        self.db.commit()
+
     def assign(self, concepts=(1,), analysts=(1,)):
         return assign(self.db, concepts, analysts, actor_id=2, access_role='master')
 
@@ -67,6 +73,7 @@ class WorkAssignmentTests(unittest.TestCase):
         return {table: [tuple(r) for r in self.db.execute(f'SELECT * FROM "{table}"')] for table in tables}
 
     def test_one_two_and_no_analysts(self):
+        self.pending_concepts()
         self.assertEqual(self.assign(), 1)
         self.assertEqual(self.assign(analysts=(2,)), 1)
         rows = assigned_analysts(self.db, [1, 2])
@@ -75,6 +82,7 @@ class WorkAssignmentTests(unittest.TestCase):
         self.assertEqual(rows[1][0]['created_by_name_snapshot'], 'Carlos')
 
     def test_idempotence_constraint_removal_and_reassignment(self):
+        self.pending_concepts()
         self.assign()
         self.assertEqual(self.assign(), 0)
         with self.assertRaises(sqlite3.IntegrityError):
@@ -90,6 +98,7 @@ class WorkAssignmentTests(unittest.TestCase):
         self.assertIsNotNone(rows[0]['removed_at'])
 
     def test_bulk_filters_pagination_and_no_linguistic_writes(self):
+        self.pending_concepts()
         before = self.snapshot()
         self.assign((1, 2), (1, 2))
         self.assertEqual(list_concepts(self.db, status='assigned')['total'], 2)
@@ -104,6 +113,7 @@ class WorkAssignmentTests(unittest.TestCase):
         self.assertEqual(self.snapshot(), before)
 
     def test_invalid_batch_and_late_failure_roll_back(self):
+        self.pending_concepts()
         with self.assertRaises(ValueError): self.assign((1, 999))
         with self.assertRaises(ValueError): self.assign(analysts=(1, 999))
         self.db.execute("UPDATE collaborator SET active=0 WHERE collaborator_id=2")
@@ -119,6 +129,7 @@ class WorkAssignmentTests(unittest.TestCase):
             with self.assertRaises(PermissionError): remove(self.db, 1, access_role=role)
 
     def test_reviewer_and_master_mutations_preserve_real_role(self):
+        self.pending_concepts()
         for role in ('reviewer', 'master'):
             self.assertEqual(assign(self.db, [1], [1], actor_id=2, access_role=role), 1)
             row = self.db.execute('SELECT * FROM concept_work_assignment WHERE active=1').fetchone()
@@ -128,6 +139,7 @@ class WorkAssignmentTests(unittest.TestCase):
             self.assertEqual(saved['removed_access_role'], role)
 
     def test_personal_work_isolation_shared_concept_and_removal(self):
+        self.pending_concepts()
         before = self.snapshot()
         self.assign((1,), (1, 2))
         self.assign((2,), (2,))
@@ -138,10 +150,11 @@ class WorkAssignmentTests(unittest.TestCase):
         self.assertEqual(ids(1), [])
         self.assertEqual(ids(2), [1, 2])
         self.assertEqual(self.db.execute('SELECT active FROM concept_work_assignment WHERE work_assignment_id=1').fetchone()[0], 0)
-        self.assertEqual(self.db.execute('SELECT count(*) FROM alternative').fetchone()[0], 0)
+        self.assertEqual(self.db.execute('SELECT count(*) FROM alternative').fetchone()[0], 3)
         self.assertEqual(self.snapshot(), before)
 
     def test_personal_work_empty_invalid_search_and_pagination(self):
+        self.pending_concepts()
         self.assertEqual(my_work(self.db, 1)['total'], 0)
         self.assign((1, 2), (1,))
         for identifier in (None, '', 'bad', 999):
@@ -325,11 +338,14 @@ class WorkAssignmentTests(unittest.TestCase):
                 self.assertIn('value="assignment"', html)
 
     def test_routes_permissions_csrf_bulk_and_remove(self):
+        self.pending_concepts()
         app = Flask(__name__, template_folder=str(ROOT / 'templates'))
         app.config.update(TESTING=True, SECRET_KEY='local-test-only')
         app.register_blueprint(work_assignments_bp)
         from routes.alternatives import alternatives_bp
         app.register_blueprint(alternatives_bp)
+        from routes.alternative_changes import alternative_changes_bp
+        app.register_blueprint(alternative_changes_bp)
         install_access_context(app)
         with patch.object(database, 'BASE_DATOS', self.path), patch.dict(os.environ, {
             'LESICO_MASTER_ROUTE': 'admin-test', 'LESICO_REVIEWER_ROUTE': 'review-test', 'LESICO_ANALYST_ROUTE': 'analyst-test'}):
@@ -432,8 +448,8 @@ class WorkAssignmentTests(unittest.TestCase):
 response = app.test_client().get('/admin-local/administracion/asignaciones')
 assert response.status_code == 200, response.status_code
 html = response.get_data(as_text=True)
-assert all(text in html for text in ('Ana', 'Carlos', 'Sin asignar', 'Trabajo encontrado: 0 tareas'))
-assert all(text not in html for text in ('Concepto A', 'Concepto B', 'Concepto C'))
+assert all(text in html for text in ('Ana', 'Carlos', 'Sin asignar', 'Trabajo encontrado: 3 tareas'))
+assert all(text in html for text in ('Concepto A', 'Concepto B', 'Concepto C'))
 client = app.test_client()
 assert client.get('/mi-trabajo?collaborator_id=1').status_code == 404
 for prefix in ('admin-local', 'revision-local'):

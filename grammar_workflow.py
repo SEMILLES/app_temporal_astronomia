@@ -1,3 +1,4 @@
+from concept_work_state import reconcile_completed_work_assignments
 from grammatical_marks import validate_grammatical_marks
 from occurrence_grammar import create_or_replace_occurrence_grammar
 from activity import record_activity, resolve_collaborator
@@ -134,6 +135,11 @@ def resolve_grammar_submission(connection, submission_id, decision, *, reviewed_
                             comment=review_note)
         detect_conflicts_after_change(connection,"occurrence",row["occurrence_id"],
             actor_context={"collaborator_id":collaborator_id,"access_role":access_role})
+        if decision == 'accepted':
+            concepts = [r[0] for r in connection.execute('''SELECT a.concept_id FROM assignment s
+                JOIN alternative a USING(alternative_id) WHERE s.occurrence_id=? AND s.is_current=1''',
+                (row['occurrence_id'],))]
+            reconcile_completed_work_assignments(connection, concepts, collaborator_id, access_role)
         _finish(connection,name,owns)
     except Exception:
         _rollback(connection,name,owns)
