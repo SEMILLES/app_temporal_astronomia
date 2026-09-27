@@ -90,4 +90,25 @@ class CatalogMediaNavigationTests(unittest.TestCase):
         for path in ("/catalogo","/catalogo/v1"):
             public=self.client.get(path).get_data(as_text=True); self.assertNotIn("lesico-internal-context",public); self.assertIn('data-has-video="true"',public)
 
+
+    def test_occurrences_are_collapsed_and_alternative_selection_scrolls(self):
+        html = self.client.get(
+            "/ana/catalogo-interno/conceptos/1"
+        ).get_data(as_text=True)
+
+        self.assertIn(
+            '<details class="ocurrencia"><summary><strong>GLOSA</strong> ' + chr(183) + ' Fuente</summary>',
+            html,
+        )
+        self.assertNotIn('<details class="ocurrencia" open', html)
+
+        javascript = (
+            ROOT / "static" / "catalogo" / "catalogo.js"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("scrollIntoView", javascript)
+        self.assertIn("prefers-reduced-motion: reduce", javascript)
+        self.assertIn("data-alternative-panel", javascript)
+
+
 if __name__=="__main__": unittest.main()
