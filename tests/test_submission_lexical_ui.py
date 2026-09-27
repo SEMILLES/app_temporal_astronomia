@@ -198,6 +198,65 @@ class LexicalUITests(unittest.TestCase):
         self.assertEqual(response.location, '/aportes/pendientes')
         self.assertEqual(get_proposal(db, morphology)['resolution'], 'accepted')
 
+    def test_relation_target_evidence_current_only_in_inline_and_individual_review(self):
+        from routes.alternative_changes import alternative_changes_bp, _review_context
+        from alternative_change_workflow import create_proposal, get_proposal
+        self.client.application.config['SECRET_KEY'] = 'test-only'
+        self.client.application.register_blueprint(alternative_changes_bp)
+        db = self.connect()
+        db.execute("INSERT INTO collaborator(display_name) VALUES('Ana')")
+        db.executemany("INSERT INTO alternative(concept_id,working_label) VALUES(1,?)", [('2a',), ('3a',), ('4a',)])
+        source_id = db.execute("INSERT INTO source(source_name,source_type) VALUES('Libro del destino','MATERIAL_IMPRESO')").lastrowid
+        occurrence_id = db.execute("""INSERT INTO occurrence(source_id,original_gloss,source_detail_1,source_detail_1_status,
+            source_detail_2,source_detail_2_status,source_locator)
+            VALUES(?,'EVIDENCIA DESTINO','Capítulo destino','VALUE','42','VALUE','LOCALIZADOR ANTIGUO')""", (source_id,)).lastrowid
+        db.execute('INSERT INTO assignment(occurrence_id,alternative_id) VALUES(?,2)', (occurrence_id,))
+        db.execute('INSERT INTO assignment(occurrence_id,alternative_id,is_current) VALUES(2,2,0)')
+        db.execute('INSERT INTO assignment(occurrence_id,alternative_id,is_current) VALUES(3,2,0)')
+        db.execute('INSERT INTO assignment(occurrence_id,alternative_id) VALUES(3,1)')
+        db.commit()
+        actor = dict(collaborator_id=1, access_role='analyst')
+        positive = create_proposal(db, 1, 'RELATION', {'target_id': 2, 'parameter': 'CM_1'}, **actor)
+        empty = create_proposal(db, 1, 'RELATION', {'target_id': 4, 'parameter': 'CM_1'}, **actor)
+        negative = create_proposal(db, 3, 'RELATION', {'relation_answer': 'NO'}, **actor)
+        morphology = create_proposal(db, 1, 'MORPHOLOGY', {'component_count': 1}, **actor)
+        before = self.dump()
+        context = _review_context(db, get_proposal(db, positive))
+        target = context['relation_target']
+        self.assertEqual((target['alternative_id'], target['working_label'], target['preferred_label'], target['display_label']),
+                         (2, '2a', 'TEST', 'TEST-2a'))
+        self.assertEqual([o['occurrence_id'] for o in target['occurrences']], [occurrence_id])
+        self.assertIn('Página: 42', target['occurrences'][0]['locator_display'])
+        inline = self.client.get('/aportes/pendientes')
+        self.assertEqual(inline.status_code, 200)
+        for sid in (positive, empty, negative, morphology):
+            detail = self.client.get(f'/aportes/alternativas/{sid}')
+            self.assertEqual(detail.status_code, 200)
+            block = re.search(r'<section id="submission-' + str(sid) + r'"><details>(.*?)</details></section>', inline.text, re.S)[1]
+            for mode, html in (('inline', block), ('individual', detail.text)):
+                with self.subTest(submission=sid, mode=mode):
+                    if sid in (positive, empty):
+                        evidence = re.search(r'<details class="relation-target-evidence">(.*?)</details>', html, re.S)
+                        self.assertIsNotNone(evidence)
+                        self.assertIn('Evidencias de la alternativa destino', html)
+                        self.assertEqual(html.count('KNOWN'), 1)  # Origin evidence is not repeated.
+                        if sid == positive:
+                            for value in ('TEST-2a · 1 ocurrencia', f'Ocurrencia {occurrence_id}', 'EVIDENCIA DESTINO',
+                                          'Libro del destino', 'Capítulo destino', 'Página: 42'):
+                                self.assertIn(value, evidence[1])
+                            for value in ('TO-ANALYZE', 'TARGET', 'KNOWN', 'LOCALIZADOR ANTIGUO'):
+                                self.assertNotIn(value, evidence[1])
+                        else:
+                            self.assertIn('TEST-4a · 0 ocurrencias', evidence[1])
+                            self.assertIn('Sin ocurrencias vigentes asociadas.', evidence[1])
+                    else:
+                        self.assertNotIn('relation-target-evidence', html)
+                        self.assertIsNone(_review_context(db, get_proposal(db, sid))['relation_target'])
+                        if sid == morphology:
+                            self.assertIn('Cantidad: 1', html)
+                            self.assertIn('value="accepted">Aprobar</button>', html)
+        self.assertEqual(before, self.dump())
+
     def test_preview_table_presentation_preserves_calculated_values(self):
         preview = {'rows': [
             {'alternative_id': 10, 'current_label': '2a', 'proposed_label': '10a',

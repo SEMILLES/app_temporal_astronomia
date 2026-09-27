@@ -10,7 +10,7 @@
 {% set review=alternative_change_context[p.submission_id] %}
 {% with inline_review=true, proposal=review.proposal, proposed=review.proposed,
     alternative=review.alternative, morphology=review.morphology, components=review.components,
-    relations=review.relations, evidence=review.evidence, options=review.options,
+    relations=review.relations, evidence=review.evidence, options=review.options, relation_target=review.relation_target,
     previews=review.previews, preview_errors=review.preview_errors,
     relation_history=review.relation_history, review_token=review.review_token %}
 {% include '_alternative_change_review.html' %}

@@ -816,6 +816,8 @@ class RelationProposalRouteTests(unittest.TestCase):
         MorphologyProposalRouteTests.setUp(self)
         self.url = '/alternativas/1/proponer?mode=relation'
         from routes.submissions import preview_group_changed, preview_proposed_order
+        from routes.occurrences import occurrences_bp
+        self.client.application.register_blueprint(occurrences_bp)
         self.client.application.jinja_env.filters.update(preview_group_changed=preview_group_changed, preview_proposed_order=preview_proposed_order)
         with closing(self.connect()) as db:
             db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'3a')")

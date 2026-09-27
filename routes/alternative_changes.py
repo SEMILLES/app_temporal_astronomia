@@ -31,6 +31,13 @@ def proposal_rows(db, pending=False):
         """ + (" WHERE s.status='pending'" if pending else '') + ' ORDER BY s.submission_id DESC').fetchall()
 
 
+def _assigned_occurrences(db, aid):
+    rows = db.execute('''SELECT o.*,s.source_name,s.legacy_source_code,s.source_type
+        FROM assignment a JOIN occurrence o USING(occurrence_id) JOIN source s USING(source_id)
+        WHERE a.alternative_id=? AND a.is_current=1 ORDER BY o.occurrence_id''',(aid,)).fetchall()
+    return [occurrence_presentation(row) for row in rows]
+
+
 def _context(db, aid):
     target = db.execute('''SELECT a.*,c.preferred_label FROM alternative a JOIN concept c USING(concept_id)
                            WHERE a.alternative_id=?''', (aid,)).fetchone()
@@ -43,11 +50,9 @@ def _context(db, aid):
         FROM alternative_relation r JOIN alternative lo ON lo.alternative_id=r.alternative_low_id
         JOIN alternative hi ON hi.alternative_id=r.alternative_high_id
         WHERE r.is_current=1 AND (r.alternative_low_id=? OR r.alternative_high_id=?)''',(aid,aid)).fetchall()
-    evidence = db.execute('''SELECT o.*,s.source_name,s.legacy_source_code,s.source_type
-        FROM assignment a JOIN occurrence o USING(occurrence_id) JOIN source s USING(source_id)
-        WHERE a.alternative_id=? AND a.is_current=1 ORDER BY o.occurrence_id''',(aid,)).fetchall()
+    evidence = _assigned_occurrences(db, aid)
     options = db.execute('SELECT alternative_id,working_label FROM alternative WHERE concept_id=? AND retired_at IS NULL AND alternative_id!=? ORDER BY alternative_id',(target['concept_id'],aid)).fetchall()
-    return dict(alternative=target,morphology=morphology,components=components,relations=relations,evidence=[occurrence_presentation(o) for o in evidence],options=options,parameters=PHONOLOGICAL_PARAMETERS)
+    return dict(alternative=target,morphology=morphology,components=components,relations=relations,evidence=evidence,options=options,parameters=PHONOLOGICAL_PARAMETERS)
 
 
 def _morphology_form_context(db, context, form=None):
@@ -192,6 +197,15 @@ def propose(alternative_id):
 def _review_context(db, proposal):
     context=_context(db,proposal['alternative_id'])
     proposed=json.loads(proposal['payload'])
+    relation_target = None
+    if proposal['change_kind'] == 'RELATION' and proposed.get('target_id') is not None:
+        target = db.execute('''SELECT a.alternative_id,a.working_label,c.preferred_label
+            FROM alternative a JOIN concept c USING(concept_id) WHERE a.alternative_id=?''',
+            (proposed['target_id'],)).fetchone()
+        if target:
+            relation_target = dict(target,
+                display_label=alternative_display_label(target['preferred_label'], target['working_label']) or target['preferred_label'] + ' · Sin etiqueta',
+                occurrences=_assigned_occurrences(db, target['alternative_id']))
     previews={}; preview_errors={}
     if proposal['status']=='pending' and proposal['change_kind']=='RELATION':
         resolutions = ('NO_CONFIRMED',) if proposed.get('relation_answer') == 'NO' else ('ACCEPTED', 'REJECTED')
@@ -200,7 +214,7 @@ def _review_context(db, proposal):
                 previews[resolution]=relation_review_preview(db,proposal['alternative_id'],proposed,resolution)
             except (ValueError,TypeError) as exc:
                 preview_errors[resolution]=str(exc)
-    context.update(proposal=proposal, proposed=proposed, previews=previews, preview_errors=preview_errors,
+    context.update(proposal=proposal, proposed=proposed, relation_target=relation_target, previews=previews, preview_errors=preview_errors,
         relation_history=relation_review_history(db,proposal['submission_id']) if proposal['change_kind']=='RELATION' else None,
         review_token=sign({'sid':proposal['submission_id'],'baseline':baseline(db,proposal['alternative_id'],proposal['change_kind'])}) if proposal['status']=='pending' and not context['alternative']['retired_at'] else '')
     return context
