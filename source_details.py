@@ -1,5 +1,6 @@
 import re
 import unicodedata
+from datetime import date
 from urllib.parse import urlsplit
 
 SOURCE_TYPES = {
@@ -16,35 +17,40 @@ DETAIL_STATUSES = frozenset(("VALUE", "NA", "UNKNOWN"))
 def occurrence_presentation(row):
     """Present already joined source/occurrence data without additional queries."""
     item = dict(row)
+
     def text(value):
         value = str(value or '').strip()
         return '' if value.upper() in ('UNKNOWN', 'NA', 'N/A') else value
+
     name = text(item.get('source_name'))
     legacy = text(item.get('legacy_source_code'))
     item['source_display'] = f'({legacy}) {name}' if legacy else name
     source_type = item.get('source_type')
     parts = []
-    if source_type != 'MESA_DE_TRABAJO':
-        label1, label2, _ = source_type_labels(source_type)
-        if item.get('source_detail_1_status') == 'VALUE' and text(item.get('source_detail_1')):
-            parts.append(f'{label1}: {text(item["source_detail_1"])}')
-        applicable = effective_detail_2_applicability(source_type,
-            item.get('source_detail_2_status'), item.get('source_detail_2_applicability_override'))
-        if applicable and item.get('source_detail_2_status') == 'VALUE' and text(item.get('source_detail_2')):
-            parts.append(f'{label2 or "Tiempo"}: {text(item["source_detail_2"])}')
-        if not parts and text(item.get('source_locator')):
-            parts.append(text(item['source_locator']))
-    item['locator_display'] = ' · '.join(parts)
+    label1, label2, _ = source_type_labels(source_type)
+    if item.get('source_detail_1_status') == 'VALUE' and text(item.get('source_detail_1')):
+        parts.append(f'{label1}: {text(item["source_detail_1"])}')
+    applicable = effective_detail_2_applicability(
+        source_type,
+        item.get('source_detail_2_status'),
+        item.get('source_detail_2_applicability_override'),
+    )
+    if applicable and item.get('source_detail_2_status') == 'VALUE' and text(item.get('source_detail_2')):
+        parts.append(f'{label2 or "Tiempo"}: {text(item["source_detail_2"])}')
+    if source_type != "MESA_DE_TRABAJO" and not parts and text(item.get('source_locator')):
+        parts.append(text(item['source_locator']))
+    item['locator_display'] = ' \u00b7 '.join(parts)
+
     url = text(item.get('hyperlink'))
     try:
         parsed = urlsplit(url)
-        item['evidence_url'] = url if parsed.scheme in ('http','https') and parsed.netloc else None
+        item['evidence_url'] = url if parsed.scheme in ('http', 'https') and parsed.netloc else None
     except ValueError:
         item['evidence_url'] = None
     return item
 
 def source_type_labels(source_type):
-    if source_type == "MESA_DE_TRABAJO": return (None, None, False)
+    if source_type == "MESA_DE_TRABAJO": return ("Fecha", "Participantes", True)
     if source_type == "MATERIAL_IMPRESO": return ("Submaterial / sección", "Página", True)
     if source_type == "VIDEO_POR_SENA": return ("Título / identificador del video", None, False)
     if source_type in ("UN_VIDEO_VARIAS_SENAS", "VARIOS_VIDEOS_VARIAS_SENAS"):
@@ -54,16 +60,31 @@ def source_type_labels(source_type):
 def normalize_detail(status, value, *, applicable=True, kind=None, allow_incomplete=False):
     value = (value or "").strip() or None
     status = (status or "").strip().upper() or None
-    if not applicable: return "NA", None
-    if allow_incomplete and status is None: return None, value
-    if status not in DETAIL_STATUSES: raise ValueError("Debe indicarse Dato, N/A o Desconocido para cada referencia aplicable.")
+    if not applicable:
+        return "NA", None
+    if allow_incomplete and status is None:
+        return None, value
+    if status not in DETAIL_STATUSES:
+        raise ValueError("Debe indicarse Dato, N/A o Desconocido para cada referencia aplicable.")
     if status == "VALUE":
-        if value is None: raise ValueError("Un campo marcado como Dato requiere un valor.")
-        if kind == "page" and not value.isdigit(): raise ValueError("La página debe contener únicamente números.")
+        if value is None:
+            raise ValueError("Un campo marcado como Dato requiere un valor.")
+        if kind == "page" and not value.isdigit():
+            raise ValueError("La página debe contener únicamente números.")
         if kind == "time" and not re.fullmatch(r"(?:\d{1,2}):[0-5]\d(?::[0-5]\d)?", value):
             raise ValueError("El tiempo debe usar M:SS, MM:SS o H:MM:SS.")
+        if kind == "date":
+            try:
+                value = date.fromisoformat(value).isoformat()
+            except ValueError:
+                raise ValueError("La fecha debe usar una fecha válida en formato AAAA-MM-DD.") from None
+        if kind == "participants":
+            value = ", ".join(part.strip() for part in value.split(",") if part.strip())
+            if not value:
+                raise ValueError("Participantes debe contener al menos un nombre.")
         return status, value
-    if value is not None: raise ValueError("N/A y Desconocido no admiten texto.")
+    if value is not None:
+        raise ValueError("N/A y Desconocido no admiten texto.")
     return status, None
 
 def normalize_applicability_override(source_type, override):
@@ -81,8 +102,6 @@ def normalize_applicability_override(source_type, override):
 def effective_detail_2_applicability(source_type, status=None, override=None):
     """Explicit choice, then legacy VALUE/NA, then the source's normal rule."""
     override = normalize_applicability_override(source_type, override)
-    if source_type == "MESA_DE_TRABAJO":
-        return False
     if override is not None:
         return bool(override)
     if status == "VALUE":
@@ -97,24 +116,40 @@ def normalize_occurrence_details(source_type, status1, value1, status2, value2, 
                                  source_detail_2_applicability_override=None):
     """Normalize references, retaining the existing four-item return contract."""
     source_detail_2_applicability_override = normalize_applicability_override(
-        source_type, source_detail_2_applicability_override)
-    if source_type == "MESA_DE_TRABAJO":
-        return "NA", None, "NA", None
+        source_type, source_detail_2_applicability_override
+    )
     applicable = effective_detail_2_applicability(
-        source_type, status2, source_detail_2_applicability_override)
+        source_type, status2, source_detail_2_applicability_override
+    )
     if status2 == "NA" and (value2 or "").strip() and str(source_detail_2_applicability_override) != "0":
         raise ValueError("N/A no admite texto.")
-    kind2 = "page" if source_type == "MATERIAL_IMPRESO" else "time" if source_type in (
-        "VIDEO_POR_SENA", "UN_VIDEO_VARIAS_SENAS", "VARIOS_VIDEOS_VARIAS_SENAS") else None
-    s1, v1 = normalize_detail(status1, value1, allow_incomplete=allow_incomplete)
+
+    kind1 = "date" if source_type == "MESA_DE_TRABAJO" else None
+    kind2 = (
+        "page" if source_type == "MATERIAL_IMPRESO"
+        else "time" if source_type in (
+            "VIDEO_POR_SENA", "UN_VIDEO_VARIAS_SENAS", "VARIOS_VIDEOS_VARIAS_SENAS"
+        )
+        else "participants" if source_type == "MESA_DE_TRABAJO"
+        else None
+    )
+
+    s1, v1 = normalize_detail(
+        status1, value1, kind=kind1, allow_incomplete=allow_incomplete
+    )
     if applicable and source_type == "VIDEO_POR_SENA":
         if not allow_incomplete and status2 != "VALUE":
             raise ValueError("El tiempo requerido necesita un valor válido.")
         if allow_incomplete:
-            # Drafts retain unfinished input; completion performs strict validation.
             return s1, v1, "VALUE", (value2 or "").strip() or None
-    s2, v2 = normalize_detail(status2, value2, applicable=applicable, kind=kind2,
-                              allow_incomplete=allow_incomplete)
+
+    s2, v2 = normalize_detail(
+        status2,
+        value2,
+        applicable=applicable,
+        kind=kind2,
+        allow_incomplete=allow_incomplete,
+    )
     return s1, v1, s2, v2
 
 
@@ -125,19 +160,26 @@ def _comparison(value):
 
 def catalog_source_reference(occurrence):
     source_type = occurrence["source"]["source_type"]
-    if source_type == "MESA_DE_TRABAJO":
-        return None
     d1 = occurrence.get("source_detail_1") or None
     d2 = occurrence.get("source_detail_2") or None
+    if source_type == "MESA_DE_TRABAJO":
+        return " \u00b7 ".join(filter(None, (
+            f"Fecha: {d1}" if d1 else None,
+            f"Participantes: {d2}" if d2 else None,
+        ))) or None
     if source_type == "VIDEO_POR_SENA":
         return None if d1 and _comparison(d1) == _comparison(occurrence.get("original_gloss")) else d1
     if source_type == "MATERIAL_IMPRESO":
-        return " · ".join(filter(None, (d1, f"p. {d2}" if d2 else None))) or None
+        return " \u00b7 ".join(filter(None, (d1, f"p. {d2}" if d2 else None))) or None
     if source_type in ("UN_VIDEO_VARIAS_SENAS", "VARIOS_VIDEOS_VARIAS_SENAS"):
-        result = " · ".join(filter(None, (d1, d2)))
-        if result: return result
-        return "Referencia desconocida" if (occurrence.get("source_detail_1_status") == "UNKNOWN" and occurrence.get("source_detail_2_status") == "UNKNOWN") else None
-    return " · ".join(filter(None, (d1, d2))) or None
+        result = " \u00b7 ".join(filter(None, (d1, d2)))
+        if result:
+            return result
+        return "Referencia desconocida" if (
+            occurrence.get("source_detail_1_status") == "UNKNOWN"
+            and occurrence.get("source_detail_2_status") == "UNKNOWN"
+        ) else None
+    return " \u00b7 ".join(filter(None, (d1, d2))) or None
 
 def analysts_may_create_sources(connection):
     row = connection.execute("SELECT setting_value FROM application_setting WHERE setting_key='analyst_source_creation'").fetchone()

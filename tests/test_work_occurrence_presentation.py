@@ -19,12 +19,17 @@ class WorkOccurrencePresentationTests(unittest.TestCase):
 
     def test_time_applicability_and_override(self):
         for source_type, override, expected in [('VIDEO_POR_SENA',1,True),('VARIOS_VIDEOS_VARIAS_SENAS',0,False),
-                                               ('UN_VIDEO_VARIAS_SENAS',None,True),('MESA_DE_TRABAJO',None,False)]:
+                                               ('UN_VIDEO_VARIAS_SENAS',None,True)]:
             with self.subTest(source_type=source_type):
                 item=self.present(source_type=source_type,source_detail_2_status='VALUE',source_detail_2='2:15',
                                   source_detail_2_applicability_override=override)
                 self.assertEqual('2:15' in item['locator_display'],expected)
         self.assertEqual(self.present(source_type='VIDEO_POR_SENA',source_detail_2_status='UNKNOWN')['locator_display'],'')
+        mesa=self.present(source_type='MESA_DE_TRABAJO',
+                          source_detail_1_status='VALUE',source_detail_1='2026-09-27',
+                          source_detail_2_status='VALUE',source_detail_2='Ana, Carlos')
+        self.assertIn('Fecha: 2026-09-27',mesa['locator_display'])
+        self.assertIn('Participantes: Ana, Carlos',mesa['locator_display'])
         self.assertEqual(self.present(source_type='MESA_DE_TRABAJO',source_locator='No mostrar')['locator_display'],'')
 
     def test_other_locator_and_existing_video_semantics(self):
