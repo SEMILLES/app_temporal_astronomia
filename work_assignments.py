@@ -24,20 +24,38 @@ def concept_diagnostics(db, concept_ids):
         for tasks in result.values()
         for item in tasks['grammar']
     })
-    pending_grammar = {identifier: [] for identifier in grammar_occurrences}
-    if grammar_occurrences:
-        marks = ','.join('?' for _ in grammar_occurrences)
+    assignment_occurrences = sorted({
+        item['occurrence_id']
+        for tasks in result.values()
+        for item in tasks['assignment']
+    })
+
+    def pending_submissions(occurrence_ids, submission_type):
+        result_by_occurrence = {
+            identifier: [] for identifier in occurrence_ids
+        }
+        if not occurrence_ids:
+            return result_by_occurrence
+        marks = ','.join('?' for _ in occurrence_ids)
         rows = db.execute(
             f'''SELECT submission_id, occurrence_id
                 FROM submission
-                WHERE submission_type='GRAMMAR'
+                WHERE submission_type=?
                   AND status='pending'
                   AND occurrence_id IN ({marks})
                 ORDER BY submission_id''',
-            tuple(grammar_occurrences),
+            (submission_type, *occurrence_ids),
         ).fetchall()
         for row in rows:
-            pending_grammar[row['occurrence_id']].append(row)
+            result_by_occurrence[row['occurrence_id']].append(row)
+        return result_by_occurrence
+
+    pending_grammar = pending_submissions(
+        grammar_occurrences, 'GRAMMAR'
+    )
+    pending_assignment = pending_submissions(
+        assignment_occurrences, 'ALTERNATIVE'
+    )
 
     for tasks in result.values():
         for kind in ('morphology', 'relations'):
@@ -47,6 +65,10 @@ def concept_diagnostics(db, concept_ids):
             tasks[kind] = [occurrence_presentation(row) for row in tasks[kind]]
         for item in tasks['grammar']:
             item['pending_submissions'] = pending_grammar.get(
+                item['occurrence_id'], []
+            )
+        for item in tasks['assignment']:
+            item['pending_submissions'] = pending_assignment.get(
                 item['occurrence_id'], []
             )
     return result

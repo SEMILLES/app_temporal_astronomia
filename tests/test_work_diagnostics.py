@@ -333,6 +333,13 @@ assert response.status_code==302
 response=client.post('/a/ocurrencias/2/clasificar',data={'proposal_kind':'EXISTING','proposed_existing_alternative_id':'1'})
 assert response.status_code==302
 with closing(conectar()) as db:
+    alternative_sid=db.execute(
+        "SELECT submission_id FROM submission WHERE occurrence_id=2 AND submission_type='ALTERNATIVE' AND status='pending'"
+    ).fetchone()[0]
+html=client.get('/a/mi-trabajo?collaborator_id=1').text
+assert '/a/aportes/'+str(alternative_sid) in html
+assert '/a/ocurrencias/2/clasificar' not in html
+with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM occurrence_grammar').fetchone()[0]==0
     assert db.execute('SELECT COUNT(*) FROM alternative_morphology').fetchone()[0]==0
     assert db.execute('SELECT COUNT(*) FROM alternative_relation').fetchone()[0]==0

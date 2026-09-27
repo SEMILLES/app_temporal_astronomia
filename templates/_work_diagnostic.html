@@ -33,7 +33,9 @@ Asignación a alternativa: {{ diagnostic.assignment|length }} pendientes</p>
 {% if diagnostic.assignment %}<p><strong>Asignación a alternativa · ocurrencias</strong></p><ul>
 {% for item in diagnostic.assignment %}<li>Ocurrencia {{ item.occurrence_id }} · {{ item.original_gloss }}:
 {% include '_work_occurrence_context.html' %}
-<a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=item.occurrence_id) }}">Clasificar / asignar alternativa</a></li>{% endfor %}
+{% set pending = item.pending_submissions %}
+{% for p in pending %}<a href="{{ url_for('submissions.detalle_aporte', submission_id=p.submission_id) }}">En revisión · Aporte #{{ p.submission_id }}</a>{% if not loop.last %} · {% endif %}{% endfor %}
+{% if not pending %}<a href="{{ url_for('occurrences.clasificar_ocurrencia', occurrence_id=item.occurrence_id) }}">Clasificar / asignar alternativa</a>{% endif %}</li>{% endfor %}
 </ul>{% endif %}
 </details>{% endif %}
 </div>
