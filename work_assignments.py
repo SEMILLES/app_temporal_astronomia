@@ -18,12 +18,37 @@ def concept_diagnostics(db, concept_ids):
     items = {item['alternative_id']: item for tasks in result.values()
              for kind in ('morphology', 'relations') for item in tasks[kind]}
     pending = pending_changes(db, list(items))
+
+    grammar_occurrences = sorted({
+        item['occurrence_id']
+        for tasks in result.values()
+        for item in tasks['grammar']
+    })
+    pending_grammar = {identifier: [] for identifier in grammar_occurrences}
+    if grammar_occurrences:
+        marks = ','.join('?' for _ in grammar_occurrences)
+        rows = db.execute(
+            f'''SELECT submission_id, occurrence_id
+                FROM submission
+                WHERE submission_type='GRAMMAR'
+                  AND status='pending'
+                  AND occurrence_id IN ({marks})
+                ORDER BY submission_id''',
+            tuple(grammar_occurrences),
+        ).fetchall()
+        for row in rows:
+            pending_grammar[row['occurrence_id']].append(row)
+
     for tasks in result.values():
         for kind in ('morphology', 'relations'):
             for item in tasks[kind]:
                 item['pending_changes'] = pending[item['alternative_id']]
         for kind in ('grammar', 'assignment'):
             tasks[kind] = [occurrence_presentation(row) for row in tasks[kind]]
+        for item in tasks['grammar']:
+            item['pending_submissions'] = pending_grammar.get(
+                item['occurrence_id'], []
+            )
     return result
 
 

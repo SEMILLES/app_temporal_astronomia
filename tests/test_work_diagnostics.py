@@ -192,6 +192,48 @@ class WorkDiagnosticTests(unittest.TestCase):
         review_proposal(self.db, sid, 'accepted', collaborator_id=1, access_role='reviewer')
         self.assertEqual(self.pending()['task_total'], before - 1)
 
+    def test_pending_grammar_submission_is_annotation_not_extra_task(self):
+        from grammar_workflow import create_grammar_submission, resolve_grammar_submission
+        alternative = self.alternative('1a')
+        occurrence = self.occurrence(alternative)
+        self.db.commit()
+
+        before = self.pending()['task_total']
+
+        sid = create_grammar_submission(
+            self.db,
+            occurrence,
+            {'gender': 'FEM-A'},
+            collaborator_id=1,
+            access_role='analyst',
+        )
+
+        data = self.pending()
+        self.assertEqual(data['task_total'], before)
+        item = next(
+            row for row in data['diagnostics'][1]['grammar']
+            if row['occurrence_id'] == occurrence
+        )
+        self.assertEqual(
+            [row['submission_id'] for row in item['pending_submissions']],
+            [sid],
+        )
+
+        resolve_grammar_submission(
+            self.db,
+            sid,
+            'rejected',
+            review_note='Revisar analisis',
+            collaborator_id=1,
+            access_role='reviewer',
+        )
+
+        item = next(
+            row for row in self.pending()['diagnostics'][1]['grammar']
+            if row['occurrence_id'] == occurrence
+        )
+        self.assertEqual(item['pending_submissions'], [])
+
     def test_grammar_follows_current_assignment_and_assignment_current_reference(self):
         old = self.alternative('1a')
         current = self.alternative('1b', concept=3)
@@ -296,6 +338,13 @@ with closing(conectar()) as db:
     assert db.execute('SELECT COUNT(*) FROM alternative_relation').fetchone()[0]==0
     assert db.execute('SELECT COUNT(*) FROM assignment').fetchone()[0]==1
     assert {tuple(r) for r in db.execute('SELECT submission_type,status FROM submission')}=={('GRAMMAR','pending'),('ALTERNATIVE','pending')}
+    grammar_sid=db.execute(
+        "SELECT submission_id FROM submission WHERE submission_type='GRAMMAR' AND status='pending'"
+    ).fetchone()[0]
+html=client.get('/a/mi-trabajo?collaborator_id=1').text
+assert 'En revisión' in html
+assert '/a/aportes/'+str(grammar_sid) in html
+assert '/a/ocurrencias/1/gramatica' not in html
 assert client.get('/r/aportes/pendientes').status_code==200
 from alternative_change_workflow import create_proposal,review_proposal
 with closing(conectar()) as db:
