@@ -5,6 +5,8 @@ from catalog_diff import build_catalog_diff
 from catalog_publication import (IdenticalPublication, PublicationBlocked,
     PublicationError, publish_catalog, serialize_catalog_projection, verify_publication_hash)
 from database import crear_esquema
+from concept_classification import apply_metadata
+from catalog_projection import build_catalog_projection
 
 
 class CatalogPublicationTests(unittest.TestCase):
@@ -45,5 +47,30 @@ class CatalogPublicationTests(unittest.TestCase):
         self.assertEqual(serialize_catalog_projection({"b":"á","a":1}),'{"a":1,"b":"á"}')
         diff=build_catalog_diff(None,{"concepts":[{"concept_id":2,"preferred_label":"X","alternatives":[],"relations":[]}]})
         self.assertEqual(diff["concepts_added"][0]["concept_id"],2)
+
+    def test_snapshot_freezes_collection_and_classification_metadata(self):
+        self.add_lexical_data()
+        collection = self.db.execute("SELECT collection_id FROM collection WHERE code='academic-vocabulary'").fetchone()[0]
+        system = self.db.execute("SELECT system_id FROM classification_system WHERE code='knowledge-areas'").fetchone()[0]
+        category = self.db.execute('SELECT category_id,code,name FROM classification_category WHERE system_id=? ORDER BY display_order', (system,)).fetchone()
+        apply_metadata(self.db, 1, {'collections': {collection: 'join'},
+            'classifications': {system: [category['category_id']]}}, access_role='master')
+        first = publish_catalog(self.db, publication_comment='Metadata sintetica', actor_context=self.actor())
+        frozen = json.loads(first['snapshot_json'])
+        concept = frozen['concepts'][0]
+        self.assertEqual(concept['collections'][0]['code'], 'academic-vocabulary')
+        self.assertEqual(concept['classifications'], {'knowledge-areas': [{'code': category['code'], 'name': category['name']}]})
+        apply_metadata(self.db, 1, {'collections': {collection: 'leave'}}, access_role='master')
+        live = build_catalog_projection(self.db)
+        self.assertEqual(live['concepts'][0]['collections'], [])
+        self.assertEqual(live['concepts'][0]['classifications'], {})
+        second = publish_catalog(self.db, publication_comment='Retiro sintetico', actor_context=self.actor())
+        summary = json.loads(second['change_summary_json'])
+        self.assertEqual(len(summary['collections_changed']), 1)
+        self.assertEqual(len(summary['classifications_changed']), 1)
+        stored = self.db.execute('SELECT * FROM catalog_publication WHERE publication_id=?', (first['publication_id'],)).fetchone()
+        self.assertEqual(stored['snapshot_json'], first['snapshot_json'])
+        self.assertEqual(json.loads(stored['snapshot_json']), frozen)
+        self.assertTrue(verify_publication_hash(stored))
 
 if __name__=="__main__": unittest.main()

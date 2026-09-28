@@ -17,6 +17,7 @@ def build_catalog_diff(previous, current):
     summary = {
         "initial_publication": not bool(old_concepts),
         "concepts_added": [], "concepts_removed": [], "concepts_changed": [],
+        "collections_changed": [], "classifications_changed": [],
         "alternatives_added": [], "alternatives_removed": [],
         "alternatives_changed": [], "occurrences_added": [],
         "occurrences_removed": [], "occurrences_changed_or_moved": [],
@@ -28,6 +29,23 @@ def build_catalog_diff(previous, current):
     for concept_id in sorted(old_concepts.keys() - new_concepts.keys()):
         summary["concepts_removed"].append(_label(old_concepts[concept_id], "concept_id", "preferred_label"))
     for concept_id in sorted(old_concepts.keys() & new_concepts.keys()):
+        old, new = old_concepts[concept_id], new_concepts[concept_id]
+        before = sorted(old.get("collections", []), key=lambda c: (c["code"], c["collection_id"]))
+        after = sorted(new.get("collections", []), key=lambda c: (c["code"], c["collection_id"]))
+        identity = {"concept_id": concept_id, "preferred_label": new["preferred_label"]}
+        if before != after:
+            summary["collections_changed"].append({**identity, "before": before, "after": after})
+        old_systems = old.get("classifications", {})
+        new_systems = new.get("classifications", {})
+        for system in sorted(old_systems.keys() | new_systems.keys()):
+            before, after = old_systems.get(system, []), new_systems.get(system, [])
+            # Presence matters: an explicit empty revision overrides legacy.
+            if before != after or (system in old_systems) != (system in new_systems):
+                summary["classifications_changed"].append({
+                    **identity, "system_code": system,
+                    "before": before if system in old_systems else None,
+                    "after": after if system in new_systems else None,
+                })
         if old_concepts[concept_id]["preferred_label"] != new_concepts[concept_id]["preferred_label"]:
             summary["concepts_changed"].append({"concept_id": concept_id, "before": old_concepts[concept_id]["preferred_label"], "after": new_concepts[concept_id]["preferred_label"]})
 

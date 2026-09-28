@@ -4,6 +4,7 @@ import unittest
 
 from catalog_projection import build_catalog_projection
 from database import crear_esquema
+from concept_classification import apply_metadata, administer
 
 
 class CatalogProjectionTests(unittest.TestCase):
@@ -104,6 +105,57 @@ class CatalogProjectionTests(unittest.TestCase):
         self.assertNotIn("created_at", encoded)
         self.assertNotIn("submission", encoded)
         self.assertNotIn("conflict", encoded)
+
+    def test_current_metadata_structured_or_legacy_and_read_only(self):
+        systems = {r['code']: r['system_id'] for r in self.db.execute('SELECT * FROM classification_system')}
+        categories = {code: [dict(r) for r in self.db.execute(
+            'SELECT * FROM classification_category WHERE system_id=? ORDER BY display_order', (sid,))]
+            for code, sid in systems.items()}
+        academic = self.db.execute("SELECT collection_id FROM collection WHERE code='academic-vocabulary'").fetchone()[0]
+        other = administer(self.db, 'collection', code='aaa-other', name='Otra', access_role='master')
+        self.db.execute("UPDATE concept SET semantic_field_1='Legacy SF', semantic_field_2='Legacy SF 2', knowledge_area_1='Legacy KA'")
+        self.db.commit()
+        def apply(classifications=None, collections=None, concept=1):
+            apply_metadata(self.db, concept, {'classifications': classifications or {},
+                'collections': collections or {}}, access_role='master')
+        def concept():
+            return next(c for c in build_catalog_projection(self.db)['concepts'] if c['concept_id'] == 1)
+        self.assertEqual(concept()['semantic_fields'], ['Legacy SF', 'Legacy SF 2'])
+        self.assertEqual(concept()['knowledge_areas'], ['Legacy KA'])
+        self.assertEqual(concept()['classifications'], {})
+        sf, ka = systems['semantic-fields'], systems['knowledge-areas']
+        apply({sf: [categories['semantic-fields'][0]['category_id']]})
+        selected = {code: list(reversed(rows[1:3])) for code, rows in categories.items()}
+        apply({systems[code]: [r['category_id'] for r in rows] for code, rows in selected.items()},
+              {academic: 'join', other: 'join'})
+        # Metadata on an ineligible concept must not make it eligible.
+        apply(collections={academic: 'join'}, concept=3)
+        administer(self.db, 'collection', identifier=academic, name='Nombre actual', active=0, access_role='master')
+        administer(self.db, 'category', identifier=selected['semantic-fields'][0]['category_id'],
+                   name='Nombre posterior', active=0, access_role='master')
+        before = '\n'.join(self.db.iterdump())
+        changes = self.db.total_changes
+        self.db.execute('PRAGMA query_only=ON')
+        first = build_catalog_projection(self.db)
+        self.assertEqual(first, build_catalog_projection(self.db))
+        self.assertEqual(json.loads(json.dumps(first)), first)
+        self.assertEqual(before, '\n'.join(self.db.iterdump()))
+        self.assertEqual(changes, self.db.total_changes)
+        self.db.execute('PRAGMA query_only=OFF')
+        current = concept()
+        self.assertEqual([c['concept_id'] for c in first['concepts']], [2, 1])
+        self.assertEqual(current['collections'], [
+            {'collection_id': other, 'code': 'aaa-other', 'name': 'Otra'},
+            {'collection_id': academic, 'code': 'academic-vocabulary', 'name': 'Nombre actual'}])
+        self.assertEqual(list(current['classifications']), sorted(systems))
+        for code, legacy in [('semantic-fields', 'semantic_fields'), ('knowledge-areas', 'knowledge_areas')]:
+            self.assertEqual(current['classifications'][code], [{'code': r['code'], 'name': r['name']} for r in selected[code]])
+            self.assertEqual(current[legacy], [r['name'] for r in selected[code]])
+        apply({sf: []}, {academic: 'leave'})
+        self.assertEqual(concept()['semantic_fields'], [])
+        self.assertEqual(concept()['classifications'], {'semantic-fields': []})
+        self.assertEqual(concept()['knowledge_areas'], ['Legacy KA'])
+        self.assertEqual([c['collection_id'] for c in concept()['collections']], [other])
 
 
 if __name__ == "__main__":

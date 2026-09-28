@@ -149,9 +149,6 @@ def project_nomenclature_history(connection, alternative_id):
 
 def build_catalog_projection(connection):
     """Return only current canonical lexical state, using JSON-safe values."""
-    # Phase 19A compatibility option B: retain legacy arrays until an explicit
-    # data migration switches their source. Never merge them with structured rows.
-    # Existing immutable publications and their names/order remain untouched.
     profiles = {row['alternative_id']: public_profile(row)
                 for row in connection.execute('SELECT * FROM alternative_usage_profile')}
     all_alternatives = [dict(row) for row in connection.execute("""
@@ -180,6 +177,36 @@ def build_catalog_projection(connection):
             "knowledge_areas": [value for value in (row["knowledge_area_1"], row["knowledge_area_2"]) if value],
             "alternatives": [], "relations": [],
         })
+    # Current memberships use canonical collection identities, not audit snapshots.
+    for row in connection.execute("""
+        SELECT m.concept_id, c.collection_id, c.code, c.name
+        FROM collection_membership AS m JOIN collection AS c USING(collection_id)
+        WHERE m.ended_at IS NULL
+        ORDER BY c.code, c.collection_id
+    """):
+        if row["concept_id"] in by_concept:
+            by_concept[row["concept_id"]].setdefault("collections", []).append(
+                {key: row[key] for key in ("collection_id", "code", "name")})
+    # Revision snapshots preserve the classification decision and slot order.
+    # Inactive catalog entries remain valid until the revision is closed.
+    for row in connection.execute("""
+        SELECT * FROM concept_classification_revision WHERE ended_at IS NULL
+        ORDER BY system_code_snapshot, system_id, concept_id
+    """):
+        if row["concept_id"] in by_concept:
+            by_concept[row["concept_id"]].setdefault("classifications", {})[
+                row["system_code_snapshot"]] = [
+                    {"code": row[f"category_{slot}_code"],
+                     "name": row[f"category_{slot}_name"]}
+                    for slot in (1, 2) if row[f"category_{slot}_id"] is not None
+                ]
+    for concept in by_concept.values():
+        concept.setdefault("collections", [])
+        classifications = concept.setdefault("classifications", {})
+        for system, legacy in (("semantic-fields", "semantic_fields"),
+                               ("knowledge-areas", "knowledge_areas")):
+            if system in classifications:
+                concept[legacy] = [category["name"] for category in classifications[system]]
     for row in alternatives:
         ids = connection.execute(
             "SELECT occurrence_id FROM assignment "

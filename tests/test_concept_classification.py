@@ -211,14 +211,20 @@ class ClassificationTests(unittest.TestCase):
                 save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid),expected_edit_token=token)
             save_resolution(self.db,sid,'ACCEPT_PROPOSAL',access_role='reviewer',concept_metadata=proposal_payload(self.db,sid),expected_edit_token=edit_token(self.db,'submission_concept',sid))
 
-    def test_legacy_catalog_keeps_names_order_and_columns(self):
+    def test_catalog_uses_current_classification_and_preserves_legacy_columns(self):
         self.db.execute("UPDATE concept SET semantic_field_1='LEGACY-B',semantic_field_2='LEGACY-A',knowledge_area_1='LEGACY-AREA' WHERE concept_id=1")
         self.db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1a')")
         self.db.commit()
         before=build_catalog_projection(self.db)
         self.apply({self.sf:self.fields[:2],self.ka:self.areas[:2]},{self.collection:'join'})
         self.apply(collections={self.collection:'leave'})
-        self.assertEqual(before,build_catalog_projection(self.db))
+        after=build_catalog_projection(self.db)['concepts'][0]
+        self.assertEqual(list(SEMANTIC_FIELDS[:2]),after['semantic_fields'])
+        self.assertEqual(['LEGACY-AREA'],after['knowledge_areas'])
+        self.assertEqual([],after['collections'])
+        self.assertNotIn('knowledge-areas',after['classifications'])
+        self.assertEqual(('LEGACY-B','LEGACY-A','LEGACY-AREA'),tuple(self.db.execute(
+            'SELECT semantic_field_1,semantic_field_2,knowledge_area_1 FROM concept WHERE concept_id=1').fetchone()))
         self.assertEqual(['LEGACY-B','LEGACY-A'],before['concepts'][0]['semantic_fields'])
 
     def test_auditor_checks_structural_corruption(self):
