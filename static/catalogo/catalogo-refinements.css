@@ -20,14 +20,16 @@
   --catalog-ink: #482631;
   --catalog-focus: #984b35;
 }
-.colecciones-catalogo { display:flex; flex-wrap:wrap; gap:.6rem; padding:1rem 1.5rem; background:var(--catalog-surface); }
-.colecciones-catalogo a { padding:.6rem .9rem; border:1px solid var(--catalog-border); border-radius:.4rem; text-decoration:none; }
-.colecciones-catalogo a[aria-current="page"] { background:var(--catalog-primary); color:#fff; font-weight:700; text-decoration:underline; text-underline-offset:.25em; }
 .catalogo :is(input,button,select,a,summary):focus-visible { outline:3px solid var(--catalog-focus); outline-offset:3px; }
 .selector-clasificaciones input { accent-color:var(--catalog-secondary); }
 .clasificacion-secundaria span { background:#edf0f2; color:#44515a; font-weight:400; }
 .clasificacion-principal { border-left:3px solid var(--catalog-secondary); padding-left:.5rem; }
 /* Usage/context and searchable classification selection share card styles. */
+.clasificacion-desplegable { margin-top:.9rem; border:1px solid var(--catalog-border); border-radius:.4rem; padding:.6rem; }
+.clasificacion-desplegable > summary { cursor:pointer; font-weight:700; color:var(--catalog-link); }
+.clasificacion-desplegable[open] > summary { margin-bottom:.6rem; }
+.ocurrencia > .detalle-secundario { margin-inline-start:1.25rem; }
+@media(max-width:760px) { .ocurrencia > .detalle-secundario { margin-inline-start:1rem; } }
 .selector-clasificaciones { max-height: 11rem; overflow: auto; margin: .5rem 0 1rem; }
 .selector-clasificaciones label { display: flex; gap: .5rem; padding: .3rem; align-items: center; }
 .selector-clasificaciones label[hidden] { display: none; }

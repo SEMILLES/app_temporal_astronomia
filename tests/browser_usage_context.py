@@ -18,6 +18,9 @@ def main():
     db=connect(fixture.path)
     db.execute("INSERT INTO concept(preferred_label,semantic_field_1,knowledge_area_1) VALUES('A-VECES','Expresiones de Tiempo','Artes')")
     db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(2,'1a')")
+    db.execute("INSERT INTO source(source_name) VALUES('Fuente sintética')")
+    db.execute("INSERT INTO occurrence(source_id,original_gloss) VALUES(1,'MORADO')")
+    db.execute("INSERT INTO assignment(occurrence_id,alternative_id) VALUES(1,1)")
     db.commit()
     collection=db.execute("SELECT collection_id FROM collection WHERE code='academic-vocabulary'").fetchone()[0]
     for concept_id in (1,2):
@@ -34,6 +37,12 @@ def main():
             page.goto(f'http://127.0.0.1:{server.server_port}/ana/catalogo-interno/conceptos/1')
             visible=lambda:page.locator('.boton-concepto:visible').count()
             assert visible()==2
+            page.locator('.ocurrencia > summary').click()
+            for label in ('Gramática','Acerca de esta fuente'):
+                summary=page.locator('.ocurrencia > .detalle-secundario > summary',has_text=label)
+                summary.click()
+                assert summary.locator('..').evaluate('el=>el.open')
+                assert summary.locator('..').evaluate('el=>parseFloat(getComputedStyle(el).marginInlineStart)')==20
             page.locator('#filtro-video').check();assert visible()==1
             assert page.locator('.boton-variante:visible').count()==3
             page.locator('[data-pestana="uso-1"]').click()
@@ -43,6 +52,8 @@ def main():
             assert page.locator('[data-alternative-panel="3"]').is_visible()
             assert page.locator('[data-alternative-panel="3"] .media-alternativa').count()==0
             page.locator('#filtro-variacion').select_option('both');assert visible()==1
+            assert not page.locator('.clasificacion-desplegable').evaluate('el=>el.open')
+            page.locator('.clasificacion-desplegable summary').click()
             page.locator('#buscador-clasificaciones').fill('col');assert page.locator('#filtro-clasificaciones label:visible').count()==1
             page.locator('#filtro-clasificaciones input[value="colores"]').check();assert visible()==1
             page.locator('#buscador-clasificaciones').fill('');page.locator('#filtro-clasificaciones input[value="expresiones de tiempo"]').check()
@@ -59,7 +70,11 @@ def main():
             page.screenshot(path=str(output/'usage-context-desktop.png'),full_page=True)
             page.set_viewport_size({'width':390,'height':844})
             page.screenshot(path=str(output/'usage-context-mobile.png'),full_page=True)
-            page.locator('.colecciones-catalogo a',has_text='Vocabulario Académico').click()
+            page.goto(f'http://127.0.0.1:{server.server_port}/ana/catalogo-interno/colecciones/academica/conceptos/1')
+            assert page.locator('.colecciones-catalogo').count()==0
+            page.locator('.clasificacion-desplegable summary').focus()
+            page.keyboard.press('Enter')
+            assert page.locator('.clasificacion-desplegable').evaluate('el=>el.open')
             assert '/colecciones/academica/' in page.url
             assert page.locator('body').get_attribute('class')=='catalogo catalogo--academica'
             assert page.locator('.sobrelinea').inner_text()=='SEMILLES · Universidad Nacional de Colombia'
@@ -73,6 +88,7 @@ def main():
             page.locator('#limpiar-filtros').click()
             assert visible()==2
             assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
+            assert page.locator('.ocurrencia > .detalle-secundario').first.evaluate('el=>parseFloat(getComputedStyle(el).marginInlineStart)')==16
             assert not errors,errors
             browser.close()
             report={'browser':'Chromium','javascript_errors':errors,'filters_combined':True,'all_alternatives_retained':True,'conditional_profile_tab':True,'semantic_multiselect_search':True,'navigation_and_clear':True}

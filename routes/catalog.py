@@ -64,27 +64,7 @@ def _render_catalog(view_code, projection, **context):
             endpoint += target
         return url_for(endpoint, **values)
 
-    def collection_url(destination):
-        target = 'catalog'
-        identifiers = {}
-        concept = context.get('selected_concept')
-        if concept and scope_catalog({'concepts': [concept]}, destination)['concepts']:
-            if 'alternative_id' in request.view_args:
-                target = 'alternative'
-                identifiers['alternative_id'] = context['selected_alternative']['alternative_id']
-            elif 'concept_id' in request.view_args:
-                target = 'concept'
-                identifiers['concept_id'] = concept['concept_id']
-        endpoint = f'catalog.{kind}_'
-        if kind == 'external' and version is not None:
-            endpoint += 'version' + ('_' + target if target != 'catalog' else '')
-            identifiers['version_number'] = version
-        else:
-            endpoint += target
-        return url_for(endpoint, view_code=destination.code, **identifiers)
-
     return render_template('catalogo_lesico.html', catalog_view=view,
-                           catalog_views=CATALOG_VIEWS.values(), collection_url=collection_url,
                            catalog_url=catalog_url,
                            catalog_counts=_catalog_counts(projection), **context)
 

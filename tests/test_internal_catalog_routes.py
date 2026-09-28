@@ -199,7 +199,7 @@ class InternalCatalogRouteTests(unittest.TestCase):
                 self.assertEqual(len(memberships), 1)
                 self.assertNotIn('concept_id=', classification[0])
 
-    def test_collection_navigation_branding_theme_and_detail_hierarchy(self):
+    def test_collapsible_classification_branding_theme_and_detail_hierarchy(self):
         self.academic_fixture()
         base = '/ana/catalogo-interno'
         academic = base + '/colecciones/academica'
@@ -209,19 +209,19 @@ class InternalCatalogRouteTests(unittest.TestCase):
             html = self.client.get(path).get_data(as_text=True)
             self.assertIn(f'class="catalogo catalogo--{theme}"', html)
             self.assertIn(f'<p class="sobrelinea">{brand}</p>', html)
-            self.assertIn(f'href="{path}" aria-current="page"', html)
-            self.assertIn('Colección Analizada</a>', html)
-            self.assertIn('Vocabulario Académico</a>', html)
+            self.assertNotIn('colecciones-catalogo', html)
+            self.assertIn('<details class="clasificacion-desplegable"><summary>', html)
+            self.assertNotIn('<details class="clasificacion-desplegable" open', html)
+            dropdown = html.split('<details class="clasificacion-desplegable">', 1)[1].split('</details>', 1)[0]
+            label = 'Campo semántico' if param == 'campo' else 'Área de conocimiento'
+            self.assertIn(f'<summary>{label}</summary>', dropdown)
+            self.assertIn('id="buscador-clasificaciones"', dropdown)
+            self.assertIn('id="filtro-clasificaciones"', dropdown)
+            self.assertIn(f'data-filter-param="{param}"', dropdown)
             self.assertIn('id="buscador-clasificaciones"', html)
             self.assertIn(f'data-filter-param="{param}"', html)
             self.assertNotIn('<select id="filtro-area"', html)
             self.assertIn('role="group"', html)
-        for entity in ('conceptos', 'alternativas'):
-            member = self.client.get(f'{base}/{entity}/1').get_data(as_text=True)
-            self.assertIn(f'href="{academic}/{entity}/1"', member)
-            outsider = self.client.get(f'{base}/{entity}/2').get_data(as_text=True)
-            self.assertIn(f'href="{academic}"', outsider)
-            self.assertNotIn(f'href="{academic}/{entity}/2"', outsider)
         html = self.client.get(academic + '/conceptos/1?area=uno&area=dos&campo=omitido').get_data(as_text=True)
         self.assertIn('area=uno&amp;area=dos', html)
         self.assertNotIn('campo=omitido', html)

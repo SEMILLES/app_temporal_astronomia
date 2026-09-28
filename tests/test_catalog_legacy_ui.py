@@ -74,6 +74,17 @@ class LegacyCatalogUITests(unittest.TestCase):
         self.assertGreater(html.index("Historial de nomenclatura"),html.index("Morfología"))
         self.assertLess(html.index('class="identificador-alternativa"'),html.index('class="media-alternativa"') if 'class="media-alternativa"' in html else html.index("Ocurrencias y fuentes"))
         self.assertIn("Campo semántico",html)
+
+    def test_occurrence_sublevels_keep_native_details_and_shared_indentation(self):
+        html = self.client.get('/ana/catalogo-interno/alternativas/1').get_data(as_text=True)
+        self.assertIn('<details class="detalle-secundario"><summary>Gramática</summary>', html)
+        self.assertIn('<details class="detalle-secundario fuente-ocurrencia"><summary>Acerca de esta fuente</summary>', html)
+        self.assertIn('<dl class="resumen-datos datos-ocurrencia">', html)
+        for label in ('Fuente', 'Referencia en la fuente', 'Periodo'):
+            self.assertIn(f'<dt>{label}</dt>', html)
+        css = (ROOT / 'static/catalogo/catalogo-refinements.css').read_text(encoding='utf-8')
+        self.assertIn('.ocurrencia > .detalle-secundario { margin-inline-start:1.25rem; }', css)
+        self.assertIn('.ocurrencia > .detalle-secundario { margin-inline-start:1rem; }', css)
     def test_occurrence_documentation_is_inside_source_details_and_note_is_conditional(self):
         html=self.client.get("/ana/catalogo-interno/alternativas/1").get_data(as_text=True)
         source_start=html.index("<summary>Acerca de esta fuente</summary>")
