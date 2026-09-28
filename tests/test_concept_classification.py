@@ -63,7 +63,7 @@ class ClassificationTests(unittest.TestCase):
             self.assertEqual(tuple(r[0] for r in self.db.execute('SELECT name FROM classification_category WHERE system_id=? ORDER BY display_order',(sid,))),expected)
         before=self.dump();install(self.db);self.assertEqual(before,self.dump())
         self.assertEqual(0,self.db.execute('SELECT count(*) FROM collection_membership').fetchone()[0])
-        self.assertEqual(56,self.db.execute('SELECT count(*) FROM classification_category').fetchone()[0])
+        self.assertEqual(len(SEMANTIC_FIELDS)+len(KNOWLEDGE_AREAS),self.db.execute('SELECT count(*) FROM classification_category').fetchone()[0])
 
     def test_empty_second_position_order_and_swap_semantics(self):
         self.apply({self.sf:[]});self.assertIsNone(self.current()['category_1_id'])

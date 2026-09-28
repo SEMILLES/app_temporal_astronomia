@@ -17,7 +17,7 @@ KNOWLEDGE_AREAS = (
     'Ingeniería', 'Tecnología e Informática', 'Lingüística', 'Educación', 'Derecho',
     'Economía y Administración', 'Ciencias Sociales', 'Historia', 'Filosofía',
     'Literatura y Lenguas', 'Artes', 'Diseño y Arquitectura', 'Comunicación',
-    'Ciencias Agrarias', 'Otro',
+    'Ciencias Agrarias', 'Otro', 'Administrativo',
 )
 TABLES = ('collection', 'classification_system', 'classification_category',
           'collection_membership', 'concept_classification_revision',

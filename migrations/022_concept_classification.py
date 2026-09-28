@@ -158,6 +158,10 @@ def check_seeds(db, reference, *, initial):
         if initial:
             valid = actual == expected
         else:
+            # KA-24 was added after 022. Existing 022 installations remain valid;
+            # the explicit academic normalization supplies it with an audit trail.
+            if kind == 'categories':
+                expected = [r for r in expected if (r[0], r[1]) != ('knowledge-areas', 'KA-24')]
             key = (lambda r: (r[0],r[1])) if kind == 'categories' else (
                 (lambda r: (r[0],r[2])) if kind == 'systems' else (lambda r: r[0]))
             valid = {key(r) for r in expected} <= {key(r) for r in actual}

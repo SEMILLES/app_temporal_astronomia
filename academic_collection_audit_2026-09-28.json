@@ -1,0 +1,2932 @@
+{
+  "manifest_version": 1,
+  "purpose": "Materializar la Colección Académica y sus Áreas de conocimiento a partir de la auditoría editorial confirmada.",
+  "collection_code": "academic-vocabulary",
+  "classification_system_code": "knowledge-areas",
+  "concept_count": 386,
+  "source_audit_sha256": "ab9082d27d6871a9f5fdb054b300c5292302d81236b120149bbac5a495182a51",
+  "rules": {
+    "max_areas_per_concept": 2,
+    "preserve_legacy_columns": true,
+    "do_not_create_future_proposals": true
+  },
+  "summary": {
+    "astronomy_existing_concepts": 150,
+    "additional_concepts": 236,
+    "concepts_with_two_areas": 169,
+    "concepts_with_one_area": 217,
+    "area_usage_counts": {
+      "Administrativo": 20,
+      "Artes": 7,
+      "Astronomía": 150,
+      "Biología": 26,
+      "Ciencias Agrarias": 1,
+      "Ciencias Ambientales": 3,
+      "Ciencias Sociales": 75,
+      "Ciencias de la Tierra": 20,
+      "Comunicación": 9,
+      "Derecho": 30,
+      "Diseño y Arquitectura": 6,
+      "Economía y Administración": 15,
+      "Educación": 36,
+      "Filosofía": 13,
+      "Física": 34,
+      "Historia": 8,
+      "Ingeniería": 22,
+      "Lingüística": 19,
+      "Literatura y Lenguas": 4,
+      "Matemáticas": 7,
+      "Medicina y Ciencias de la Salud": 34,
+      "Otro": 1,
+      "Química": 4,
+      "Tecnología e Informática": 11
+    }
+  },
+  "future_area_proposals_not_for_this_migration": [
+    {
+      "name": "Geografía",
+      "status": "revisión futura"
+    },
+    {
+      "name": "Administración Pública",
+      "status": "revisión futura"
+    },
+    {
+      "name": "Investigación",
+      "status": "revisión futura"
+    }
+  ],
+  "concepts": [
+    {
+      "concept_id": 1,
+      "preferred_label": "ADAPTADOR-MONTURA-T",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 2,
+      "preferred_label": "AGUJERO-NEGRO",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 3,
+      "preferred_label": "ALINEACIÓN-ESTELAR",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 4,
+      "preferred_label": "ALINEACIÓN-POLAR",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 5,
+      "preferred_label": "ANILLO-PLANETARIO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 6,
+      "preferred_label": "APERTURA-TELESCOPIO",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 7,
+      "preferred_label": "APILAR-STACK",
+      "areas": [
+        "Astronomía",
+        "Tecnología e Informática"
+      ]
+    },
+    {
+      "concept_id": 8,
+      "preferred_label": "ASTERISMO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 9,
+      "preferred_label": "ASTEROIDE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 10,
+      "preferred_label": "ASTROFÍSICA",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 11,
+      "preferred_label": "ASTROLOGÍA",
+      "areas": [
+        "Astronomía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 12,
+      "preferred_label": "ASTRONAÚTICA",
+      "areas": [
+        "Astronomía",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 13,
+      "preferred_label": "ASTRONOMÍA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 14,
+      "preferred_label": "ASTRONOMÍA-CULTURAL",
+      "areas": [
+        "Astronomía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 15,
+      "preferred_label": "ASTRONOMÍA-INDÍGENA",
+      "areas": [
+        "Astronomía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 16,
+      "preferred_label": "ASTRONOMÍA-PREHISPÁNICA",
+      "areas": [
+        "Astronomía",
+        "Historia"
+      ]
+    },
+    {
+      "concept_id": 17,
+      "preferred_label": "ASTROS",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 18,
+      "preferred_label": "ATMÓSFERA",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 19,
+      "preferred_label": "AZIMUTH",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 20,
+      "preferred_label": "AÑO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 21,
+      "preferred_label": "BIG-BANG",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 22,
+      "preferred_label": "BINOCULAR",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 23,
+      "preferred_label": "BIOSFERA",
+      "areas": [
+        "Astronomía",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 24,
+      "preferred_label": "BÓVEDA-CELESTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 25,
+      "preferred_label": "CALENDARIO-ANCESTRAL",
+      "areas": [
+        "Astronomía",
+        "Historia"
+      ]
+    },
+    {
+      "concept_id": 26,
+      "preferred_label": "CALENTAMIENTO-GLOBAL",
+      "areas": [
+        "Astronomía",
+        "Ciencias Ambientales"
+      ]
+    },
+    {
+      "concept_id": 27,
+      "preferred_label": "CAMPO-MAGNÉTICO",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 28,
+      "preferred_label": "CARTA-CELESTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 29,
+      "preferred_label": "CIELO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 30,
+      "preferred_label": "CIELO-AUSTRAL",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 31,
+      "preferred_label": "CIELO-BOREAL",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 32,
+      "preferred_label": "CIELO-DIURNO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 33,
+      "preferred_label": "CIELO-ESTRELLADO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 34,
+      "preferred_label": "CIELO-NOCTURNO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 35,
+      "preferred_label": "CIENCIA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 36,
+      "preferred_label": "CINTURÓN-DE-ASTEROIDES",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 37,
+      "preferred_label": "COHETE",
+      "areas": [
+        "Astronomía",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 38,
+      "preferred_label": "COLISIÓN-ESPACIAL",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 39,
+      "preferred_label": "COMETA-ASTRO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 40,
+      "preferred_label": "CONSTELACIÓN",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 41,
+      "preferred_label": "CONTAMINACIÓN-LUMÍNICA",
+      "areas": [
+        "Astronomía",
+        "Ciencias Ambientales"
+      ]
+    },
+    {
+      "concept_id": 42,
+      "preferred_label": "COOLER",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 43,
+      "preferred_label": "COSMOGONÍA",
+      "areas": [
+        "Astronomía",
+        "Filosofía"
+      ]
+    },
+    {
+      "concept_id": 44,
+      "preferred_label": "COSMOS",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 45,
+      "preferred_label": "COSMOVISIÓN",
+      "areas": [
+        "Astronomía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 46,
+      "preferred_label": "CRUZ-DEL-SUR",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 47,
+      "preferred_label": "CRÁTER",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 48,
+      "preferred_label": "CUERPO-CELESTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 49,
+      "preferred_label": "CÁMARA-ASTRONÓMICA",
+      "areas": [
+        "Astronomía",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 50,
+      "preferred_label": "CÚMULO-ESTELAR",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 51,
+      "preferred_label": "DARK-FRAME",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 52,
+      "preferred_label": "DOMO-OBSERVATORIO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 53,
+      "preferred_label": "ECLIPSE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 54,
+      "preferred_label": "ECLÍPTICA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 55,
+      "preferred_label": "ECUADOR-CELESTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 56,
+      "preferred_label": "ECUADOR-LATITUD",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 57,
+      "preferred_label": "ESPACIO-PROFUNDO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 58,
+      "preferred_label": "ESPECTROMETRÍA",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 59,
+      "preferred_label": "ESTACIONES-AÑO",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 60,
+      "preferred_label": "ESTRELLA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 61,
+      "preferred_label": "ESTRELLA-FUGAZ",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 62,
+      "preferred_label": "EVENTOS-CALENDARIO-ASTRONÓMICO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 63,
+      "preferred_label": "EVOLUCIÓN",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 64,
+      "preferred_label": "EXPOSICIÓN-LARGA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 65,
+      "preferred_label": "FASES-LUNARES",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 66,
+      "preferred_label": "FILTRO-ASTRONÓMICO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 67,
+      "preferred_label": "FLAT-FRAME",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 68,
+      "preferred_label": "FOCOS-ELIPSE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 69,
+      "preferred_label": "FOTOGRAFÍA-PLANETARIA",
+      "areas": [
+        "Astronomía",
+        "Tecnología e Informática"
+      ]
+    },
+    {
+      "concept_id": 70,
+      "preferred_label": "FUERZA",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 71,
+      "preferred_label": "FUERZA-ATRACCIÓN",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 72,
+      "preferred_label": "FUERZA-REPULSIÓN",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 73,
+      "preferred_label": "FUERZA-ROZAMIENTO",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 74,
+      "preferred_label": "GALAXIA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 75,
+      "preferred_label": "GALILEO-GALILEI",
+      "areas": [
+        "Astronomía",
+        "Historia"
+      ]
+    },
+    {
+      "concept_id": 76,
+      "preferred_label": "GRAVEDAD",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 77,
+      "preferred_label": "HIDRÓGENO",
+      "areas": [
+        "Astronomía",
+        "Química"
+      ]
+    },
+    {
+      "concept_id": 78,
+      "preferred_label": "JUPITER",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 79,
+      "preferred_label": "LEYENDA-ASTRONÓMICA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 80,
+      "preferred_label": "LUNA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 81,
+      "preferred_label": "LUNA-CUARTO-CRECIENTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 82,
+      "preferred_label": "LUNA-CUARTO-MENGUANTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 83,
+      "preferred_label": "LUNA-GIBOSA-CRECIENTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 84,
+      "preferred_label": "LUNA-GIBOSA-MENGUANTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 85,
+      "preferred_label": "LUNA-NUEVA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 86,
+      "preferred_label": "LUNA-NUEVA-VISIBLE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 87,
+      "preferred_label": "LUZ",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 88,
+      "preferred_label": "MAGNITUD",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 89,
+      "preferred_label": "MAGNITUD-APARENTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 90,
+      "preferred_label": "MARTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 91,
+      "preferred_label": "MASA-FÍSICA",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 92,
+      "preferred_label": "MERCURIO-PLANETA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 93,
+      "preferred_label": "METEORITO",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 94,
+      "preferred_label": "METEORO",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 95,
+      "preferred_label": "METEOROIDE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 96,
+      "preferred_label": "MITO-CELESTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 97,
+      "preferred_label": "MONTURA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 98,
+      "preferred_label": "MONTURA-ECUATORIAL",
+      "areas": [
+        "Astronomía",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 99,
+      "preferred_label": "MONTURA-MANUAL",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 100,
+      "preferred_label": "MONTURA-TO-GO",
+      "areas": [
+        "Astronomía",
+        "Tecnología e Informática"
+      ]
+    },
+    {
+      "concept_id": 101,
+      "preferred_label": "MUSEO-DEL-ESPACIO",
+      "areas": [
+        "Astronomía",
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 102,
+      "preferred_label": "NEBULOSA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 103,
+      "preferred_label": "NEPTUNO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 104,
+      "preferred_label": "NIVEL-BORTLE",
+      "areas": [
+        "Astronomía",
+        "Ciencias Ambientales"
+      ]
+    },
+    {
+      "concept_id": 105,
+      "preferred_label": "NORTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 106,
+      "preferred_label": "NÚCLEO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 107,
+      "preferred_label": "OBJETO-CELESTE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 108,
+      "preferred_label": "OBSERVACIÓN-A-SIMPLE-VISTA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 109,
+      "preferred_label": "OBSERVACIÓN-ASTRONÓMICA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 110,
+      "preferred_label": "OBSERVATORIO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 111,
+      "preferred_label": "OCCIDENTE",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 112,
+      "preferred_label": "ORIENTACIÓN-ANCESTRAL",
+      "areas": [
+        "Astronomía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 113,
+      "preferred_label": "ORIENTE",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 114,
+      "preferred_label": "ORIÓN-CONSTELACIÓN",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 115,
+      "preferred_label": "OVNI",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 116,
+      "preferred_label": "PATRIMONIO-DE-LA-HUMANIDAD",
+      "areas": [
+        "Astronomía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 117,
+      "preferred_label": "PIXLINSIGHT",
+      "areas": [
+        "Astronomía",
+        "Tecnología e Informática"
+      ]
+    },
+    {
+      "concept_id": 118,
+      "preferred_label": "PLANETA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 119,
+      "preferred_label": "PLANETARIO",
+      "areas": [
+        "Astronomía",
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 120,
+      "preferred_label": "PLANETOLOGÍA",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 121,
+      "preferred_label": "PLUTÓN",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 122,
+      "preferred_label": "POLOS",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 123,
+      "preferred_label": "PUNTOS-CARDINALES",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 124,
+      "preferred_label": "REDUCTOR-FOCAL",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 125,
+      "preferred_label": "REVOLUCIÓN-FÍSICA",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 126,
+      "preferred_label": "ROTACIÓN",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 127,
+      "preferred_label": "SATURNO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 128,
+      "preferred_label": "SATÉLITE",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 129,
+      "preferred_label": "SEGUIMIENTO-ESTELAR",
+      "areas": [
+        "Astronomía",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 130,
+      "preferred_label": "SHARPCAP",
+      "areas": [
+        "Astronomía",
+        "Tecnología e Informática"
+      ]
+    },
+    {
+      "concept_id": 131,
+      "preferred_label": "SISTEMA-SOLAR",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 132,
+      "preferred_label": "SOL",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 133,
+      "preferred_label": "SONDA-ESPACIAL",
+      "areas": [
+        "Astronomía",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 134,
+      "preferred_label": "SUPERNOVA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 135,
+      "preferred_label": "SUR",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 136,
+      "preferred_label": "TELESCOPIO",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 137,
+      "preferred_label": "TELESCOPIO-POLAR",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 138,
+      "preferred_label": "TEMPERATURA",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 139,
+      "preferred_label": "TIEMPO",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 140,
+      "preferred_label": "TIERRA-PLANETA",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 141,
+      "preferred_label": "TORMENTA-DE-METERORITOS",
+      "areas": [
+        "Astronomía",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 142,
+      "preferred_label": "TRASLACIÓN",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 143,
+      "preferred_label": "UNIVERSO",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 144,
+      "preferred_label": "URANO",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 145,
+      "preferred_label": "VENUS",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 146,
+      "preferred_label": "VOLUMEN-FÍSICA",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 147,
+      "preferred_label": "VÍA-LÁCTEA",
+      "areas": [
+        "Astronomía"
+      ]
+    },
+    {
+      "concept_id": 148,
+      "preferred_label": "ZODIACO",
+      "areas": [
+        "Astronomía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 149,
+      "preferred_label": "ÓRBITA",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 150,
+      "preferred_label": "ÓRBITA-ELÍPTICA",
+      "areas": [
+        "Astronomía",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 154,
+      "preferred_label": "ABOGADO",
+      "areas": [
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 155,
+      "preferred_label": "ABORTAR",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 163,
+      "preferred_label": "ABUSO-SEXUAL",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 167,
+      "preferred_label": "ACNÉ",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 174,
+      "preferred_label": "ACUEDUCTO",
+      "areas": [
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 178,
+      "preferred_label": "ADICTO-SUSTANCIAS",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 179,
+      "preferred_label": "ADMINISTRAR",
+      "areas": [
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 194,
+      "preferred_label": "ALCALDE",
+      "areas": [
+        "Ciencias Sociales",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 196,
+      "preferred_label": "ALCOHOLISMO",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 197,
+      "preferred_label": "ALFABETO-MANUAL",
+      "areas": [
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 202,
+      "preferred_label": "ALMA",
+      "areas": [
+        "Filosofía"
+      ]
+    },
+    {
+      "concept_id": 212,
+      "preferred_label": "AMÉRICA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 216,
+      "preferred_label": "ANIMAL",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 224,
+      "preferred_label": "APRENDER",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 228,
+      "preferred_label": "ARCOIRIS",
+      "areas": [
+        "Física",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 232,
+      "preferred_label": "ARQUITECTURA",
+      "areas": [
+        "Diseño y Arquitectura"
+      ]
+    },
+    {
+      "concept_id": 236,
+      "preferred_label": "ARTE",
+      "areas": [
+        "Artes"
+      ]
+    },
+    {
+      "concept_id": 239,
+      "preferred_label": "ASIA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 242,
+      "preferred_label": "ASORVAL",
+      "areas": [
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 247,
+      "preferred_label": "AUDIOMETRÍA",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 248,
+      "preferred_label": "AUDÍFONO",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 249,
+      "preferred_label": "AUSTRALIA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 259,
+      "preferred_label": "BACHILLERATO",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 262,
+      "preferred_label": "BALLENA",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 266,
+      "preferred_label": "BANCO",
+      "areas": [
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 271,
+      "preferred_label": "BARRANQUILLA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 281,
+      "preferred_label": "BIBLIA",
+      "areas": [
+        "Literatura y Lenguas",
+        "Historia"
+      ]
+    },
+    {
+      "concept_id": 282,
+      "preferred_label": "BIBLIOTECA",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 287,
+      "preferred_label": "BILINGÜISMO",
+      "areas": [
+        "Lingüística",
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 290,
+      "preferred_label": "BIOLOGÍA",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 294,
+      "preferred_label": "BOGOTÁ",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 302,
+      "preferred_label": "BRASIL",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 332,
+      "preferred_label": "CALI",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 334,
+      "preferred_label": "CALIFICACIÓN",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 335,
+      "preferred_label": "CALIFICAR",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 349,
+      "preferred_label": "CAMPESINO",
+      "areas": [
+        "Ciencias Agrarias",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 352,
+      "preferred_label": "CAMÁRA-FOTOGRÁFICA",
+      "areas": [
+        "Tecnología e Informática",
+        "Artes"
+      ]
+    },
+    {
+      "concept_id": 359,
+      "preferred_label": "CAPITAL-ECONÓMICO",
+      "areas": [
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 360,
+      "preferred_label": "CAPITAL-GEOGRÁFICA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 373,
+      "preferred_label": "CARTAGENA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 388,
+      "preferred_label": "CEMENTERIO-COLUMBARIO",
+      "areas": [
+        "Ciencias Sociales",
+        "Diseño y Arquitectura"
+      ]
+    },
+    {
+      "concept_id": 389,
+      "preferred_label": "CEMENTERIO-SEPULTURA",
+      "areas": [
+        "Ciencias Sociales",
+        "Historia"
+      ]
+    },
+    {
+      "concept_id": 390,
+      "preferred_label": "CEMENTO",
+      "areas": [
+        "Ingeniería",
+        "Diseño y Arquitectura"
+      ]
+    },
+    {
+      "concept_id": 404,
+      "preferred_label": "CHEQUE",
+      "areas": [
+        "Economía y Administración",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 412,
+      "preferred_label": "CIENTÍFICO",
+      "areas": [
+        "Otro"
+      ]
+    },
+    {
+      "concept_id": 415,
+      "preferred_label": "CINE",
+      "areas": [
+        "Artes",
+        "Comunicación"
+      ]
+    },
+    {
+      "concept_id": 417,
+      "preferred_label": "CIRUGÍA",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 418,
+      "preferred_label": "CIUDAD",
+      "areas": [
+        "Ciencias Sociales",
+        "Diseño y Arquitectura"
+      ]
+    },
+    {
+      "concept_id": 421,
+      "preferred_label": "CLASE",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 422,
+      "preferred_label": "CLASE-TAXONOMÍA",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 430,
+      "preferred_label": "COLEGIO",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 432,
+      "preferred_label": "COLOMBIA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 433,
+      "preferred_label": "COLOR",
+      "areas": [
+        "Física",
+        "Artes"
+      ]
+    },
+    {
+      "concept_id": 446,
+      "preferred_label": "COMUNICAR",
+      "areas": [
+        "Comunicación",
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 453,
+      "preferred_label": "CONGRESO",
+      "areas": [
+        "Ciencias Sociales",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 456,
+      "preferred_label": "CONTADOR",
+      "areas": [
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 457,
+      "preferred_label": "CONTAR-CUANTIFICAR",
+      "areas": [
+        "Matemáticas"
+      ]
+    },
+    {
+      "concept_id": 461,
+      "preferred_label": "COOPERATIVA",
+      "areas": [
+        "Economía y Administración",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 466,
+      "preferred_label": "CORAZÓN",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 480,
+      "preferred_label": "CREMACIÓN",
+      "areas": [
+        "Ciencias Sociales",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 482,
+      "preferred_label": "CRÉDITO",
+      "areas": [
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 495,
+      "preferred_label": "CULTURA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 499,
+      "preferred_label": "CURSO",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 502,
+      "preferred_label": "CÁNCER",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 503,
+      "preferred_label": "CÁRCEL",
+      "areas": [
+        "Derecho",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 504,
+      "preferred_label": "CÉDULA",
+      "areas": [
+        "Administrativo",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 505,
+      "preferred_label": "CÓNDOR",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 517,
+      "preferred_label": "DELFÍN",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 518,
+      "preferred_label": "DEMOCRACIA",
+      "areas": [
+        "Ciencias Sociales",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 519,
+      "preferred_label": "DEPARTAMENTO",
+      "areas": [
+        "Ciencias Sociales",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 523,
+      "preferred_label": "DERECHO",
+      "areas": [
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 540,
+      "preferred_label": "DESTORNILLADOR-ELÉCTRICO",
+      "areas": [
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 544,
+      "preferred_label": "DEUDA",
+      "areas": [
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 554,
+      "preferred_label": "DIENTE",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 558,
+      "preferred_label": "DIGNIDAD",
+      "areas": [
+        "Derecho",
+        "Filosofía"
+      ]
+    },
+    {
+      "concept_id": 560,
+      "preferred_label": "DIOS",
+      "areas": [
+        "Filosofía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 561,
+      "preferred_label": "DIPLOMA",
+      "areas": [
+        "Educación",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 570,
+      "preferred_label": "DISCURSO",
+      "areas": [
+        "Comunicación",
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 573,
+      "preferred_label": "DOCTOR-ACADÉMICO",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 574,
+      "preferred_label": "DOCTORADO",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 579,
+      "preferred_label": "DROGADICCIÓN",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 580,
+      "preferred_label": "DROGADICTO",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 589,
+      "preferred_label": "ECUADOR-PAÍS",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 590,
+      "preferred_label": "EDIFICIO",
+      "areas": [
+        "Diseño y Arquitectura",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 591,
+      "preferred_label": "EDUCACIÓN-FÍSICA",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 593,
+      "preferred_label": "ELECTRÓNICA",
+      "areas": [
+        "Ingeniería",
+        "Tecnología e Informática"
+      ]
+    },
+    {
+      "concept_id": 594,
+      "preferred_label": "ELEFANTE",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 596,
+      "preferred_label": "EMBARAZO",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 602,
+      "preferred_label": "EMPRESA",
+      "areas": [
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 607,
+      "preferred_label": "ENERGÍA-ELÉCTRICA",
+      "areas": [
+        "Física",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 615,
+      "preferred_label": "ENSEÑAR",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 628,
+      "preferred_label": "ESCULTURA",
+      "areas": [
+        "Artes"
+      ]
+    },
+    {
+      "concept_id": 632,
+      "preferred_label": "ESPAÑA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 633,
+      "preferred_label": "ESPAÑOL-LENGUA",
+      "areas": [
+        "Literatura y Lenguas",
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 643,
+      "preferred_label": "ESTADOS-UNIDOS",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 645,
+      "preferred_label": "ESTUDIANTE",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 646,
+      "preferred_label": "ESTUDIAR",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 648,
+      "preferred_label": "ESTÓMAGO",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 649,
+      "preferred_label": "EUROPA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 654,
+      "preferred_label": "EXÁMEN",
+      "areas": [
+        "Educación",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 655,
+      "preferred_label": "EXÁMEN-MÉDICO",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 661,
+      "preferred_label": "FAMILIA-TAXONOMÍA",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 663,
+      "preferred_label": "FAX",
+      "areas": [
+        "Tecnología e Informática",
+        "Comunicación"
+      ]
+    },
+    {
+      "concept_id": 668,
+      "preferred_label": "FENASCOL",
+      "areas": [
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 674,
+      "preferred_label": "FILMADORA",
+      "areas": [
+        "Comunicación",
+        "Tecnología e Informática"
+      ]
+    },
+    {
+      "concept_id": 675,
+      "preferred_label": "FILOSOFÍA",
+      "areas": [
+        "Filosofía"
+      ]
+    },
+    {
+      "concept_id": 679,
+      "preferred_label": "FISCAL",
+      "areas": [
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 680,
+      "preferred_label": "FISCALÍA",
+      "areas": [
+        "Derecho",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 682,
+      "preferred_label": "FLATULENCIA",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 687,
+      "preferred_label": "FONOAUDIOLOGÍA",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 690,
+      "preferred_label": "FRACTURA",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 691,
+      "preferred_label": "FRASE",
+      "areas": [
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 695,
+      "preferred_label": "FRONTERA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 703,
+      "preferred_label": "FÁBRICA",
+      "areas": [
+        "Ingeniería",
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 705,
+      "preferred_label": "FÉ",
+      "areas": [
+        "Filosofía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 706,
+      "preferred_label": "FÍSICA",
+      "areas": [
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 714,
+      "preferred_label": "GAS",
+      "areas": [
+        "Química",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 718,
+      "preferred_label": "GATO-HIDRÁULICO",
+      "areas": [
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 721,
+      "preferred_label": "GEOGRAFÍA",
+      "areas": [
+        "Ciencias Sociales",
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 723,
+      "preferred_label": "GOBIERNO",
+      "areas": [
+        "Ciencias Sociales",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 726,
+      "preferred_label": "GRADO",
+      "areas": [
+        "Educación",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 727,
+      "preferred_label": "GRADO-GEOMETRÍA",
+      "areas": [
+        "Matemáticas"
+      ]
+    },
+    {
+      "concept_id": 755,
+      "preferred_label": "HIPOACÚSICO",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 756,
+      "preferred_label": "HISTORIA",
+      "areas": [
+        "Historia"
+      ]
+    },
+    {
+      "concept_id": 760,
+      "preferred_label": "HOJA-PLANTA",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 763,
+      "preferred_label": "HOMICIDIO",
+      "areas": [
+        "Derecho",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 764,
+      "preferred_label": "HOMOSEXUAL",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 767,
+      "preferred_label": "HORARIO-CLASES",
+      "areas": [
+        "Educación",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 773,
+      "preferred_label": "HUESO",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 783,
+      "preferred_label": "IMPUESTOS",
+      "areas": [
+        "Economía y Administración",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 785,
+      "preferred_label": "INDÍGENA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 786,
+      "preferred_label": "INFARTO",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 787,
+      "preferred_label": "INFECCIÓN",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 789,
+      "preferred_label": "INGENIERO",
+      "areas": [
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 790,
+      "preferred_label": "INGLÉS",
+      "areas": [
+        "Literatura y Lenguas",
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 792,
+      "preferred_label": "INSOR",
+      "areas": [
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 793,
+      "preferred_label": "INSTITUTO",
+      "areas": [
+        "Administrativo",
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 794,
+      "preferred_label": "INSTITUTO-DE-CIEGOS-Y-SORDOS-BOGOTÁ",
+      "areas": [
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 795,
+      "preferred_label": "INSTITUTO-DE-CIEGOS-Y-SORDOS-CALI",
+      "areas": [
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 797,
+      "preferred_label": "INTEGRACIÓN",
+      "areas": [
+        "Educación",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 800,
+      "preferred_label": "INTERNET",
+      "areas": [
+        "Tecnología e Informática"
+      ]
+    },
+    {
+      "concept_id": 802,
+      "preferred_label": "INTÉRPRETE",
+      "areas": [
+        "Lingüística",
+        "Comunicación"
+      ]
+    },
+    {
+      "concept_id": 808,
+      "preferred_label": "JARDÍN-INFANTIL",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 815,
+      "preferred_label": "JIRAFA",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 824,
+      "preferred_label": "JUSTICIA",
+      "areas": [
+        "Derecho",
+        "Filosofía"
+      ]
+    },
+    {
+      "concept_id": 826,
+      "preferred_label": "KÍNDER",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 839,
+      "preferred_label": "LENGUA-DE-SEÑAS",
+      "areas": [
+        "Lingüística",
+        "Comunicación"
+      ]
+    },
+    {
+      "concept_id": 840,
+      "preferred_label": "LENGUA-SISTEMA",
+      "areas": [
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 841,
+      "preferred_label": "LEY",
+      "areas": [
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 842,
+      "preferred_label": "LEÓN",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 845,
+      "preferred_label": "LIBRO",
+      "areas": [
+        "Literatura y Lenguas",
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 849,
+      "preferred_label": "LINGÜÍSTICA",
+      "areas": [
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 867,
+      "preferred_label": "LÍNEA-ECUATORIAL",
+      "areas": [
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 868,
+      "preferred_label": "MACHISMO",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 877,
+      "preferred_label": "MANIFESTACIÓN",
+      "areas": [
+        "Ciencias Sociales",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 884,
+      "preferred_label": "MAPA-COLOMBIA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 886,
+      "preferred_label": "MAR",
+      "areas": [
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 894,
+      "preferred_label": "MATEMÁTICAS",
+      "areas": [
+        "Matemáticas"
+      ]
+    },
+    {
+      "concept_id": 900,
+      "preferred_label": "MEDELLÍN",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 905,
+      "preferred_label": "MEDIR",
+      "areas": [
+        "Matemáticas",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 912,
+      "preferred_label": "MERCADO-ECONOMÍA",
+      "areas": [
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 915,
+      "preferred_label": "METAL",
+      "areas": [
+        "Química",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 922,
+      "preferred_label": "MINISTRO",
+      "areas": [
+        "Ciencias Sociales",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 931,
+      "preferred_label": "MONTAÑA",
+      "areas": [
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 946,
+      "preferred_label": "MUSEO",
+      "areas": [
+        "Artes",
+        "Historia"
+      ]
+    },
+    {
+      "concept_id": 952,
+      "preferred_label": "MÚSICA",
+      "areas": [
+        "Artes"
+      ]
+    },
+    {
+      "concept_id": 958,
+      "preferred_label": "NARCOTRÁFICO",
+      "areas": [
+        "Derecho",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 984,
+      "preferred_label": "NÚMERO",
+      "areas": [
+        "Matemáticas"
+      ]
+    },
+    {
+      "concept_id": 991,
+      "preferred_label": "ODONTÓLOGO",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 1000,
+      "preferred_label": "ORACIÓN-GRAMATICAL",
+      "areas": [
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 1002,
+      "preferred_label": "ORALIZAR",
+      "areas": [
+        "Lingüística",
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 1008,
+      "preferred_label": "OSO",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 1012,
+      "preferred_label": "OYENTE",
+      "areas": [
+        "Ciencias Sociales",
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 1017,
+      "preferred_label": "PALABRA",
+      "areas": [
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 1020,
+      "preferred_label": "PANAMÁ",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1048,
+      "preferred_label": "PAZ",
+      "areas": [
+        "Ciencias Sociales",
+        "Filosofía"
+      ]
+    },
+    {
+      "concept_id": 1049,
+      "preferred_label": "PAÍS",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1051,
+      "preferred_label": "PECADO",
+      "areas": [
+        "Filosofía",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1052,
+      "preferred_label": "PEDIATRA",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 1063,
+      "preferred_label": "PENE",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 1075,
+      "preferred_label": "PERIODISTA",
+      "areas": [
+        "Comunicación"
+      ]
+    },
+    {
+      "concept_id": 1082,
+      "preferred_label": "PERÚ",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1088,
+      "preferred_label": "PETRÓLEO",
+      "areas": [
+        "Ciencias de la Tierra",
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 1089,
+      "preferred_label": "PEZ",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 1110,
+      "preferred_label": "PLANICIE",
+      "areas": [
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 1121,
+      "preferred_label": "POLICÍA",
+      "areas": [
+        "Derecho",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1125,
+      "preferred_label": "POLÍTICA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1138,
+      "preferred_label": "PRESIDENTE",
+      "areas": [
+        "Ciencias Sociales",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 1140,
+      "preferred_label": "PRIMARIA",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 1145,
+      "preferred_label": "PROFESIONAL",
+      "areas": [
+        "Educación",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 1146,
+      "preferred_label": "PROFESOR",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 1148,
+      "preferred_label": "PROHIBIDO-NORMATIVO",
+      "areas": [
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 1151,
+      "preferred_label": "PSICOLOGÍA",
+      "areas": [
+        "Ciencias Sociales",
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 1152,
+      "preferred_label": "PUEBLO",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1153,
+      "preferred_label": "PUENTE-CONSTRUCCIÓN",
+      "areas": [
+        "Ingeniería",
+        "Diseño y Arquitectura"
+      ]
+    },
+    {
+      "concept_id": 1161,
+      "preferred_label": "QUIEBRA",
+      "areas": [
+        "Economía y Administración",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 1164,
+      "preferred_label": "QUÍMICA",
+      "areas": [
+        "Química"
+      ]
+    },
+    {
+      "concept_id": 1165,
+      "preferred_label": "RADIOGRAFÍA",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 1171,
+      "preferred_label": "REGISTRADORA",
+      "areas": [
+        "Tecnología e Informática",
+        "Economía y Administración"
+      ]
+    },
+    {
+      "concept_id": 1172,
+      "preferred_label": "REGLA-MEDICIÓN",
+      "areas": [
+        "Matemáticas"
+      ]
+    },
+    {
+      "concept_id": 1173,
+      "preferred_label": "REGLA-NORMATIVA",
+      "areas": [
+        "Derecho",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 1174,
+      "preferred_label": "REGLAMENTO",
+      "areas": [
+        "Administrativo",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 1175,
+      "preferred_label": "REINA",
+      "areas": [
+        "Historia",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1176,
+      "preferred_label": "RELIGIÓN",
+      "areas": [
+        "Ciencias Sociales",
+        "Filosofía"
+      ]
+    },
+    {
+      "concept_id": 1198,
+      "preferred_label": "RÍO",
+      "areas": [
+        "Ciencias de la Tierra"
+      ]
+    },
+    {
+      "concept_id": 1210,
+      "preferred_label": "SALÓN-DE-CLASE",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 1211,
+      "preferred_label": "SANGRE",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 1216,
+      "preferred_label": "SECUESTRAR",
+      "areas": [
+        "Derecho",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1224,
+      "preferred_label": "SEMÁFORO",
+      "areas": [
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 1231,
+      "preferred_label": "SEÑA/SEÑAR",
+      "areas": [
+        "Lingüística",
+        "Comunicación"
+      ]
+    },
+    {
+      "concept_id": 1232,
+      "preferred_label": "SIDA",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 1235,
+      "preferred_label": "SIGNIFICAR",
+      "areas": [
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 1237,
+      "preferred_label": "SINDICATO",
+      "areas": [
+        "Ciencias Sociales",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 1239,
+      "preferred_label": "SOCIEDAD",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1240,
+      "preferred_label": "SOCIEDAD-DE-SORDOS-DE-BOGOTÁ",
+      "areas": [
+        "Administrativo",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1247,
+      "preferred_label": "SORDO",
+      "areas": [
+        "Ciencias Sociales",
+        "Lingüística"
+      ]
+    },
+    {
+      "concept_id": 1248,
+      "preferred_label": "SORDO-CIEGO",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1255,
+      "preferred_label": "SUMAR",
+      "areas": [
+        "Matemáticas"
+      ]
+    },
+    {
+      "concept_id": 1262,
+      "preferred_label": "TABLERO",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 1267,
+      "preferred_label": "TALADRO",
+      "areas": [
+        "Ingeniería"
+      ]
+    },
+    {
+      "concept_id": 1274,
+      "preferred_label": "TAREA",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 1282,
+      "preferred_label": "TEMA",
+      "areas": [
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 1291,
+      "preferred_label": "TERMÓMETRO",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Física"
+      ]
+    },
+    {
+      "concept_id": 1293,
+      "preferred_label": "TIBURÓN",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 1299,
+      "preferred_label": "TOALLA-HIGIÉNICA",
+      "areas": [
+        "Medicina y Ciencias de la Salud"
+      ]
+    },
+    {
+      "concept_id": 1310,
+      "preferred_label": "TORTUGA",
+      "areas": [
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 1312,
+      "preferred_label": "TRABAJAR/TRABAJO",
+      "areas": [
+        "Economía y Administración",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1333,
+      "preferred_label": "UNIVERSIDAD",
+      "areas": [
+        "Educación",
+        "Administrativo"
+      ]
+    },
+    {
+      "concept_id": 1334,
+      "preferred_label": "UNIÓN-LIBRE",
+      "areas": [
+        "Derecho",
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1343,
+      "preferred_label": "VAGINA",
+      "areas": [
+        "Medicina y Ciencias de la Salud",
+        "Biología"
+      ]
+    },
+    {
+      "concept_id": 1351,
+      "preferred_label": "VENEZUELA",
+      "areas": [
+        "Ciencias Sociales"
+      ]
+    },
+    {
+      "concept_id": 1355,
+      "preferred_label": "VERDAD",
+      "areas": [
+        "Filosofía"
+      ]
+    },
+    {
+      "concept_id": 1361,
+      "preferred_label": "VIDA",
+      "areas": [
+        "Biología",
+        "Filosofía"
+      ]
+    },
+    {
+      "concept_id": 1370,
+      "preferred_label": "VOCABULARIO",
+      "areas": [
+        "Lingüística",
+        "Educación"
+      ]
+    },
+    {
+      "concept_id": 1373,
+      "preferred_label": "VOTAR",
+      "areas": [
+        "Ciencias Sociales",
+        "Derecho"
+      ]
+    },
+    {
+      "concept_id": 1377,
+      "preferred_label": "YO-PSICOANÁLISIS",
+      "areas": [
+        "Ciencias Sociales",
+        "Filosofía"
+      ]
+    }
+  ]
+}
