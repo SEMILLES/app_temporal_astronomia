@@ -10,7 +10,7 @@ from catalog_publication import (IdenticalPublication, PublicationBlocked,
                                  PublicationError, publication_preview,
                                  publish_catalog)
 from catalog_projection import build_catalog_projection
-from catalog_context import enrich_catalog
+from catalog_views import CATALOG_VIEWS, scope_catalog
 from usage_profile import display_profile, normalize
 from catalog_presentation import variation_type
 from database import conectar
@@ -46,6 +46,30 @@ def _catalog_counts(projection):
             "occurrences": sum(len(a["occurrences"]) for a in alternatives)}
 
 
+def _render_catalog(view_code, projection, **context):
+    view = CATALOG_VIEWS[view_code]
+    kind = context['catalog_kind']
+    version = request.view_args.get('version_number')
+    filter_keys = ('q', 'video', 'variacion',
+                   'campo' if view.filter_dimension == 'semantic_fields' else 'area')
+    filters = {key: request.args.getlist(key) for key in filter_keys if key in request.args}
+
+    def catalog_url(target='catalog', **identifiers):
+        latest = identifiers.pop('latest', False)
+        endpoint = f'catalog.{kind}_'
+        values = {'view_code': view_code, **identifiers, **filters}
+        if kind == 'external' and version is not None and not latest:
+            endpoint += 'version' + ('_' + target if target != 'catalog' else '')
+            values['version_number'] = version
+        else:
+            endpoint += target
+        return url_for(endpoint, **values)
+
+    return render_template('catalogo_lesico.html', catalog_view=view,
+                           catalog_url=catalog_url,
+                           catalog_counts=_catalog_counts(projection), **context)
+
+
 def _matches(concept, query):
     if not query:
         return True
@@ -61,10 +85,10 @@ def _matches(concept, query):
     return any(query in value.casefold() for value in terms)
 
 
-def _load():
+def _load(view_code):
     db = conectar()
     try:
-        projection = enrich_catalog(db, build_catalog_projection(db))
+        projection = scope_catalog(build_catalog_projection(db), CATALOG_VIEWS[view_code])
         blocking = db.execute(
             "SELECT count(*) FROM conflict "
             "WHERE status='open' AND severity='blocking'"
@@ -87,28 +111,28 @@ def _banner_context(blocking, non_blocking):
     }
 
 
-@catalog_bp.get("/catalogo-interno")
-def internal_catalog():
-    projection, blocking, non_blocking = _load()
+@catalog_bp.get("/catalogo-interno/colecciones/academica", defaults={"view_code": "academica"})
+@catalog_bp.get("/catalogo-interno", defaults={"view_code": "analizada"})
+def internal_catalog(view_code="analizada"):
+    projection, blocking, non_blocking = _load(view_code)
     raw_query = (request.args.get("q") or "").strip()
     concepts = [
         concept for concept in projection["concepts"]
         if _matches(concept, raw_query.casefold())
     ]
-    return render_template(
-        "catalogo_lesico.html", catalog_kind="internal",
+    return _render_catalog(view_code, projection, catalog_kind="internal",
         concepts=concepts,
         query=raw_query,
         selected_concept=None, selected_alternative=None, selected_relations=[],
-        catalog_counts=_catalog_counts(projection),
         **_presentation(None),
         **_banner_context(blocking, non_blocking),
     )
 
 
-@catalog_bp.get("/catalogo-interno/conceptos/<int:concept_id>")
-def internal_concept(concept_id):
-    projection, blocking, non_blocking = _load()
+@catalog_bp.get("/catalogo-interno/colecciones/academica/conceptos/<int:concept_id>", defaults={"view_code": "academica"})
+@catalog_bp.get("/catalogo-interno/conceptos/<int:concept_id>", defaults={"view_code": "analizada"})
+def internal_concept(concept_id, view_code="analizada"):
+    projection, blocking, non_blocking = _load(view_code)
     concept = next(
         (item for item in projection["concepts"] if item["concept_id"] == concept_id),
         None,
@@ -116,19 +140,18 @@ def internal_concept(concept_id):
     if concept is None:
         abort(404)
     alternative = concept["alternatives"][0] if concept["alternatives"] else None
-    return render_template(
-        "catalogo_lesico.html", catalog_kind="internal",
+    return _render_catalog(view_code, projection, catalog_kind="internal",
         concepts=projection["concepts"], query="", selected_concept=concept,
         selected_alternative=alternative, selected_relations=[],
-        catalog_counts=_catalog_counts(projection),
         **_presentation(concept),
         **_banner_context(blocking, non_blocking),
     )
 
 
-@catalog_bp.get("/catalogo-interno/alternativas/<int:alternative_id>")
-def internal_alternative(alternative_id):
-    projection, blocking, non_blocking = _load()
+@catalog_bp.get("/catalogo-interno/colecciones/academica/alternativas/<int:alternative_id>", defaults={"view_code": "academica"})
+@catalog_bp.get("/catalogo-interno/alternativas/<int:alternative_id>", defaults={"view_code": "analizada"})
+def internal_alternative(alternative_id, view_code="analizada"):
+    projection, blocking, non_blocking = _load(view_code)
     concept = alternative = None
     for item in projection["concepts"]:
         candidate = next(
@@ -145,11 +168,9 @@ def internal_alternative(alternative_id):
         relation for relation in concept["relations"]
         if relation["alternative_relation_id"] in alternative["relation_ids"]
     ]
-    return render_template(
-        "catalogo_lesico.html", catalog_kind="internal",
+    return _render_catalog(view_code, projection, catalog_kind="internal",
         concepts=projection["concepts"], query="", selected_concept=concept,
         selected_alternative=alternative, selected_relations=relations,
-        catalog_counts=_catalog_counts(projection),
         **_presentation(concept),
         **_banner_context(blocking, non_blocking),
     )
@@ -170,71 +191,77 @@ def _publication(version_number=None):
     finally: db.close()
 
 
-def _external_context(version_number=None):
+def _external_context(version_number=None, view_code="analizada"):
     publication, latest = _publication(version_number)
     if version_number is not None and publication is None: abort(404)
     projection = json.loads(publication["snapshot_json"]) if publication else {"concepts": []}
-    return publication, latest, projection
+    return publication, latest, scope_catalog(projection, CATALOG_VIEWS[view_code])
 
 
-@catalog_bp.get("/catalogo")
-def external_catalog():
-    publication, latest, projection = _external_context()
+@catalog_bp.get("/colecciones/academica", defaults={"view_code": "academica"})
+@catalog_bp.get("/catalogo", defaults={"view_code": "analizada"})
+def external_catalog(view_code="analizada"):
+    publication, latest, projection = _external_context(view_code=view_code)
     query = (request.args.get("q") or "").strip()
     concepts = [c for c in projection["concepts"] if _matches(c, query.casefold())]
-    return render_template("catalogo_lesico.html", catalog_kind="external",
+    return _render_catalog(view_code, projection, catalog_kind="external",
         publication=publication, latest=latest, concepts=concepts, query=query,
         historical=False, selected_concept=None, selected_alternative=None, selected_relations=[])
 
 
-@catalog_bp.get("/catalogo/v<int:version_number>")
-def external_version(version_number):
-    publication, latest, projection = _external_context(version_number)
+@catalog_bp.get("/colecciones/academica/v<int:version_number>", defaults={"view_code": "academica"})
+@catalog_bp.get("/catalogo/v<int:version_number>", defaults={"view_code": "analizada"})
+def external_version(version_number, view_code="analizada"):
+    publication, latest, projection = _external_context(version_number, view_code)
     query = (request.args.get("q") or "").strip()
-    return render_template("catalogo_lesico.html", catalog_kind="external",
+    return _render_catalog(view_code, projection, catalog_kind="external",
         publication=publication, latest=latest,
         concepts=[c for c in projection["concepts"] if _matches(c, query.casefold())], query=query,
         historical=version_number != latest, selected_concept=None,
         selected_alternative=None, selected_relations=[])
 
 
-def _external_concept(version_number, concept_id):
-    publication, latest, projection = _external_context(version_number)
+def _external_concept(version_number, concept_id, view_code):
+    publication, latest, projection = _external_context(version_number, view_code)
     concept = next((c for c in projection["concepts"] if c["concept_id"] == concept_id), None)
     if concept is None: abort(404)
     alternative = concept["alternatives"][0] if concept["alternatives"] else None
-    return render_template("catalogo_lesico.html", catalog_kind="external",
+    return _render_catalog(view_code, projection, catalog_kind="external",
         publication=publication, latest=latest, concepts=projection["concepts"], query="",
         selected_concept=concept, selected_alternative=alternative, selected_relations=[],
         **_presentation(concept),
         historical=publication["version_number"] != latest)
 
 
-@catalog_bp.get("/catalogo/conceptos/<int:concept_id>")
-def external_concept(concept_id): return _external_concept(None, concept_id)
-@catalog_bp.get("/catalogo/v<int:version_number>/conceptos/<int:concept_id>")
-def external_version_concept(version_number, concept_id): return _external_concept(version_number, concept_id)
+@catalog_bp.get("/colecciones/academica/conceptos/<int:concept_id>", defaults={"view_code": "academica"})
+@catalog_bp.get("/catalogo/conceptos/<int:concept_id>", defaults={"view_code": "analizada"})
+def external_concept(concept_id, view_code="analizada"): return _external_concept(None, concept_id, view_code)
+@catalog_bp.get("/colecciones/academica/v<int:version_number>/conceptos/<int:concept_id>", defaults={"view_code": "academica"})
+@catalog_bp.get("/catalogo/v<int:version_number>/conceptos/<int:concept_id>", defaults={"view_code": "analizada"})
+def external_version_concept(version_number, concept_id, view_code="analizada"): return _external_concept(version_number, concept_id, view_code)
 
 
-def _external_alternative(version_number, alternative_id):
-    publication, latest, projection = _external_context(version_number)
+def _external_alternative(version_number, alternative_id, view_code):
+    publication, latest, projection = _external_context(version_number, view_code)
     concept = alternative = None
     for candidate in projection["concepts"]:
         alternative = next((a for a in candidate["alternatives"] if a["alternative_id"] == alternative_id), None)
         if alternative: concept = candidate; break
     if alternative is None: abort(404)
     relations = [r for r in concept["relations"] if r["alternative_relation_id"] in alternative["relation_ids"]]
-    return render_template("catalogo_lesico.html", catalog_kind="external",
+    return _render_catalog(view_code, projection, catalog_kind="external",
         publication=publication, latest=latest, concepts=projection["concepts"], query="",
         selected_concept=concept, selected_alternative=alternative, selected_relations=relations,
         **_presentation(concept),
         historical=publication["version_number"] != latest)
 
 
-@catalog_bp.get("/catalogo/alternativas/<int:alternative_id>")
-def external_alternative(alternative_id): return _external_alternative(None, alternative_id)
-@catalog_bp.get("/catalogo/v<int:version_number>/alternativas/<int:alternative_id>")
-def external_version_alternative(version_number, alternative_id): return _external_alternative(version_number, alternative_id)
+@catalog_bp.get("/colecciones/academica/alternativas/<int:alternative_id>", defaults={"view_code": "academica"})
+@catalog_bp.get("/catalogo/alternativas/<int:alternative_id>", defaults={"view_code": "analizada"})
+def external_alternative(alternative_id, view_code="analizada"): return _external_alternative(None, alternative_id, view_code)
+@catalog_bp.get("/colecciones/academica/v<int:version_number>/alternativas/<int:alternative_id>", defaults={"view_code": "academica"})
+@catalog_bp.get("/catalogo/v<int:version_number>/alternativas/<int:alternative_id>", defaults={"view_code": "analizada"})
+def external_version_alternative(version_number, alternative_id, view_code="analizada"): return _external_alternative(version_number, alternative_id, view_code)
 
 
 @catalog_bp.get("/actualizar-catalogo")

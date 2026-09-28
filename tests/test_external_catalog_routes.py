@@ -1,9 +1,11 @@
-import sqlite3,tempfile,unittest
+import json,sqlite3,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from flask import Flask
 from access_control import install_access_context
 from catalog_publication import publish_catalog
+from catalog_projection import build_catalog_projection
+from concept_classification import apply_metadata
 from conflict_presentation import local_timestamp
 from database import crear_esquema
 from routes.catalog import catalog_bp
@@ -35,4 +37,82 @@ class ExternalCatalogRouteTests(unittest.TestCase):
         self.assertEqual(self.client.get("/mas/actualizar-catalogo").status_code,200)
         self.assertEqual(self.client.get("/rev/actualizar-catalogo").status_code,404)
         response=self.client.post("/ana/actualizar-catalogo",data={"access_role":"master","publication_comment":"x"}); self.assertEqual(response.status_code,404)
+
+    def test_shared_snapshot_academic_latest_history_and_scope_security(self):
+        base = '/colecciones/academica'
+        self.assertIn('Aún no hay una versión publicada', self.client.get(base).get_data(as_text=True))
+        self.assertEqual(self.client.get(base + '/v99').status_code, 404)
+        db = self.connect()
+        db.executemany('INSERT INTO concept(preferred_label,semantic_field_1,knowledge_area_1) VALUES(?,?,?)',
+                       [('ACADEMICO', 'Campo', 'Area'), ('GENERAL', 'Campo', 'Area')])
+        db.executemany('INSERT INTO alternative(concept_id,working_label) VALUES(?,?)', [(1,'1a'),(2,'1a'),(1,'1b')])
+        db.execute("INSERT INTO alternative_relation(alternative_low_id,alternative_high_id,phonological_parameter) VALUES(1,3,'CM')")
+        db.commit()
+        collection = db.execute("SELECT collection_id FROM collection WHERE code='academic-vocabulary'").fetchone()[0]
+        apply_metadata(db, 1, {'collections': {collection: 'join'}}, access_role='master')
+        db.close()
+        first = self.publish('Snapshot compartido sintetico')
+        for suffix in ('', '/v1'):
+            analyzed = self.client.get('/catalogo' + suffix).get_data(as_text=True)
+            academic = self.client.get(base + suffix).get_data(as_text=True)
+            self.assertIn('GENERAL', analyzed)
+            self.assertIn('ACADEMICO', analyzed)
+            self.assertIn('ACADEMICO', academic)
+            self.assertNotIn('GENERAL', academic)
+            self.assertIn('1 conceptos · 2 alternativas · 0 ocurrencias', academic)
+            self.assertIn('id="filtro-area"', academic)
+            self.assertNotIn('id="filtro-campos"', academic)
+            self.assertIn('id="filtro-campos"', analyzed)
+            self.assertNotIn('id="filtro-area"', analyzed)
+            for page in (academic, analyzed):
+                for control in ('buscador-catalogo', 'filtro-video', 'filtro-variacion'):
+                    self.assertIn(f'id="{control}"', page)
+            for entity in ('conceptos', 'alternativas'):
+                self.assertEqual(self.client.get(base + suffix + f'/{entity}/1').status_code, 200)
+                self.assertEqual(self.client.get(base + suffix + f'/{entity}/2').status_code, 404)
+                self.assertEqual(self.client.get('/catalogo' + suffix + f'/{entity}/2').status_code, 200)
+            detail = self.client.get(base + suffix + '/conceptos/1?area=area&campo=omitido&q=acad&video=1').get_data(as_text=True)
+            self.assertIn(f'{base}{suffix}/alternativas/3?', detail)
+            self.assertNotIn('href="/catalogo/', detail)
+            self.assertIn('area=area', detail)
+            self.assertNotIn('campo=omitido', detail)
+        # Live membership changes cannot change either view of the publication.
+        db = self.connect()
+        apply_metadata(db, 1, {'collections': {collection: 'leave'}}, access_role='master')
+        self.assertIn('ACADEMICO', self.client.get(base).get_data(as_text=True))
+        self.assertEqual(db.execute('SELECT count(*) FROM catalog_publication').fetchone()[0], 1)
+        self.assertEqual(db.execute('SELECT concept_count FROM catalog_publication').fetchone()[0], 2)
+        db.close()
+        self.publish('Retiro sintetico')
+        self.assertNotIn('ACADEMICO', self.client.get(base).get_data(as_text=True))
+        historical = self.client.get(base + '/v1').get_data(as_text=True)
+        self.assertIn('ACADEMICO', historical)
+        self.assertIn('Versión histórica', historical)
+        self.assertIn(f'href="{base}"', historical)
+        self.assertIn(base + '/v1/conceptos/1', historical)
+        db = self.connect()
+        self.assertEqual(db.execute('SELECT snapshot_json FROM catalog_publication WHERE publication_id=?',
+                                   (first['publication_id'],)).fetchone()[0], first['snapshot_json'])
+        db.close()
+
+    def test_old_snapshot_without_memberships_is_only_analyzed(self):
+        db = self.connect()
+        db.execute("INSERT INTO concept(preferred_label,knowledge_area_1) VALUES('ANTIGUO','Area')")
+        db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(1,'1a')")
+        projection = build_catalog_projection(db)
+        db.close()
+        for concept in projection['concepts']:
+            concept.pop('collections')
+            concept.pop('classifications')
+        # Synthetic historical publication, never a real database.
+        publication = {'snapshot_json': json.dumps(projection), 'version_number': 1,
+                       'published_at_display': 'Fecha sintetica', 'snapshot_sha256': 'synthetic'}
+        with patch('routes.catalog._publication', return_value=(publication, 2)):
+            for suffix in ('', '/v1'):
+                self.assertIn('ANTIGUO', self.client.get('/catalogo' + suffix).get_data(as_text=True))
+                response = self.client.get('/colecciones/academica' + suffix)
+                self.assertEqual(response.status_code, 200)
+                self.assertNotIn('ANTIGUO', response.get_data(as_text=True))
+                for entity in ('conceptos', 'alternativas'):
+                    self.assertEqual(self.client.get(f'/colecciones/academica{suffix}/{entity}/1').status_code, 404)
 if __name__=="__main__": unittest.main()
