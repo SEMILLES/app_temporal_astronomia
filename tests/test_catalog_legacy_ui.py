@@ -1,4 +1,5 @@
 import hashlib, sqlite3, tempfile, unittest
+from html import escape
 from pathlib import Path
 from unittest.mock import patch
 
@@ -6,6 +7,7 @@ from flask import Flask
 
 from access_control import install_access_context
 from catalog_publication import publish_catalog
+from catalog_projection import build_catalog_projection
 from database import crear_esquema
 from routes.catalog import catalog_bp
 
@@ -107,6 +109,45 @@ class LegacyCatalogUITests(unittest.TestCase):
         self.assertIn("<h4>Historial de nomenclatura</h4>",html)
         self.assertIn("Sin cambios de nomenclatura registrados.",html)
         self.assertNotIn("<details class=\"bloque informacion-tecnica-historial\" open",html)
+
+    def test_morphology_note_only_at_end_of_technical_history_in_both_views(self):
+        db = self.connect()
+        try:
+            projection = build_catalog_projection(db)
+        finally:
+            db.close()
+        concept = projection['concepts'][0]
+        concept['collections'] = [{'code': 'academic-vocabulary'}]
+        alternative = next(a for a in concept['alternatives'] if a['alternative_id'] == 1)
+        original_morphology = alternative['morphology']
+        before = self.digest()
+        for note in ('  Análisis documentado <sin HTML> & original  ', None, '', ' \t\n '):
+            alternative['morphology'] = {**original_morphology, 'note': note}
+            for base in ('/ana/catalogo-interno', '/ana/catalogo-interno/colecciones/academica'):
+                with self.subTest(note=note, view=base), patch(
+                    'routes.catalog.build_catalog_projection', return_value=projection
+                ):
+                    response = self.client.get(base + '/alternativas/1')
+                    self.assertEqual(response.status_code, 200)
+                    html = response.get_data(as_text=True)
+                    morphology = html.split('data-panel="morfologia-1"', 1)[1].split('</section>', 1)[0]
+                    technical = html.split('<details class="bloque informacion-tecnica-historial">', 1)[1].split('</details>', 1)[0]
+                    self.assertIn('Número de componentes', morphology)
+                    self.assertIn('Permutación libre', morphology)
+                    self.assertIn('raíz', morphology)
+                    self.assertNotIn('Nota morfológica', morphology)
+                    if note and note.strip():
+                        rendered = escape(note)
+                        self.assertEqual(html.count(rendered), 1)
+                        self.assertNotIn(rendered, morphology)
+                        self.assertTrue(technical.endswith(
+                            f'<section><h4>Nota morfológica</h4><p>{rendered}</p></section>'))
+                    else:
+                        self.assertNotIn('Nota morfológica', html)
+        # An Alternative with no morphology must not gain an empty note section.
+        html = self.client.get('/ana/catalogo-interno/alternativas/2').get_data(as_text=True)
+        self.assertNotIn('Nota morfológica', html)
+        self.assertEqual(self.digest(), before)
     def test_provenance_document_records_exact_source(self):
         text=(ROOT/"docs/legacy_catalog_ui.md").read_text(encoding="utf-8")
         self.assertIn("ab5a06d5f3a9cf2e2da82dc664571f7a46996bcd",text)
