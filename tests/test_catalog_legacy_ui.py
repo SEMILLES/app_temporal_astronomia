@@ -45,7 +45,7 @@ class LegacyCatalogUITests(unittest.TestCase):
         before=self.digest()
         for role in ("ana","rev","mas"):
             response=self.client.get(f"/{role}/catalogo-interno"); self.assertEqual(response.status_code,200)
-            html=response.get_data(as_text=True); self.assertIn("Colección Analizada · LeSiCo",html); self.assertIn("Universidad Nacional de Colombia",html); self.assertIn("Versión de trabajo · No publicada",html)
+            html=response.get_data(as_text=True); self.assertIn("Colección Analizada · LeSiCo",html); self.assertIn('<p class="sobrelinea">SEMILLES</p>',html); self.assertIn("Versión de trabajo · No publicada",html)
             self.assertIn("1 conceptos · 2 alternativas · 1 ocurrencias",html)
             self.assertIn("CATÁLOGO INTERNO",html); self.assertNotIn("LeSiCo: base de datos léxica de la LSC",html)
             self.assertNotIn("v0",html); self.assertIn("LUNA",html); self.assertIn("ASTRO&lt;script&gt;",html)

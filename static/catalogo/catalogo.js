@@ -1,45 +1,39 @@
 "use strict";
 const normalizarCatalogo=valor=>String(valor||"").normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[-_]+/g," ").replace(/\s+/g," ").trim().toLowerCase();
 function coincideConcepto(datos,filtros){
-  const normalizar=normalizarCatalogo,campos=JSON.parse(datos.semanticFields||"[]").map(normalizar);
+  const normalizar=normalizarCatalogo,clasificaciones=JSON.parse(datos.classifications||"[]").map(normalizar);
   return (!filtros.consulta||normalizar(datos.conceptoBusqueda).includes(normalizar(filtros.consulta)))
-    &&(!filtros.area||(datos.knowledgeAreas||"").split("||").map(normalizar).includes(filtros.area))
     &&(!filtros.video||datos.hasVideo==="true")
     &&(!filtros.variacion||datos.variationType===filtros.variacion)
-    &&(!filtros.campos.length||filtros.campos.some(campo=>campos.includes(campo)));
+    &&(!filtros.clasificaciones.length||filtros.clasificaciones.some(valor=>clasificaciones.includes(valor)));
 }
 if(typeof module!=="undefined")module.exports={coincideConcepto,normalizarCatalogo};
 if(typeof document!=="undefined")document.addEventListener("DOMContentLoaded",()=>{
-  const buscador=document.querySelector("#buscador-catalogo"),filtroVideo=document.querySelector("#filtro-video"),filtroArea=document.querySelector("#filtro-area"),filtroVariacion=document.querySelector("#filtro-variacion"),filtroCampos=document.querySelector("#filtro-campos"),buscadorCampos=document.querySelector("#buscador-campos");
+  const buscador=document.querySelector("#buscador-catalogo"),filtroVideo=document.querySelector("#filtro-video"),filtroVariacion=document.querySelector("#filtro-variacion"),filtroClasificaciones=document.querySelector("#filtro-clasificaciones"),buscadorClasificaciones=document.querySelector("#buscador-clasificaciones");
   const conceptos=[...document.querySelectorAll("[data-concepto-busqueda]")],contador=document.querySelector("#contador-resultados"),normalizar=normalizarCatalogo;
-  if(filtroArea){
-    const areas=new Map();
-    conceptos.forEach(elemento=>(elemento.dataset.knowledgeAreas||"").split("||").filter(Boolean).forEach(area=>areas.set(normalizar(area),area)));
-    [...areas].sort((a,b)=>a[1].localeCompare(b[1],"es")).forEach(([value,label])=>filtroArea.add(new Option(label,value)));
-  }
-  if(filtroCampos){
+  if(filtroClasificaciones){
     const campos=new Map();
-    conceptos.forEach(elemento=>JSON.parse(elemento.dataset.semanticFields||"[]").forEach(campo=>campos.set(normalizar(campo),campo)));
+    conceptos.forEach(elemento=>JSON.parse(elemento.dataset.classifications||"[]").forEach(campo=>campos.set(normalizar(campo),campo)));
+    if(!campos.size){const aviso=document.createElement("p");aviso.textContent="No hay clasificaciones disponibles";filtroClasificaciones.append(aviso);}
     [...campos].sort((a,b)=>a[1].localeCompare(b[1],"es")).forEach(([value,label])=>{
       const fila=document.createElement("label"),casilla=document.createElement("input"),texto=document.createElement("span");
       casilla.type="checkbox";casilla.value=value;texto.textContent=label;
-      fila.append(casilla,texto);filtroCampos.append(fila);
+      fila.append(casilla,texto);filtroClasificaciones.append(fila);
     });
   }
+  const parametro=filtroClasificaciones?.dataset.filterParam;
   const parametros=new URLSearchParams(location.search);
   if(buscador&&parametros.has("q"))buscador.value=parametros.get("q");
-  if(filtroArea)filtroArea.value=parametros.get("area")||"";
   if(filtroVideo)filtroVideo.checked=parametros.get("video")==="1";
   if(filtroVariacion)filtroVariacion.value=parametros.get("variacion")||"";
-  filtroCampos?.querySelectorAll("input").forEach(casilla=>casilla.checked=parametros.getAll("campo").includes(casilla.value));
-  const estado=()=>({consulta:buscador?.value||"",area:filtroArea?.value||"",video:Boolean(filtroVideo?.checked),variacion:filtroVariacion?.value||"",campos:[...(filtroCampos?.querySelectorAll("input:checked")||[])].map(casilla=>casilla.value)});
+  filtroClasificaciones?.querySelectorAll("input").forEach(casilla=>casilla.checked=parametros.getAll(parametro).includes(casilla.value));
+  const estado=()=>({consulta:buscador?.value||"",video:Boolean(filtroVideo?.checked),variacion:filtroVariacion?.value||"",clasificaciones:[...(filtroClasificaciones?.querySelectorAll("input:checked")||[])].map(casilla=>casilla.value)});
   const consultaActual=()=>{
     const filtros=estado(),params=new URLSearchParams();
     if(filtros.consulta)params.set("q",filtros.consulta);
-    if(filtros.area)params.set("area",filtros.area);
     if(filtros.video)params.set("video","1");
     if(filtros.variacion)params.set("variacion",filtros.variacion);
-    filtros.campos.forEach(campo=>params.append("campo",campo));return params.toString();
+    filtros.clasificaciones.forEach(valor=>params.append(parametro,valor));return params.toString();
   };
   const filtrar=()=>{
     const filtros=estado();let visibles=0;
@@ -49,14 +43,14 @@ if(typeof document!=="undefined")document.addEventListener("DOMContentLoaded",()
     const query=consultaActual();
     document.querySelectorAll("[data-concepto-busqueda],[data-alternative-select]").forEach(enlace=>{const url=new URL(enlace.getAttribute("href"),location.href);url.search=query;enlace.setAttribute("href",url.href)});
   };
-  const buscarCampos=()=>filtroCampos?.querySelectorAll("label").forEach(fila=>fila.hidden=!normalizar(fila.textContent).includes(normalizar(buscadorCampos?.value)));
+  const buscarCampos=()=>filtroClasificaciones?.querySelectorAll("label").forEach(fila=>fila.hidden=!normalizar(fila.textContent).includes(normalizar(buscadorClasificaciones?.value)));
   buscador?.addEventListener("input",filtrar);
-  [filtroArea,filtroVideo,filtroVariacion,filtroCampos].forEach(control=>control?.addEventListener("change",filtrar));
-  buscadorCampos?.addEventListener("input",buscarCampos);
+  [filtroVideo,filtroVariacion,filtroClasificaciones].forEach(control=>control?.addEventListener("change",filtrar));
+  buscadorClasificaciones?.addEventListener("input",buscarCampos);
   document.querySelector("#limpiar-filtros")?.addEventListener("click",()=>{
-    if(buscador)buscador.value="";if(filtroArea)filtroArea.value="";if(filtroVideo)filtroVideo.checked=false;if(filtroVariacion)filtroVariacion.value="";
-    filtroCampos?.querySelectorAll("input").forEach(casilla=>casilla.checked=false);
-    if(buscadorCampos)buscadorCampos.value="";buscarCampos();filtrar();history.replaceState(null,"",location.pathname);
+    if(buscador)buscador.value="";if(filtroVideo)filtroVideo.checked=false;if(filtroVariacion)filtroVariacion.value="";
+    filtroClasificaciones?.querySelectorAll("input").forEach(casilla=>casilla.checked=false);
+    if(buscadorClasificaciones)buscadorClasificaciones.value="";buscarCampos();filtrar();history.replaceState(null,"",location.pathname);
     // A direct server-side search may have returned a reduced concept list.
     if(parametros.has("q"))location.assign(location.pathname);
   });

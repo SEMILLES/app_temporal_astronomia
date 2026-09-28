@@ -1,13 +1,13 @@
 "use strict";
 const assert=require('node:assert/strict');
 const {coincideConcepto,normalizarCatalogo}=require('../static/catalogo/catalogo.js');
-const concept={conceptoBusqueda:'A-VECES glosa',knowledgeAreas:'Astronomía||Artes',semanticFields:JSON.stringify(['Expresiones de Tiempo','Clima']),hasVideo:'true',variationType:'both'};
-const all={consulta:'',area:'',video:false,variacion:'',campos:[]};
+const concept={conceptoBusqueda:'A-VECES glosa',classifications:JSON.stringify(['Expresiones de Tiempo','Clima']),hasVideo:'true',variationType:'both'};
+const all={consulta:'',video:false,variacion:'',clasificaciones:[]};
 assert(coincideConcepto(concept,all));
-assert(coincideConcepto(concept,{consulta:'a veces',area:'astronomia',video:true,variacion:'both',campos:['clima']}));
-for(const override of [{consulta:'inexistente'},{area:'biologia'},{variacion:'lexical'},{campos:['colores']}])assert(!coincideConcepto(concept,{...all,...override}));
+assert(coincideConcepto(concept,{consulta:'a veces',video:true,variacion:'both',clasificaciones:['clima']}));
+for(const override of [{consulta:'inexistente'},{variacion:'lexical'},{clasificaciones:['colores']}])assert(!coincideConcepto(concept,{...all,...override}));
 assert(!coincideConcepto({...concept,hasVideo:'false'},{...all,video:true}));
-assert(coincideConcepto(concept,{...all,campos:['colores','clima']}));
+assert(coincideConcepto(concept,{...all,clasificaciones:['colores','clima']}));
 for(const variation of ['none','lexical','phonological','both']){
   assert(coincideConcepto({...concept,variationType:variation},{...all,variacion:variation}));
 }
@@ -35,7 +35,8 @@ for(const academic of [false,true]){
   const card=element(concept),alternative=element({alternativeSelect:'1'});
   card.attributes.href=base+'/conceptos/1';alternative.attributes.href=base+'/alternativas/1';
   const controls=Object.fromEntries(['buscador-catalogo','filtro-video','filtro-variacion','contador-resultados','limpiar-filtros',
-    ...(academic?['filtro-area']:['filtro-campos','buscador-campos'])].map(id=>['#'+id,element()]));
+    'filtro-clasificaciones','buscador-clasificaciones'].map(id=>['#'+id,element()]));
+  controls['#filtro-clasificaciones'].dataset.filterParam=academic?'area':'campo';
   const document={
     addEventListener(event,callback){callback()},
     querySelector(selector){return controls[selector]||null},
@@ -47,9 +48,9 @@ for(const academic of [false,true]){
     },
     createElement(){return element()}
   };
-  vm.runInNewContext(script,{document,URL,URLSearchParams,
+  vm.runInNewContext(script,{document,URL,URLSearchParams,history:{replaceState(){}},
     Option:function(label,value){this.label=label;this.value=value},
-    location:{search:'?q=a&area=astronomia&campo=clima&video=1&variacion=both',href:'https://example.test'+base}});
+    location:{search:'?q=a&area=clima&area=expresiones+de+tiempo&campo=clima&campo=expresiones+de+tiempo&video=1&variacion=both',pathname:base,assign(){},href:'https://example.test'+base}});
   for(const link of [card,alternative]){
     const url=new URL(link.attributes.href);
     assert(url.pathname.startsWith(base+'/'));
@@ -58,10 +59,32 @@ for(const academic of [false,true]){
     assert.equal(url.searchParams.get('variacion'),'both');
     assert.equal(url.searchParams.has('area'),academic);
     assert.equal(url.searchParams.has('campo'),!academic);
+    assert.equal(url.searchParams.getAll(academic?'area':'campo').length,2);
   }
   assert.equal(controls['#contador-resultados'].textContent,'1 concepto(s)');
   controls['#buscador-catalogo'].value='inexistente';
   controls['#buscador-catalogo'].listeners.input();
   assert.equal(controls['#contador-resultados'].textContent,'0 concepto(s)');
+  controls['#buscador-clasificaciones'].value='inexistente';
+  controls['#buscador-clasificaciones'].listeners.input();
+  assert(controls['#filtro-clasificaciones'].children.every(row=>row.hidden));
+  controls['#limpiar-filtros'].listeners.click();
+  assert.equal(controls['#contador-resultados'].textContent,'1 concepto(s)');
+  assert.equal(new URL(card.attributes.href).search,'');
+  assert(controls['#filtro-clasificaciones'].querySelectorAll('input').every(input=>!input.checked));
 }
 console.log('DOM por colección, controles ausentes y navegación filtrada: OK');
+
+for(const withEmptyGroup of [false,true]){
+  const group=element({filterParam:'area'}),counter=element();
+  const document={
+    addEventListener(event,callback){callback()},
+    querySelector(selector){return selector==='#contador-resultados'?counter:
+      selector==='#filtro-clasificaciones'&&withEmptyGroup?group:null},
+    querySelectorAll(){return []},createElement(){return element()}
+  };
+  vm.runInNewContext(script,{document,URL,URLSearchParams,location:{search:'?campo=ignorado'}});
+  assert.equal(counter.textContent,'0 concepto(s)');
+  if(withEmptyGroup)assert.equal(group.children[0].textContent,'No hay clasificaciones disponibles');
+}
+console.log('Clasificaciones vacías y controles opcionales ausentes: OK');

@@ -119,8 +119,8 @@ class InternalCatalogRouteTests(unittest.TestCase):
         db=self.connect();db.execute("UPDATE concept SET knowledge_area_1='Astronomía',knowledge_area_2='Lingüística'");db.commit();db.close()
         html=self.client.get("/ana/catalogo-interno/conceptos/1").get_data(as_text=True)
         self.assertIn('data-knowledge-areas="Astronomía||Lingüística"',html)
-        self.assertNotIn('id="filtro-area"',html)
-        self.assertIn('id="filtro-campos"',html)
+        self.assertNotIn('data-filter-param="area"',html)
+        self.assertIn('data-filter-param="campo"',html)
 
     def academic_fixture(self):
         db = self.connect()
@@ -151,15 +151,15 @@ class InternalCatalogRouteTests(unittest.TestCase):
             self.assertNotIn('EXTERNO', html)
             self.assertIn('1 conceptos · 2 alternativas · 1 ocurrencias', html)
             self.assertIn('Vocabulario académico en LSC', html)
-            self.assertIn('id="filtro-area"', html)
-            self.assertNotIn('id="filtro-campos"', html)
+            self.assertIn('data-filter-param="area"', html)
+            self.assertNotIn('data-filter-param="campo"', html)
             self.assertIn('<span>Area sintetica</span>', html)
             self.assertNotIn('<span>Campo sintetico</span>', html)
             analyzed = self.client.get(f'/{role}/catalogo-interno').get_data(as_text=True)
             self.assertIn('EXTERNO', analyzed)
             self.assertIn('Colección Analizada', analyzed)
             self.assertIn('<span>Campo sintetico</span>', analyzed)
-            self.assertNotIn('id="filtro-area"', analyzed)
+            self.assertNotIn('data-filter-param="area"', analyzed)
             for page in (html, analyzed):
                 for control in ('buscador-catalogo', 'filtro-video', 'filtro-variacion'):
                     self.assertIn(f'id="{control}"', page)
@@ -198,6 +198,35 @@ class InternalCatalogRouteTests(unittest.TestCase):
                 self.assertEqual(len(classification), 1)
                 self.assertEqual(len(memberships), 1)
                 self.assertNotIn('concept_id=', classification[0])
+
+    def test_collection_navigation_branding_theme_and_detail_hierarchy(self):
+        self.academic_fixture()
+        base = '/ana/catalogo-interno'
+        academic = base + '/colecciones/academica'
+        for path, theme, brand, param in (
+            (base, 'analizada', 'SEMILLES', 'campo'),
+            (academic, 'academica', 'SEMILLES · Universidad Nacional de Colombia', 'area')):
+            html = self.client.get(path).get_data(as_text=True)
+            self.assertIn(f'class="catalogo catalogo--{theme}"', html)
+            self.assertIn(f'<p class="sobrelinea">{brand}</p>', html)
+            self.assertIn(f'href="{path}" aria-current="page"', html)
+            self.assertIn('Colección Analizada</a>', html)
+            self.assertIn('Vocabulario Académico</a>', html)
+            self.assertIn('id="buscador-clasificaciones"', html)
+            self.assertIn(f'data-filter-param="{param}"', html)
+            self.assertNotIn('<select id="filtro-area"', html)
+            self.assertIn('role="group"', html)
+        for entity in ('conceptos', 'alternativas'):
+            member = self.client.get(f'{base}/{entity}/1').get_data(as_text=True)
+            self.assertIn(f'href="{academic}/{entity}/1"', member)
+            outsider = self.client.get(f'{base}/{entity}/2').get_data(as_text=True)
+            self.assertIn(f'href="{academic}"', outsider)
+            self.assertNotIn(f'href="{academic}/{entity}/2"', outsider)
+        html = self.client.get(academic + '/conceptos/1?area=uno&area=dos&campo=omitido').get_data(as_text=True)
+        self.assertIn('area=uno&amp;area=dos', html)
+        self.assertNotIn('campo=omitido', html)
+        self.assertIn('clasificacion-principal" aria-label="Área de conocimiento"', html)
+        self.assertIn('clasificacion-secundaria" aria-label="Campo semántico"', html)
 
 
 if __name__ == "__main__":

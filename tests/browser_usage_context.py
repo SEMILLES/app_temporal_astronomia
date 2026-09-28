@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT/'tests'))
 from test_usage_context import CatalogContextTests, connect
+from concept_classification import apply_metadata
 from playwright.sync_api import sync_playwright
 from werkzeug.serving import make_server
 
@@ -17,6 +18,11 @@ def main():
     db=connect(fixture.path)
     db.execute("INSERT INTO concept(preferred_label,semantic_field_1,knowledge_area_1) VALUES('A-VECES','Expresiones de Tiempo','Artes')")
     db.execute("INSERT INTO alternative(concept_id,working_label) VALUES(2,'1a')")
+    db.commit()
+    collection=db.execute("SELECT collection_id FROM collection WHERE code='academic-vocabulary'").fetchone()[0]
+    for concept_id in (1,2):
+        apply_metadata(db,concept_id,{'collections':{collection:'join'}},access_role='master')
+    db.execute("UPDATE concept SET knowledge_area_1='Biología' WHERE concept_id=1")
     db.commit();db.close()
     server=make_server('127.0.0.1',0,fixture.client.application)
     thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
@@ -37,11 +43,10 @@ def main():
             assert page.locator('[data-alternative-panel="3"]').is_visible()
             assert page.locator('[data-alternative-panel="3"] .media-alternativa').count()==0
             page.locator('#filtro-variacion').select_option('both');assert visible()==1
-            page.locator('#filtro-area').select_option('artes');assert visible()==1
-            page.locator('#buscador-campos').fill('col');assert page.locator('#filtro-campos label:visible').count()==1
-            page.locator('#filtro-campos input[value="colores"]').check();assert visible()==1
-            page.locator('#buscador-campos').fill('');page.locator('#filtro-campos input[value="expresiones de tiempo"]').check()
-            assert page.locator('#filtro-campos input:checked').count()==2
+            page.locator('#buscador-clasificaciones').fill('col');assert page.locator('#filtro-clasificaciones label:visible').count()==1
+            page.locator('#filtro-clasificaciones input[value="colores"]').check();assert visible()==1
+            page.locator('#buscador-clasificaciones').fill('');page.locator('#filtro-clasificaciones input[value="expresiones de tiempo"]').check()
+            assert page.locator('#filtro-clasificaciones input:checked').count()==2
             page.locator('#limpiar-filtros').click();assert visible()==2
             page.locator('#buscador-catalogo').fill('a veces');assert visible()==1
             page.locator('.boton-concepto:visible').click()
@@ -54,6 +59,20 @@ def main():
             page.screenshot(path=str(output/'usage-context-desktop.png'),full_page=True)
             page.set_viewport_size({'width':390,'height':844})
             page.screenshot(path=str(output/'usage-context-mobile.png'),full_page=True)
+            page.locator('.colecciones-catalogo a',has_text='Vocabulario Académico').click()
+            assert '/colecciones/academica/' in page.url
+            assert page.locator('body').get_attribute('class')=='catalogo catalogo--academica'
+            assert page.locator('.sobrelinea').inner_text()=='SEMILLES · Universidad Nacional de Colombia'
+            page.locator('#filtro-clasificaciones input[value="biologia"]').check()
+            assert visible()==1
+            page.locator('#filtro-clasificaciones input[value="artes"]').check()
+            assert visible()==2
+            assert 'area=biologia' in page.locator('.boton-concepto').first.get_attribute('href')
+            page.locator('#buscador-clasificaciones').fill('bio')
+            assert page.locator('#filtro-clasificaciones label:visible').count()==1
+            page.locator('#limpiar-filtros').click()
+            assert visible()==2
+            assert page.evaluate('document.documentElement.scrollWidth <= innerWidth')
             assert not errors,errors
             browser.close()
             report={'browser':'Chromium','javascript_errors':errors,'filters_combined':True,'all_alternatives_retained':True,'conditional_profile_tab':True,'semantic_multiselect_search':True,'navigation_and_clear':True}
