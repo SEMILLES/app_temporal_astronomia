@@ -1,0 +1,4 @@
+<option value="">Seleccione</option>
+{% for parameter in phonological_parameters %}
+<option value="{{ parameter }}"{% if selected_parameter == parameter %} selected{% endif %}>{{ parameter }}</option>
+{% endfor %}

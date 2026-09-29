@@ -1,0 +1,6 @@
+
+<option value="">Seleccione</option>
+<option value="N/A"{% if selected_count == 'N/A' %} selected{% endif %}>N/A</option>
+{% for count in range(1,11) %}
+<option value="{{ count }}"{% if selected_count == (count ~ '') %} selected{% endif %}>{{ count }}</option>
+{% endfor %}

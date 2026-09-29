@@ -1,0 +1,30 @@
+<template id="component-template">
+<fieldset class="component">
+<legend>Componente</legend>
+
+<input type="number" min="1" name="component_position" aria-label="Posición">
+
+<p>Tipo de componente:
+<label><input type="radio" name="component_type_INDEX" value="existing"> Alternativa existente</label>
+<label><input type="radio" name="component_type_INDEX" value="unapproved"> Componente no aprobado / con dudas</label>
+</p>
+
+<div class="existing-component" hidden>
+<label>Alternativa vigente
+<select name="component_alternative_id">
+<option value="">Seleccione</option>
+{% for component in component_alternatives %}
+<option value="{{ component['alternative_id'] }}">{{ component['preferred_label'] }}-{{ component['working_label'] }}</option>
+{% endfor %}
+</select>
+</label>
+</div>
+
+<div class="unapproved-component" hidden>
+<label>Nota (obligatoria si hay dudas)
+<textarea name="component_note"></textarea>
+</label>
+</div>
+
+</fieldset>
+</template>

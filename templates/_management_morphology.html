@@ -1,0 +1,31 @@
+{% set count = morphology_values.component_count %}
+{% set allow_components = count == 'N/A' or (count|int) >= 2 %}
+{% set show_permutation = count != 'N/A' and (count|int) >= 2 %}
+<fieldset id="morphology">
+<legend>Morfología de la alternativa</legend>
+<p><label>Cantidad de componentes
+<select name="component_count" required>
+{% with selected_count=count %}{% include '_morphology_count_options.html' %}{% endwith %}
+{% if count not in ('', 'N/A') and (count|int) > 10 %}<option value="{{ count }}" selected>{{ count }} (vigente)</option>{% endif %}
+</select></label></p>
+<p id="permutation-field"{% if not show_permutation %} hidden{% endif %}>
+<label>¿Los componentes admiten permutación libre?
+<select name="free_permutation"{% if not show_permutation %} disabled{% endif %}>
+{% with selected_permutation=morphology_values.free_permutation %}{% include '_morphology_permutation_options.html' %}{% endwith %}
+</select></label></p>
+<div id="component-registration-field"{% if not allow_components %} hidden{% endif %}>
+<p>¿Se identificaron componentes?
+{% for value, label in [('yes','Sí'),('no','No')] %}
+<label><input type="radio" name="record_components" value="{{ value }}"{% if morphology_values.record_components == value %} checked{% endif %}{% if not allow_components %} disabled{% endif %}> {{ label }}</label>
+{% endfor %}</p>
+<div id="component-controls" hidden>
+<div id="components"></div>
+<p><small>Es posible registrar únicamente los componentes identificados; no es necesario completar la cantidad total declarada. Para N/A no hay un límite derivado de la cantidad.</small></p>
+<button type="button" id="add-component">Agregar componente identificado</button>
+<button type="button" id="remove-last-component" disabled>Eliminar último componente</button>
+</div></div>
+{% include '_morphology_component_template.html' %}
+<script type="application/json" id="management-components">{{ morphology_values.components|tojson }}</script>
+<p><label>Observación <textarea name="morphology_note">{{ morphology_values.morphology_note }}</textarea></label></p>
+<noscript><p>Active JavaScript para editar los componentes de la morfología.</p></noscript>
+</fieldset>

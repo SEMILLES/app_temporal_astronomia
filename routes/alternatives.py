@@ -4,6 +4,8 @@ from flask import Blueprint, render_template, request, redirect, url_for, g, abo
 
 import sqlite3
 import re
+from werkzeug.datastructures import MultiDict
+from morphology_form import component_rows
 
 from database import conectar
 from source_details import occurrence_presentation
@@ -71,6 +73,58 @@ def _labels_from_form(form):
             if key.startswith("label_")}
 
 
+def _management_morphology_values(form):
+    """Adapt the modern controls to the existing versioned admin operation."""
+    count = form.get("component_count", "").strip()
+    if not count:
+        raise MorphologyValidationError("Seleccione una cantidad de componentes o N/A.")
+    if count != "N/A" and (not count.isdigit() or int(count) < 1):
+        raise MorphologyValidationError("La cantidad de componentes debe ser un entero positivo o N/A.")
+    if count == "1":
+        components = []  # Ignore stale hidden values, including malformed rows.
+    elif "record_components" in form:
+        if form.get("record_components") not in ("yes", "no"):
+            raise MorphologyValidationError("Indique si se identificaron componentes.")
+        rows_form = MultiDict((key, value) for key, value in form.items(multi=True)
+                             if key == "record_components" or
+                             (key.startswith("component_") and key != "component_count"
+                              and not key.endswith("_label")))
+        components = component_rows(rows_form)
+        # Preserve labels carried by older canonical records, without turning
+        # them into a new editable field or dropping them on an unchanged save.
+        for item, row_id in zip(components, form.getlist("component_row_id")):
+            item["component_label"] = form.get(f"component_{row_id}_label") or None
+    else:
+        components = _components_from_form(form)  # Forms opened before this UI.
+    if count != "N/A" and len(components) > int(count):
+        raise MorphologyValidationError("Los componentes identificados no pueden superar la cantidad declarada.")
+    return {"component_count": None if count == "N/A" else count,
+            "component_count_not_applicable": count == "N/A",
+            "free_permutation": "N/A" if count in ("1", "N/A") else form.get("free_permutation", "SIN INFORMACIÓN"),
+            "note": form.get("morphology_note"), "components": components}
+
+
+def _management_morphology_form(morphology, components):
+    values = {"component_count": "", "free_permutation": "SIN INFORMACIÓN",
+              "record_components": "no", "morphology_note": "", "components": []}
+    if morphology:
+        values.update(component_count="N/A" if morphology["component_count_not_applicable"] else str(morphology["component_count"] or ""),
+                      free_permutation=morphology["free_permutation"] or "SIN INFORMACIÓN",
+                      morphology_note=morphology["note"] or "", record_components="yes" if components else "no")
+        values["components"] = [dict(position=c["position"], type="existing" if c["component_alternative_id"] else "unapproved",
+                                     alternative_id=str(c["component_alternative_id"] or ""),
+                                     note=c["note"] or "", label=c["component_label"] or "") for c in components]
+    if request.method == "POST" and request.form.get("action") == "morphology":
+        # Used only on a validation error; the caller selects this snapshot.
+        submitted = {key: request.form.get(key, "") for key in values if key != "components"}
+        submitted["components"] = [{field: request.form.get(f"component_{row_id}_{field}", "")
+                                     for field in ("position", "type", "alternative_id", "note", "label")}
+                                    for row_id in request.form.getlist("component_row_id")]
+    else:
+        submitted = values
+    return values, submitted
+
+
 def _management_context(connection, alternative_id, *, message=None, error=None,
                         relation_result=None, structural_result=None):
     if not connection.in_transaction:
@@ -121,6 +175,15 @@ def _management_context(connection, alternative_id, *, message=None, error=None,
     concept_alternatives = connection.execute(
         "SELECT alternative_id,working_label,created_at FROM alternative WHERE concept_id=? AND retired_at IS NULL ORDER BY alternative_id",
         (alternative["concept_id"],),).fetchall()
+    component_alternatives = connection.execute("""
+        SELECT a.alternative_id,a.working_label,c.preferred_label
+        FROM alternative a JOIN concept c USING(concept_id)
+        WHERE a.retired_at IS NULL ORDER BY c.preferred_label,a.working_label
+    """).fetchall()
+    current_components = morphology_components.get(morphology["alternative_morphology_id"], []) if morphology else []
+    morphology_values, submitted_values = _management_morphology_form(morphology, current_components)
+    if error and request.form.get("action") == "morphology":
+        morphology_values = submitted_values
     nomenclature = calculate_nomenclature_preview(connection, alternative["concept_id"])
     renumber_history = connection.execute(
         "SELECT * FROM renumber_event WHERE concept_id=? ORDER BY created_at DESC,renumber_event_id DESC",
@@ -138,10 +201,11 @@ def _management_context(connection, alternative_id, *, message=None, error=None,
         except StructuralAlternativeError as exc:
             component_error = str(exc)
     return dict(component=component, component_error=component_error,
-                edit_token=edit_token(connection, "morphology", alternative_id),
+                edit_token=request.form.get("edit_token", "") if error and request.form.get("action") == "morphology" else edit_token(connection, "morphology", alternative_id),
                 nomenclature_token=state_token(connection, alternative_id, {"kind": "nomenclature"}),
                 alternative=alternative, morphology=morphology,
                 morphology_history=morphology_history,
+                morphology_values=morphology_values, component_alternatives=component_alternatives,
                 morphology_components=morphology_components, relations=relations,
                 relation_history=relation_history, concept_alternatives=concept_alternatives,
                 nomenclature=nomenclature, renumber_history=renumber_history,
@@ -402,14 +466,9 @@ def actualizar_gestion_alternativa(alternative_id):
         if action == "morphology":
             if request.form.get("confirm") != "yes":
                 raise AlternativeAdminError("Confirme la actualización de morfología.")
-            count_raw = request.form.get("component_count", "").strip()
-            _, changed = update_morphology(conexion, alternative_id, {
-                "component_count": count_raw if count_raw.upper() != "N/A" else None,
-                "component_count_not_applicable": count_raw.upper() == "N/A",
-                "free_permutation": request.form.get("free_permutation"),
-                "note": request.form.get("morphology_note"),
-                "components": _components_from_form(request.form),
-            }, _actor(), edit_token=request.form.get("edit_token"))
+            _, changed = update_morphology(conexion, alternative_id,
+                _management_morphology_values(request.form), _actor(),
+                edit_token=request.form.get("edit_token"))
             message = "Morfología actualizada." if changed else "No hay cambios."
         elif action in ("preview_add_relation", "preview_retire_relation"):
             conexion.execute("BEGIN")

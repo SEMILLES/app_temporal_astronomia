@@ -4,7 +4,8 @@
 <h1>Conceptos</h1>
 
     {% if g.current_access_role in ("reviewer", "master") %}
-    <h2>Registrar nuevo concepto</h2>
+    <details>
+    <summary><strong>Registrar nuevo concepto</strong></summary>
 
     <form
         method="post"
@@ -28,6 +29,7 @@
         </button>
 
     </form>
+    </details>
     {% endif %}
 
 

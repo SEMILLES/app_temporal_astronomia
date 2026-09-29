@@ -87,11 +87,7 @@
 
 <label>Parámetro
 <select name="relation_parameter">
-<option value="">Seleccione</option>
-{% set relation_index = loop.index0 %}
-{% for parameter in phonological_parameters %}
-<option value="{{ parameter }}"{% if form_values.getlist is defined and form_values.getlist('relation_parameter')[relation_index] == parameter %} selected{% endif %}>{{ parameter }}</option>
-{% endfor %}
+{% with selected_parameter=(form_values.getlist('relation_parameter')[loop.index0] if form_values.getlist is defined else '') %}{% include '_phonological_parameter_options.html' %}{% endwith %}
 </select>
 </label>
 
@@ -110,11 +106,7 @@
 <p>
 <label>Cantidad de componentes
 <select name="morphology_component_count" required>
-<option value="">Seleccione</option>
-<option value="N/A"{% if form_values.get('morphology_component_count') == 'N/A' %} selected{% endif %}>N/A</option>
-{% for count in range(1,11) %}
-<option value="{{ count }}"{% if form_values.get('morphology_component_count') == (count ~ '') %} selected{% endif %}>{{ count }}</option>
-{% endfor %}
+{% with selected_count=form_values.get('morphology_component_count') %}{% include '_morphology_count_options.html' %}{% endwith %}
 </select>
 </label>
 </p>
@@ -122,9 +114,7 @@
 <p id="permutation-field" hidden>
 <label>¿Los componentes admiten permutación libre?
 <select name="free_permutation">
-<option value="SIN INFORMACIÓN"{% if form_values.get('free_permutation', 'SIN INFORMACIÓN') == 'SIN INFORMACIÓN' %} selected{% endif %}>Sin información</option>
-<option value="SÍ"{% if form_values.get('free_permutation') == 'SÍ' %} selected{% endif %}>Sí</option>
-<option value="NO"{% if form_values.get('free_permutation') == 'NO' %} selected{% endif %}>No</option>
+{% with selected_permutation=form_values.get('free_permutation', 'SIN INFORMACIÓN') %}{% include '_morphology_permutation_options.html' %}{% endwith %}
 </select>
 </label>
 </p>
@@ -148,36 +138,7 @@
 </div>
 </div>
 
-<template id="component-template">
-<fieldset class="component">
-<legend>Componente</legend>
-
-<input type="number" min="1" name="component_position" aria-label="Posición">
-
-<p>Tipo de componente:
-<label><input type="radio" name="component_type_INDEX" value="existing"> Alternativa existente</label>
-<label><input type="radio" name="component_type_INDEX" value="unapproved"> Componente no aprobado / con dudas</label>
-</p>
-
-<div class="existing-component" hidden>
-<label>Alternativa vigente
-<select name="component_alternative_id">
-<option value="">Seleccione</option>
-{% for component in component_alternatives %}
-<option value="{{ component['alternative_id'] }}">{{ component['preferred_label'] }}-{{ component['working_label'] }}</option>
-{% endfor %}
-</select>
-</label>
-</div>
-
-<div class="unapproved-component" hidden>
-<label>Nota (obligatoria si hay dudas)
-<textarea name="component_note"></textarea>
-</label>
-</div>
-
-</fieldset>
-</template>
+{% include '_morphology_component_template.html' %}
 
 <p><label>Observación <textarea name="morphology_note">{{ form_values.get('morphology_note', '') }}</textarea></label></p>
 

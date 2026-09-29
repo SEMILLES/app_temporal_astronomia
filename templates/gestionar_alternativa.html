@@ -8,15 +8,14 @@
 <section id="video"><h2>Video</h2>{% if current_video %}<p>Video vigente: <a href="{{ current_video.watch_url }}">{{ current_video.watch_url }}</a></p>{% else %}<p>Sin video canónico vigente.</p>{% endif %}<p><a href="{{ url_for('alternatives.gestionar_video',alternative_id=alternative.alternative_id) }}">Gestionar video canónico e historial</a></p>
 </section>
 
-<section id="morfologia"><h2>Morfología vigente</h2>
-<form method="post" onsubmit="return confirm('¿Guardar como nueva versión vigente?')"><input type="hidden" name="action" value="morphology"><input type="hidden" name="edit_token" value="{{ edit_token }}"><input type="hidden" name="confirm" value="yes">
-<label>Cantidad (N/A o entero ≥ 1) <input name="component_count" required value="{% if morphology %}{% if morphology.component_count_not_applicable %}N/A{% else %}{{ morphology.component_count or '' }}{% endif %}{% else %}N/A{% endif %}"></label>
-<label>Permutación <select name="free_permutation">{% for value in ['N/A','SÍ','NO','SIN INFORMACIÓN'] %}<option{% if morphology and morphology.free_permutation==value %} selected{% endif %}>{{ value }}</option>{% endfor %}</select></label><label>Nota <input name="morphology_note" size="50" value="{{ morphology.note if morphology and morphology.note else '' }}"></label>
-
-<fieldset><legend>Componentes explícitos</legend>
-<div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table><tr><th>Posición</th><th>ID alternativa</th><th>Etiqueta</th><th>Nota</th></tr>{% set cs=morphology_components.get(morphology.alternative_morphology_id,[]) if morphology else [] %}{% for i in range(1,9) %}{% set c=cs[i-1] if cs|length>=i else none %}<tr><td class="numeric"><input size="3" aria-label="Posición del componente {{i}}" name="component_{{i}}_position" value="{{c.position if c else i}}"></td><td><input size="7" aria-label="ID de alternativa del componente {{i}}" name="component_{{i}}_alternative_id" value="{{c.component_alternative_id if c and c.component_alternative_id else ''}}"></td><td><input aria-label="Etiqueta del componente {{i}}" name="component_{{i}}_label" value="{{c.component_label if c and c.component_label else ''}}"></td><td><input aria-label="Nota del componente {{i}}" name="component_{{i}}_note" value="{{c.note if c and c.note else ''}}"></td></tr>{% endfor %}</table></div>
-</fieldset><button class="button-primary">Guardar morfología</button>
+<section id="morfologia"><h2>Morfología de la alternativa</h2>
+<p class="metadata">Estado: {{ 'Morfología vigente' if morphology else 'Sin analizar' }}</p>
+<form method="post" id="management-morphology" onsubmit="return window.confirm('¿Guardar como nueva versión vigente?')">
+<input type="hidden" name="action" value="morphology"><input type="hidden" name="edit_token" value="{{ edit_token }}"><input type="hidden" name="confirm" value="yes">
+{% include '_management_morphology.html' %}
+<button class="button-primary">Guardar morfología</button>
 </form>
+<script src="{{ url_for('static', filename='management-morphology.js') }}" defer></script>
 <details class="history"><summary>Historial de morfología</summary>
 <div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table><tr><th>Estado/fecha</th><th>Cantidad</th><th>Permutación</th><th>Componentes</th><th>Nota/procedencia</th></tr>{% for item in morphology_history %}<tr><td>{{'Vigente' if item.is_current else 'Histórica'}} · {{item.created_at}}</td><td>{{'N/A' if item.component_count_not_applicable else item.component_count}}</td><td>{{item.free_permutation or '—'}}</td><td>{% for c in morphology_components[item.alternative_morphology_id] %}{{c.position}}: {{c.component_label or ('Alternativa '~c.component_alternative_id)}}{% if not loop.last %}; {% endif %}{% else %}Ninguno{% endfor %}</td><td>{{item.note or '—'}} · {{'aporte '~item.created_from_submission_id if item.created_from_submission_id else 'administrativa'}} · {{item.created_by or 'Sin identificar'}}</td></tr>{% else %}<tr><td colspan="5">Sin versiones.</td></tr>{% endfor %}</table></div></details>
 </section>
@@ -27,12 +26,31 @@
 <form method="post"><input type="hidden" name="action" value="preview_retire_relation"><input type="hidden" name="relation_id" value="{{r.alternative_relation_id}}"><button class="button-danger">Preparar retiro</button>
 </form></td></tr>{% else %}<tr><td colspan="3">Sin relaciones vigentes.</td></tr>{% endfor %}</table></div>
 
-<h3>Añadir relación</h3>
-<form method="post" class="inline"><input type="hidden" name="action" value="preview_add_relation"><label>Alternativa <select name="target_id" aria-label="Alternativa destino">{% for a in concept_alternatives if a.alternative_id!=alternative.alternative_id %}<option value="{{a.alternative_id}}">{{a.working_label}}</option>{% endfor %}</select></label><label>Parámetro <select name="parameter">{% for p in parameters %}<option>{{p}}</option>{% endfor %}</select></label><button>Previsualizar</button>
+<form method="post" id="management-relation">
+<input type="hidden" name="action" value="preview_add_relation">
+<fieldset><legend>Añadir relación fonológica</legend>
+<p>Seleccione otra alternativa vigente del mismo concepto y el parámetro que indica la diferencia fonológica entre las dos formas. Puede añadir varias relaciones, previsualizando y confirmando cada una.</p>
+<div class="relation">
+<label>Destino
+<select name="target_id" aria-label="Alternativa destino" required>
+<option value="">Seleccione</option>
+<optgroup label="Alternativas vigentes">{% for a in concept_alternatives if a.alternative_id!=alternative.alternative_id %}
+<option value="{{a.alternative_id}}">{{ alternative.preferred_label | alternative_display_label(a.working_label) }}</option>
+{% endfor %}</optgroup>
+</select></label>
+<label>Parámetro
+<select name="parameter" required>
+{% with phonological_parameters=parameters, selected_parameter='' %}{% include '_phonological_parameter_options.html' %}{% endwith %}
+</select></label>
+</div>
+<p id="relation-duplicate" role="alert" hidden>Esta relación ya está vigente. Seleccione otro destino o parámetro.</p>
+<button class="button-primary">Previsualizar</button>
+</fieldset>
+<script type="application/json" id="current-relations">[{% for r in relations %}{% if not loop.first %},{% endif %}[{{ (r.alternative_high_id if r.alternative_low_id == alternative.alternative_id else r.alternative_low_id)|tojson }},{{ r.phonological_parameter|tojson }}]{% endfor %}]</script>
 </form>
 {% if relation_result %}
 <h3>Confirmar cambio</h3><p>{{'+' if relation_result.relation.action=='add' else '−'}} {{relation_result.relation.parameter}} entre {{alternative.working_label}} y Alternativa {{relation_result.relation.target_id}}</p>
-<form method="post" onsubmit="return confirm('¿Aplicar atómicamente relación y nomenclatura?')"><input type="hidden" name="action" value="confirm_relation"><input type="hidden" name="state_token" value="{{ relation_result.token }}"><input type="hidden" name="confirm" value="yes"><input type="hidden" name="relation_action" value="{{relation_result.relation.action}}"><input type="hidden" name="target_id" value="{{relation_result.relation.target_id}}"><input type="hidden" name="parameter" value="{{relation_result.relation.parameter}}"><input type="hidden" name="relation_id" value="{{relation_result.relation.relation_id or ''}}">
+<form method="post" onsubmit="return window.confirm('¿Aplicar atómicamente relación y nomenclatura?')"><input type="hidden" name="action" value="confirm_relation"><input type="hidden" name="state_token" value="{{ relation_result.token }}"><input type="hidden" name="confirm" value="yes"><input type="hidden" name="relation_action" value="{{relation_result.relation.action}}"><input type="hidden" name="target_id" value="{{relation_result.relation.target_id}}"><input type="hidden" name="parameter" value="{{relation_result.relation.parameter}}"><input type="hidden" name="relation_id" value="{{relation_result.relation.relation_id or ''}}">
 <div class="table-scroll" role="region" aria-label="Tabla desplazable" tabindex="0"><table><tr><th>Alternativa</th><th>Actual</th><th>Propuesto</th></tr>{% for row in relation_result.rows|preview_rows %}<tr><td>{{row.alternative_id}}</td><td>{{row.current_label}}</td><td><input aria-label="Etiqueta propuesta para alternativa {{row.alternative_id}}" name="label_{{row.alternative_id}}" value="{{row.proposed_label}}"></td></tr>{% endfor %}</table></div>{% if not relation_result.changes %}<p>La nomenclatura no cambia.</p>{% endif %}<label>Modo <select name="mode"><option value="automatic">Automático</option><option value="manual">Manual</option></select></label><label>Razón <input name="reason" size="50"></label><button>Confirmar</button>
 </form>{% endif %}
 <details class="history"><summary>Historial de relaciones</summary>
